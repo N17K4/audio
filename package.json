@@ -36,6 +36,7 @@
       "setup-guide.html",
       "setup-guide-preload.js",
       "scripts/download_checkpoints.py",
+      "scripts/setup-engines.py",
       "frontend/out/**/*",
       "backend/**/*",
       "models/**/*"

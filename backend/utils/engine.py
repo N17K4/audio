@@ -65,6 +65,7 @@ def get_ffmpeg_binary() -> str:
 
 def detect_rvc_infer_script() -> str:
     candidates = [
+        RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # download_checkpoints.py 自动生成
         RUNTIME_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "tools" / "rvc" / "infer_cli.py",

@@ -72,7 +72,9 @@
     border-radius: 6px;
     padding: 12px 14px;
   }
+  .mirror-row + .mirror-row { margin-top: 8px; }
   .mirror-row label { font-size: 13px; color: #ccc; display: block; margin-bottom: 6px; }
+  .mirror-row select,
   .mirror-row input[type=text] {
     width: 100%;
     background: #1e1e1e;
@@ -82,7 +84,10 @@
     font-size: 13px;
     padding: 6px 10px;
     outline: none;
+    font-family: inherit;
   }
+  .mirror-row select { appearance: auto; cursor: pointer; }
+  .mirror-row select:focus,
   .mirror-row input:focus { border-color: #569cd6; }
   .mirror-hint { font-size: 12px; color: #888; margin-top: 6px; }
   .mirror-hint.warn { color: #f0c060; }
@@ -175,8 +180,22 @@
   <div class="content">
     <ul class="engine-list" id="engine-list"></ul>
     <div class="mirror-row">
-      <label>HuggingFace 下载地址（中国大陆用户请填镜像）</label>
-      <input type="text" id="hf-endpoint" placeholder="留空自动检测，或填写：https://hf-mirror.com">
+      <label>PyPI 软件源（安装 torch 等 Python 包）</label>
+      <select id="pypi-mirror">
+        <option value="">官方源（https://pypi.org）</option>
+        <option value="https://pypi.tuna.tsinghua.edu.cn/simple">清华大学（推荐）</option>
+        <option value="https://mirrors.aliyun.com/pypi/simple">阿里云</option>
+        <option value="https://pypi.mirrors.ustc.edu.cn/simple">中科大</option>
+        <option value="https://mirrors.huaweicloud.com/repository/pypi/simple">华为云</option>
+      </select>
+    </div>
+    <div class="mirror-row">
+      <label>HuggingFace 下载地址（下载 AI 模型文件）</label>
+      <select id="hf-endpoint">
+        <option value="">官方地址（huggingface.co）</option>
+        <option value="https://hf-mirror.com">hf-mirror.com（推荐）</option>
+        <option value="https://modelscope.cn">ModelScope（阿里）</option>
+      </select>
       <div class="mirror-hint" id="mirror-hint">正在检测 huggingface.co 连通性…</div>
     </div>
   </div>
@@ -312,20 +331,21 @@ window.setupAPI.onInfo(({ missingEngines, manifest }) => {
 
   // 读取已保存配置
   window.setupAPI.loadConfig().then(cfg => {
-    if (cfg.hfEndpoint) {
-      document.getElementById('hf-endpoint').value = cfg.hfEndpoint;
-    }
+    if (cfg.hfEndpoint)  document.getElementById('hf-endpoint').value  = cfg.hfEndpoint;
+    if (cfg.pypiMirror)  document.getElementById('pypi-mirror').value  = cfg.pypiMirror;
   });
 });
 
 // ─── 开始下载 ──────────────────────────────────────────────────────────────
 async function startDownload() {
-  const endpoint = document.getElementById('hf-endpoint').value.trim();
-  if (endpoint) {
-    await window.setupAPI.saveConfig({ hfEndpoint: endpoint });
-  }
+  const endpoint   = document.getElementById('hf-endpoint').value.trim();
+  const pypiMirror = document.getElementById('pypi-mirror').value.trim();
+  const cfg = {};
+  if (endpoint)   cfg.hfEndpoint  = endpoint;
+  if (pypiMirror) cfg.pypiMirror  = pypiMirror;
+  if (Object.keys(cfg).length) await window.setupAPI.saveConfig(cfg);
   showPhase('phase-progress');
-  await window.setupAPI.startDownload({ hfEndpoint: endpoint });
+  await window.setupAPI.startDownload({ hfEndpoint: endpoint, pypiMirror });
 }
 
 function skipDownload() {
@@ -337,6 +357,10 @@ let _currentFile = '';
 
 window.setupAPI.onProgress((msg) => {
   switch (msg.type) {
+    case 'phase':
+      document.getElementById('progress-subtitle').textContent = msg.label || '';
+      appendLog(`▶ ${msg.label || ''}`);
+      break;
     case 'engine_start':
       appendLog(`▶ 开始下载引擎：${msg.engine}`);
       document.getElementById('progress-subtitle').textContent = `正在下载：${msg.engine}`;
@@ -396,9 +420,11 @@ function cancelDownload() {
 function retryDownload() {
   document.getElementById('log-area').innerHTML = '';
   showPhase('phase-progress');
-  const endpoint = '';
   window.setupAPI.loadConfig().then(cfg => {
-    window.setupAPI.startDownload({ hfEndpoint: cfg.hfEndpoint || '' });
+    window.setupAPI.startDownload({
+      hfEndpoint:  cfg.hfEndpoint  || '',
+      pypiMirror:  cfg.pypiMirror  || '',
+    });
   });
 }
 

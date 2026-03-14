@@ -152,25 +152,9 @@ if (pipBin) {
 }
 fs.unlinkSync(reqsTmp);
 
-// 2. 各引擎的 requirements.txt（仅在 engine/ 已克隆时才安装）
-console.log("\n[setup-runtime] 2/2 安装各引擎依赖...");
-const engines = ["fish_speech", "seed_vc", "rvc"];
-const pip = getEmbeddedPip(binDir);
-
-for (const engine of engines) {
-  const reqs = path.join(ROOT, "runtime", engine, "engine", "requirements.txt");
-  if (!fs.existsSync(reqs)) {
-    console.log(`[setup-runtime]   ${engine}：engine/ 未克隆，跳过。`);
-    continue;
-  }
-  console.log(`\n[setup-runtime]   → 安装 ${engine} 依赖：${reqs}`);
-  if (pip) {
-    run(`"${pip}" install -r "${reqs}"`, { env: patchedEnv });
-  } else {
-    // Windows 嵌入式包无独立 pip 可执行文件，改用 python -m pip
-    const pyExe = path.join(binDir, "python.exe");
-    run(`"${pyExe}" -m pip install -r "${reqs}"`, { env: patchedEnv });
-  }
-}
+// 2. 安装引擎 pip 包 + FFmpeg（从 manifest.json pip_packages 安装）
+console.log("\n[setup-runtime] 2/2 安装引擎 pip 包 + FFmpeg...");
+const setupEnginesScript = path.join(ROOT, "scripts", "setup-engines.py");
+run(`"${pyExe}" "${setupEnginesScript}"`, { env: patchedEnv });
 
 console.log("\n[setup-runtime] 全部完成 ✓");

@@ -78,6 +78,12 @@ function getCheckpointsDir() {
   return path.join(app.getPath('userData'), 'checkpoints');
 }
 
+// ─── 运行时 Python 包目录（torch 等 ML 包首次启动后安装于此）────────────────
+// prod: app.getPath('userData')/python-packages/
+function getUserPackagesDir() {
+  return path.join(app.getPath('userData'), 'python-packages');
+}
+
 // ─── 磁盘大小计算 ─────────────────────────────────────────────────────────────
 function getDirSize(dirPath) {
   let total = 0;
@@ -271,19 +277,17 @@ function openSetupGuideWindow(missingEngines) {
 // ─── Setup IPC handlers ───────────────────────────────────────────────────
 
 ipcMain.handle('setup:startDownload', (_event, opts) => {
-  const hfEndpoint = (opts && opts.hfEndpoint) ? opts.hfEndpoint.trim() : '';
-  const ckptDir = getCheckpointsDir();
-  fs.mkdirSync(ckptDir, { recursive: true });
+  const hfEndpoint   = (opts && opts.hfEndpoint)  ? opts.hfEndpoint.trim()  : '';
+  const pypiMirror   = (opts && opts.pypiMirror)  ? opts.pypiMirror.trim()  : '';
+  const ckptDir      = getCheckpointsDir();
+  const userPkgDir   = getUserPackagesDir();
+  fs.mkdirSync(ckptDir,    { recursive: true });
+  fs.mkdirSync(userPkgDir, { recursive: true });
 
-  const scriptPath = path.join(__dirname, 'scripts', 'download_checkpoints.py');
   const isMac = process.platform === 'darwin';
-  const pyPath = app.isPackaged
-    ? (isMac
-        ? path.join(process.resourcesPath, 'runtime', 'mac', 'python', 'bin', 'python3')
-        : path.join(process.resourcesPath, 'runtime', 'win', 'python', 'python.exe'))
-    : (isMac
-        ? path.join(__dirname, 'runtime', 'mac', 'python', 'bin', 'python3')
-        : path.join(__dirname, 'runtime', 'win', 'python', 'python.exe'));
+  const pyPath = isMac
+    ? path.join(app.isPackaged ? process.resourcesPath : __dirname, 'runtime', 'mac', 'python', 'bin', 'python3')
+    : path.join(app.isPackaged ? process.resourcesPath : __dirname, 'runtime', 'win', 'python', 'python.exe');
 
   const env = {
     ...process.env,
@@ -292,31 +296,52 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     ...(hfEndpoint ? { HF_ENDPOINT: hfEndpoint } : {}),
   };
 
-  downloadProc = spawn(pyPath, [scriptPath, '--json-progress'], { env, shell: false });
+  function sendProgress(msg) {
+    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+      setupGuideWin.webContents.send('setup:progress', msg);
+    }
+  }
 
-  downloadProc.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n').filter(Boolean);
-    for (const line of lines) {
-      try {
-        const msg = JSON.parse(line);
-        if (setupGuideWin && !setupGuideWin.isDestroyed()) {
-          setupGuideWin.webContents.send('setup:progress', msg);
-        }
-      } catch { /* 非 JSON 行忽略 */ }
-    }
-  });
-  downloadProc.stderr.on('data', (data) => {
-    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
-      setupGuideWin.webContents.send('setup:progress',
-        { type: 'log', message: data.toString().trim() });
-    }
-  });
-  downloadProc.on('close', (code) => {
+  function spawnScript(scriptPath, args, onClose) {
+    const proc = spawn(pyPath, [scriptPath, ...args], { env, shell: false });
+    proc.stdout.on('data', (data) => {
+      data.toString().split('\n').filter(Boolean).forEach(line => {
+        try { sendProgress(JSON.parse(line)); } catch {}
+      });
+    });
+    proc.stderr.on('data', (data) => {
+      sendProgress({ type: 'log', message: data.toString().trim() });
+    });
+    proc.on('close', onClose);
+    return proc;
+  }
+
+  const setupEnginesScript   = path.join(__dirname, 'scripts', 'setup-engines.py');
+  const downloadScript       = path.join(__dirname, 'scripts', 'download_checkpoints.py');
+
+  // 阶段1：安装 runtime_pip_packages（torch 等 ML 包）到 userData/python-packages/
+  const enginesArgs = ['--runtime', '--target', userPkgDir, '--json-progress'];
+  if (pypiMirror) enginesArgs.push('--pypi-mirror', pypiMirror);
+
+  downloadProc = spawnScript(setupEnginesScript, enginesArgs, (code1) => {
     downloadProc = null;
-    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
-      setupGuideWin.webContents.send('setup:done', { exitCode: code });
+    if (code1 !== 0) {
+      if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+        setupGuideWin.webContents.send('setup:done', { exitCode: code1 });
+      }
+      return;
     }
+    // 阶段2：下载 HuggingFace 模型
+    const dlArgs = ['--json-progress'];
+    if (hfEndpoint) dlArgs.push('--hf-endpoint', hfEndpoint);
+    downloadProc = spawnScript(downloadScript, dlArgs, (code2) => {
+      downloadProc = null;
+      if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+        setupGuideWin.webContents.send('setup:done', { exitCode: code2 });
+      }
+    });
   });
+
   return { ok: true };
 });
 
@@ -440,9 +465,11 @@ async function createWindow() {
       BACKEND_PORT: backendPort,
       ...(LOGS_DIR ? { LOGS_DIR } : {}),
       // 打包后 runtime/ 在 Resources/ 下；checkpoints 在 userData（跨版本持久）
+      // PYTHONPATH 指向 userData/python-packages/（torch 等 ML 包首次启动后安装于此）
       ...(app.isPackaged ? {
         RESOURCES_ROOT: process.resourcesPath,
         CHECKPOINTS_DIR: getCheckpointsDir(),
+        PYTHONPATH: getUserPackagesDir(),
       } : {}),
     },
   });

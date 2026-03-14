@@ -44,27 +44,22 @@ jobs:
           & "$dest\python.exe" get-pip.py --quiet
           Remove-Item "get-pip.py"
           & "$dest\python.exe" -m pip --version
+          & "$dest\python.exe" -m pip install setuptools wheel --quiet
 
-      # ── 4. 克隆引擎源码 ───────────────────────────────────────────────────────
-      - name: 克隆引擎源码
-        run: |
-          git clone --depth 1 https://github.com/fishaudio/fish-speech runtime/fish_speech/engine
-          git clone --depth 1 https://github.com/Plachtaa/seed-vc      runtime/seed_vc/engine
-
-      # ── 5. 安装 Node 依赖 + Python 后端/引擎依赖（含 torch 等重型包）─────────
+      # ── 4. 安装 Node 依赖 + Python 后端依赖（不含引擎 requirements.txt）────────
       - name: 安装依赖（pnpm install + setup-runtime）
         run: |
           pnpm install
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
 
-      # ── 6. 安装引擎专属 pip 包 + FFmpeg（跳过 HF 模型下载）─────────────────
-      - name: 安装引擎 pip 包 + FFmpeg
-        shell: pwsh
+      # ── 5. 克隆引擎源码（在 setup-runtime 之后，避免引擎 requirements.txt 冲突）
+      - name: 克隆引擎源码
         run: |
-          & "runtime\win\python\python.exe" scripts/download_checkpoints.py --setup-only
+          git clone --depth 1 https://github.com/fishaudio/fish-speech runtime/fish_speech/engine
+          git clone --depth 1 https://github.com/Plachtaa/seed-vc      runtime/seed_vc/engine
 
-      # ── 7. 构建前端静态文件 ───────────────────────────────────────────────────
+      # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend
 
@@ -87,40 +82,13 @@ jobs:
           $size = (Get-Item $zipName).Length / 1GB
           Write-Host "打包完成：$zipName（$([math]::Round($size,2)) GB）"
 
-      # ── 10. 分卷处理（超 1.9 GB 时切分）──────────────────────────────────────
-      - name: 分卷处理
-        shell: pwsh
-        run: |
-          $zipName = $env:ZIP_NAME
-          $size = (Get-Item $zipName).Length
-          Write-Host "压缩包大小：$([math]::Round($size/1GB,2)) GB"
-          if ($size -gt 1900000000) {
-            Write-Host "超过 1.9 GB，开始分卷..."
-            $partSize = [int64](1900 * 1024 * 1024)
-            $stream = [System.IO.File]::OpenRead($zipName)
-            $buf = New-Object byte[] $partSize
-            $partIndex = 0
-            while ($true) {
-              $read = $stream.Read($buf, 0, $buf.Length)
-              if ($read -eq 0) { break }
-              $partFile = "$zipName.part$(([string]$partIndex).PadLeft(2,'0'))"
-              [System.IO.File]::WriteAllBytes($partFile, $buf[0..($read-1)])
-              Write-Host "  写入：$partFile（$([math]::Round($read/1MB,1)) MB）"
-              $partIndex++
-            }
-            $stream.Close()
-            Remove-Item $zipName
-          } else {
-            Write-Host "无需分卷，直接上传"
-          }
-
-      # ── 11a. 创建 GitHub Release 并上传安装包（tag 触发时）──────────────────
+      # ── 11a. 创建 GitHub Release 并上传安装包（tag 触发时）─────────────────
       - name: 创建 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: ${{ env.ZIP_NAME }}*
+          files: ${{ env.ZIP_NAME }}
           body: |
             ## 下载说明
 
@@ -128,21 +96,10 @@ jobs:
 
             > AI 模型（约 6 GB）将在首次启动时弹窗引导下载，支持设置 HuggingFace 镜像。
 
-            **若文件被分卷**（出现多个 `.part00` `.part01` 文件），在 PowerShell 中合并：
-            ```powershell
-            $parts = Get-ChildItem "AI-Tool-win-*.zip.part*" | Sort-Object Name
-            $out = [System.IO.File]::OpenWrite("AI-Tool-win.zip")
-            foreach ($p in $parts) {
-              $bytes = [System.IO.File]::ReadAllBytes($p.FullName)
-              $out.Write($bytes, 0, $bytes.Length)
-            }
-            $out.Close()
-            ```
-
-      # ── 11b. 上传为 Artifact（始终执行，作为备份）───────────────────────────
+      # ── 11b. 上传为 Artifact（始终执行，作为备份）──────────────────────────
       - name: 上传为 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_NAME }}*
+          path: ${{ env.ZIP_NAME }}
           retention-days: 30

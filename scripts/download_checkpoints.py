@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-检查并下载 Fish Speech / Seed-VC / Whisper 所需的 checkpoint 文件。
+检查并下载 Fish Speech / Seed-VC / Whisper / RVC 所需的 checkpoint 文件。
 从 runtime/manifest.json 读取文件清单，仅下载缺失的文件。
 下载完成后自动计算 sha256 并写回 manifest.json，后续运行自动校验完整性。
+
+pip 依赖安装和 FFmpeg 下载由 scripts/setup-engines.py 负责（pnpm run setup 阶段）。
 
 用法：
     python scripts/download_checkpoints.py                       # 检查并下载所有缺失
@@ -17,6 +19,8 @@ import argparse
 import hashlib
 import json
 import os
+import platform
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,15 +38,17 @@ if not _IS_TTY:
 # ─── HuggingFace 镜像端点（中国用户可设置 HF_ENDPOINT=https://hf-mirror.com）──
 HF_ENDPOINT: str = os.getenv("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
 
+
 def apply_hf_endpoint(url: str) -> str:
-    """将 URL 中的 huggingface.co 替换为配置的镜像端点（HTTP 直连下载时使用）。
-    hf_hub_download / snapshot_download 原生读取 HF_ENDPOINT 环境变量，无需此函数。"""
+    """将 URL 中的 huggingface.co 替换为配置的镜像端点。"""
     if HF_ENDPOINT != "https://huggingface.co":
         return url.replace("https://huggingface.co", HF_ENDPOINT)
     return url
 
+
 # ─── JSON Lines 进度输出（供 Electron IPC 使用）────────────────────────────
 _JSON_MODE: bool = False
+
 
 def emit(msg_type: str, **kwargs) -> None:
     """输出结构化进度消息。--json-progress 时输出 JSON Lines，否则普通打印。"""
@@ -51,11 +57,11 @@ def emit(msg_type: str, **kwargs) -> None:
     elif msg_type == "log":
         print(kwargs.get("message", ""), flush=True)
 
-# ─── 版本锁定（锁定到具体 commit hash，防止仓库更新导致文件变化）─────────────────
-# 从 HuggingFace 仓库 Files → History 页面获取 commit hash
+
+# ─── 版本锁定 ─────────────────────────────────────────────────────────────────
 REVISION_PINS: dict[str, str] = {
-    "fishaudio/fish-speech-1.5": "main",  # 建议锁定：填入具体 commit hash
-    "Plachta/Seed-VC":           "main",  # 建议锁定：填入具体 commit hash
+    "fishaudio/fish-speech-1.5": "main",
+    "Plachta/Seed-VC":           "main",
 }
 
 
@@ -82,7 +88,6 @@ def sha256_file(path: Path) -> str:
 
 
 def get_hf_token() -> str | None:
-    """读取 HuggingFace token：环境变量 > ~/.cache/huggingface/token"""
     token = os.getenv("HF_TOKEN", "").strip()
     if token:
         return token
@@ -92,10 +97,10 @@ def get_hf_token() -> str | None:
     return None
 
 
-_hf_login_done = False  # 同一次运行只触发一次登录
+_hf_login_done = False
+
 
 def ensure_hf_login() -> bool:
-    """遇到 401 时交互式登录，成功返回 True。同一次运行只登录一次。"""
     global _hf_login_done
     if _hf_login_done:
         return get_hf_token() is not None
@@ -171,8 +176,8 @@ def check_and_download(
     resources_root: Path,
     check_only: bool,
     force: bool,
-    sha256_updates: dict,   # {engine_name: {rel_path: sha256}} 收集需要写回的哈希
-    checkpoints_base: "Path | None" = None,  # 若设置则覆盖 checkpoints/ 基础路径
+    sha256_updates: dict,
+    checkpoints_base: "Path | None" = None,
 ) -> bool:
     checkpoint_dir_rel = cfg.get("checkpoint_dir", f"checkpoints/{engine_name}")
     if checkpoints_base is not None and checkpoint_dir_rel.startswith("checkpoints/"):
@@ -195,12 +200,10 @@ def check_and_download(
 
         dest = checkpoint_dir / rel_path
 
-        # ── force 模式删除旧文件 ───────────────────────────────────────────
         if force and dest.exists():
             print(f"  --force: 删除旧文件 {rel_path}")
             dest.unlink()
 
-        # ── 文件已存在 ────────────────────────────────────────────────────
         if dest.exists() and dest.stat().st_size > 0:
             if expected_sha256:
                 actual = sha256_file(dest)
@@ -211,18 +214,15 @@ def check_and_download(
                         continue
                     print(f"    SHA256 不匹配，重新下载...")
                     dest.unlink()
-                    # 继续往下走下载流程
                 else:
                     print(f"  ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256={expected_sha256[:12]}…")
                     continue
             else:
-                # 首次运行已有文件但无 sha256：计算并记录，下次可校验
                 actual = sha256_file(dest)
                 sha256_updates.setdefault(engine_name, {})[rel_path] = actual
                 print(f"  ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256 已记录")
                 continue
 
-        # ── 文件缺失，准备下载 ────────────────────────────────────────────
         size_str = f"~{size_mb:.0f} MB" if size_mb else "未知大小"
         status = "必填" if required else "可选"
         print(f"  ✗ {rel_path}  [{status}] {size_str}")
@@ -239,7 +239,6 @@ def check_and_download(
                 all_ok = False
             continue
 
-        # ── 下载 ─────────────────────────────────────────────────────────
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             hf_info = parse_hf_url(url)
@@ -255,16 +254,13 @@ def check_and_download(
                                    or "Unauthorized" in str(hf_err))
                     is_import_err = isinstance(hf_err, ImportError)
                     if is_import_err:
-                        # huggingface_hub 未安装，直接 HTTP 下载（公开仓库可行）
                         print(f"    [提示] huggingface_hub 未安装，回退到 HTTP 直连下载")
                         download_via_requests(url, dest)
                     elif is_auth_err:
-                        # 先尝试直接 HTTP（部分仓库无需登录）
                         try:
                             download_via_requests(url, dest)
                         except Exception as http_err:
                             if "401" in str(http_err) or "403" in str(http_err):
-                                # 直接 HTTP 也需要认证 → 触发交互式登录并重试
                                 if ensure_hf_login():
                                     print(f"  [HF] 重试下载 {filename}")
                                     downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir)
@@ -303,7 +299,6 @@ def check_and_download(
 
 
 def save_sha256_to_manifest(manifest: dict, manifest_path: Path, sha256_updates: dict) -> None:
-    """将计算好的 sha256 写回 manifest.json。"""
     changed = False
     for engine_name, file_hashes in sha256_updates.items():
         engine_cfg = manifest.get("engines", {}).get(engine_name, {})
@@ -326,9 +321,8 @@ def download_hf_cache(
     resources_root: Path,
     check_only: bool,
     force: bool,
-    checkpoints_base: "Path | None" = None,  # 若设置则覆盖 checkpoints/ 基础路径
+    checkpoints_base: "Path | None" = None,
 ) -> bool:
-    """下载需要写入 HF 缓存格式的额外模型（如 campplus、BigVGAN、Whisper-small）。"""
     downloads: list[dict] = cfg.get("hf_cache_downloads", [])
     if not downloads:
         return True
@@ -356,7 +350,6 @@ def download_hf_cache(
         size_str = f"~{size_mb:.0f} MB" if size_mb else "未知大小"
         label = f"{repo_id}/{filename}" if filename else repo_id
 
-        # 检测：看 HF 缓存目录中是否已有该 repo 的 blobs（HF 缓存文件名为哈希，无后缀）
         marker_dir = cache_dir / f"models--{repo_id.replace('/', '--')}"
         blobs_dir = marker_dir / "blobs"
         already_cached = blobs_dir.exists() and any(blobs_dir.iterdir())
@@ -374,7 +367,6 @@ def download_hf_cache(
         cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             if filename:
-                # 单文件下载
                 print(f"  [HF单文件] {repo_id}  {filename}  cache_dir={cache_dir}")
                 hf_hub_download(
                     repo_id=repo_id,
@@ -383,7 +375,6 @@ def download_hf_cache(
                     token=token,
                 )
             else:
-                # 整仓库快照下载
                 ignore_patterns: list[str] = item.get("ignore_patterns", [])
                 print(f"  [HF快照] {repo_id}  cache_dir={cache_dir}"
                       + (f"  忽略: {ignore_patterns}" if ignore_patterns else ""))
@@ -403,179 +394,44 @@ def download_hf_cache(
 
 def get_embedded_python(project_root: Path) -> str:
     """返回嵌入式 Python 可执行路径，找不到返回空串。"""
-    import platform
     if platform.system() == "Windows":
-        candidates = [project_root / "runtime" / "win" / "python" / "python.exe"]
+        p = project_root / "runtime" / "win" / "python" / "python.exe"
     else:
-        candidates = [
-            project_root / "runtime" / "mac" / "python" / "bin" / "python3",
-            project_root / "runtime" / "mac" / "python" / "bin" / "python",
-        ]
-    for p in candidates:
-        if p.exists():
-            return str(p)
-    return ""
+        p = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
+    return str(p) if p.exists() else ""
 
 
-def setup_pip_packages(engine_name: str, cfg: dict, project_root: Path, check_only: bool) -> bool:
-    """为引擎安装 manifest 中声明的 pip_packages 到嵌入式 Python 环境。"""
-    packages: list[str] = cfg.get("pip_packages", [])
-    if not packages:
-        return True
-
+def prefetch_rvc_base_models(project_root: Path) -> None:
+    """触发 rvc-python 的 base_model 预下载（hubert_base.pt / rmvpe.pt / rmvpe.onnx）。"""
     py = get_embedded_python(project_root)
     if not py:
-        print(f"  [{engine_name}] 嵌入式 Python 未找到，跳过 pip 安装")
-        return False
+        print("  [rvc] 嵌入式 Python 未找到，跳过 RVC base model 预下载")
+        return
 
-    all_ok = True
-    for pkg in packages:
-        # 检查是否已安装（把包名转为模块名：rvc-python → rvc_python）
-        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0]
-        try:
-            import subprocess
-            check = subprocess.run(
-                [py, "-c", f"import {module_name}"],
-                capture_output=True,
-            )
-            already = check.returncode == 0
-        except Exception:
-            already = False
+    # 检查 rvc-python 是否已安装（setup-engines.py 负责安装）
+    check = subprocess.run([py, "-c", "from rvc_python.infer import RVCInference"],
+                           capture_output=True)
+    if check.returncode != 0:
+        print("  [rvc] rvc-python 未安装，跳过 base model 预下载（请先运行 pnpm run setup）")
+        return
 
-        if already:
-            print(f"  ✓ {pkg}  (已安装)")
-            continue
-
-        print(f"  ✗ {pkg}  (未安装)")
-        if check_only:
-            all_ok = False
-            continue
-
-        print(f"  [pip] 安装 {pkg} ...")
-        try:
-            import subprocess
-            result = subprocess.run(
-                [py, "-m", "pip", "install", pkg, "--quiet"],
-                capture_output=True, text=True, timeout=300,
-            )
-            if result.returncode == 0:
-                print(f"    ✓ 安装成功: {pkg}")
-            else:
-                print(f"    ✗ 安装失败: {result.stderr.strip()[:200]}")
-                all_ok = False
-        except Exception as e:
-            print(f"    ✗ 安装异常: {e}")
-            all_ok = False
-
-    return all_ok
-
-
-def _patch_fairseq_for_py312(py: str) -> None:
-    """修补 fairseq 以兼容 Python 3.12 + 新版 omegaconf。"""
-    import subprocess, re
-
-    # 找到 fairseq 安装目录
-    result = subprocess.run(
-        [py, "-c", "import fairseq; import os; print(os.path.dirname(fairseq.__file__))"],
+    rvc_pkg = subprocess.run(
+        [py, "-c", "import rvc_python, os; print(os.path.dirname(rvc_python.__file__))"],
         capture_output=True, text=True,
     )
-    if result.returncode != 0:
+    if rvc_pkg.returncode != 0:
         return
-    fairseq_dir = Path(result.stdout.strip())
 
-    # 1. 修补 __init__.py：把批量 import 包在 try/except 里（跳过 Python 3.12 不兼容模块）
-    init_py = fairseq_dir / "__init__.py"
-    if init_py.exists():
-        text = init_py.read_text(encoding="utf-8")
-        # hydra_init 包 try/except
-        if "hydra_init()" in text and "try:\n    hydra_init()" not in text:
-            text = text.replace("hydra_init()", "try:\n    hydra_init()\nexcept Exception:\n    pass  # Py3.12 兼容跳过")
-        # 把批量 import fairseq.X 替换为 try/except 循环
-        bulk_imports = re.findall(r"^import fairseq\.\S+.*$", text, re.MULTILINE)
-        if bulk_imports:
-            block = "\n".join(bulk_imports)
-            loop = (
-                "for _m in " + repr([b.replace("import ", "").replace("  # noqa", "").strip()
-                                      for b in bulk_imports]) + ":\n"
-                "    try:\n"
-                "        import importlib as _il; _il.import_module(_m)\n"
-                "    except Exception:\n"
-                "        pass\n"
-            )
-            text = text.replace(block, loop)
-        init_py.write_text(text, encoding="utf-8")
+    base_model_dir = Path(rvc_pkg.stdout.strip()) / "base_model"
+    models_needed = ["hubert_base.pt", "rmvpe.pt", "rmvpe.onnx"]
+    missing = [f for f in models_needed if not (base_model_dir / f).exists()]
+    if not missing:
+        print("  ✓ RVC base_model 文件已就绪")
+        return
 
-    def _fix_mutable_defaults(py_file: Path) -> None:
-        """把文件中所有 FieldName = ClassName() 和 field(default=ClassName()) 替换为 field(default_factory=ClassName)。"""
-        if not py_file.exists():
-            return
-        text = py_file.read_text(encoding="utf-8")
-        # 模式 1：`    field: Type = ClassName()`
-        pattern1 = r'^(\s+\w+:\s+\w+)\s*=\s*(\w+)\(\)$'
-        def _rep1(m: re.Match) -> str:
-            prefix, typename = m.group(1), m.group(2)
-            if typename[0].isupper() and typename not in ("Optional", "List", "Dict", "Tuple", "Any"):
-                return f"{prefix} = field(default_factory={typename})"
-            return m.group(0)
-        text = re.sub(pattern1, _rep1, text, flags=re.MULTILINE)
-        # 模式 2：`field(default=ClassName())`
-        text = re.sub(r'field\(default=([A-Z]\w+)\(\)\)', r'field(default_factory=\1)', text)
-        py_file.write_text(text, encoding="utf-8")
-
-    # 2. 修补所有 fairseq dataclass 文件（含 transformer_config.py）
-    for rel in [
-        "dataclass/configs.py",
-        "models/transformer/transformer_config.py",
-    ]:
-        _fix_mutable_defaults(fairseq_dir / rel)
-
-    print("    ✓ fairseq Python 3.12 兼容补丁已应用")
-
-
-def _install_rvc_python(py: str) -> bool:
-    """安装 rvc-python 及其依赖（含 fairseq 兼容处理）。"""
-    import subprocess
-
-    def pip(*args: str) -> bool:
-        r = subprocess.run([py, "-m", "pip", "install", *args, "--quiet"],
-                           capture_output=True, text=True, timeout=600)
-        if r.returncode != 0:
-            print(f"    ✗ pip install {' '.join(args)} 失败: {r.stderr.strip()[:200]}")
-        return r.returncode == 0
-
-    # 降级 setuptools 以恢复 pkg_resources（pyworld 依赖）
-    pip("setuptools<72")
-
-    # 安装 fairseq（跳过依赖冲突：omegaconf 版本问题）
-    print("  [pip] 安装 fairseq (--no-deps) ...")
-    if not pip("fairseq==0.12.2", "--no-deps"):
-        return False
-
-    # 修补 fairseq 兼容 Python 3.12
-    _patch_fairseq_for_py312(py)
-
-    # 安装 bitarray（fairseq 推理需要）
-    pip("bitarray")
-
-    # 安装 rvc-python 本体（跳过 fairseq 依赖冲突）
-    print("  [pip] 安装 rvc-python (--no-deps) ...")
-    if not pip("rvc-python", "--no-deps"):
-        return False
-
-    # 安装 rvc-python 其余依赖（排除 fairseq/numpy 等已有包）
-    print("  [pip] 安装 rvc-python 运行时依赖 ...")
-    pip("av", "faiss-cpu", "ffmpeg-python", "praat-parselmouth", "pyworld", "torchcrepe")
-
-    return True
-
-
-def _prefetch_rvc_base_models(py: str) -> None:
-    """触发 rvc-python 的 base_model 预下载（hubert_base.pt / rmvpe.pt / rmvpe.onnx）。"""
-    import subprocess
-    print("  [rvc] 预下载 hubert_base.pt / rmvpe.pt / rmvpe.onnx ...")
+    print(f"  [rvc] 预下载 {', '.join(missing)} ...")
     r = subprocess.run(
-        [py, "-c",
-         "from rvc_python.infer import RVCInference; RVCInference()"],
+        [py, "-c", "from rvc_python.infer import RVCInference; RVCInference()"],
         capture_output=True, text=True, timeout=600,
     )
     if r.returncode == 0:
@@ -584,254 +440,8 @@ def _prefetch_rvc_base_models(py: str) -> None:
         print(f"    ✗ 预下载失败（可能需要联网）: {r.stderr.strip()[:200]}")
 
 
-def setup_rvc_engine(project_root: Path, check_only: bool) -> bool:
-    """安装 rvc-python、生成推理脚本、预下载 base 模型。"""
-    engine_dir = project_root / "runtime" / "rvc" / "engine"
-    infer_script = engine_dir / "infer.py"
-
-    py = get_embedded_python(project_root)
-    if not py:
-        print("  [rvc] 嵌入式 Python 未找到，跳过 RVC 安装")
-        return False
-
-    # 检查 rvc-python 是否已安装
-    import subprocess
-    check = subprocess.run([py, "-c", "from rvc_python.infer import RVCInference"],
-                           capture_output=True)
-    rvc_installed = (check.returncode == 0)
-
-    if rvc_installed:
-        print("  ✓ rvc-python  (已安装)")
-    else:
-        print("  ✗ rvc-python  (未安装)")
-        if not check_only:
-            if _install_rvc_python(py):
-                print("    ✓ rvc-python 安装完成")
-            else:
-                print("    ✗ rvc-python 安装失败，RVC 功能不可用")
-
-    # 检查并生成 engine/infer.py
-    if infer_script.exists():
-        print(f"  ✓ runtime/rvc/engine/infer.py  (已存在)")
-    else:
-        print(f"  ✗ runtime/rvc/engine/infer.py  (缺失)")
-        if not check_only:
-            engine_dir.mkdir(parents=True, exist_ok=True)
-            script_content = '''#!/usr/bin/env python3
-"""
-RVC 推理脚本（使用 rvc-python 库）
-由 download_checkpoints.py 自动生成，请勿手动修改。
-"""
-import argparse
-import sys
-from pathlib import Path
-
-
-def detect_version(model_path: str) -> str:
-    """从 checkpoint 自动检测 v1/v2，避免 emb_phone 尺寸不匹配。"""
-    try:
-        import torch
-        cpt = torch.load(model_path, map_location="cpu", weights_only=False)
-        version = cpt.get("version", "")
-        if version in ("v1", "v2"):
-            return version
-        emb = cpt.get("weight", {}).get("enc_p.emb_phone.weight")
-        if emb is not None:
-            return "v2" if emb.shape[1] == 768 else "v1"
-    except Exception:
-        pass
-    return "v2"
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="RVC 语音转换")
-    parser.add_argument("--input",  required=True, help="输入音频路径")
-    parser.add_argument("--output", required=True, help="输出音频路径")
-    parser.add_argument("--model",  required=True, help="模型 .pth 路径")
-    parser.add_argument("--index",  default="",    help="索引文件路径（可选）")
-    args = parser.parse_args()
-
-    try:
-        from rvc_python.infer import RVCInference
-    except ImportError:
-        print("[rvc] 缺少 rvc-python 包，请重新运行 pnpm run checkpoints。", file=sys.stderr)
-        return 1
-
-    input_path  = str(Path(args.input).resolve())
-    output_path = str(Path(args.output).resolve())
-    model_path  = str(Path(args.model).resolve())
-    index_path  = str(Path(args.index).resolve()) if args.index else ""
-
-    version = detect_version(model_path)
-
-    try:
-        rvc = RVCInference(device="cpu")
-        rvc.load_model(model_path, version=version, index_path=index_path)
-        rvc.infer_file(input_path, output_path)
-    except Exception as e:
-        print(f"[rvc] 推理失败: {e}", file=sys.stderr)
-        return 1
-
-    if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
-        print("[rvc] 输出文件缺失或为空", file=sys.stderr)
-        return 1
-
-    print(f"[rvc] ok -> {output_path}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-'''
-            infer_script.write_text(script_content, encoding="utf-8")
-            print(f"    ✓ 已创建 runtime/rvc/engine/infer.py")
-
-    # 预下载 base_model（hubert_base.pt 等）
-    if not check_only and rvc_installed:
-        rvc_pkg = subprocess.run(
-            [py, "-c", "import rvc_python, os; print(os.path.dirname(rvc_python.__file__))"],
-            capture_output=True, text=True,
-        )
-        if rvc_pkg.returncode == 0:
-            base_model_dir = Path(rvc_pkg.stdout.strip()) / "base_model"
-            models_needed = ["hubert_base.pt", "rmvpe.pt", "rmvpe.onnx"]
-            missing = [f for f in models_needed if not (base_model_dir / f).exists()]
-            if missing:
-                _prefetch_rvc_base_models(py)
-            else:
-                print("  ✓ RVC base_model 文件已就绪")
-
-    return True
-
-
-def download_ffmpeg(project_root: Path, check_only: bool, force: bool) -> bool:
-    """下载 FFmpeg 静态二进制到 runtime/{mac|win}/bin/。"""
-    import platform
-    import urllib.request
-    import zipfile
-    import tarfile
-
-    system = platform.system()
-    machine = platform.machine().lower()
-
-    if system == "Darwin":
-        # Mac arm64 / x86_64 均使用 evermeet.cx 提供的静态包
-        bin_dir = project_root / "runtime" / "mac" / "bin"
-        dest = bin_dir / "ffmpeg"
-        # evermeet.cx 只提供 arm64 版本（Apple Silicon），x86_64 需要其他源
-        # 使用 John Van Sickle 的静态构建（支持 x86_64 Linux），或 evermeet.cx（macOS）
-        if machine in ("arm64", "aarch64"):
-            url = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-        else:
-            # x86_64 Mac 使用 evermeet.cx
-            url = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-    elif system == "Windows":
-        bin_dir = project_root / "runtime" / "win" / "bin"
-        dest = bin_dir / "ffmpeg.exe"
-        # BtbN 提供的 Windows 静态包
-        url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-    else:
-        print(f"  [ffmpeg] 不支持的平台: {system}，跳过")
-        return True
-
-    if dest.exists() and not force:
-        size_mb = dest.stat().st_size / 1024 / 1024
-        print(f"  ✓ FFmpeg 已存在（{size_mb:.1f} MB）: {dest}")
-        # 确保可执行
-        if system != "Windows":
-            dest.chmod(0o755)
-        return True
-
-    print(f"  ✗ FFmpeg 未找到: {dest}")
-    if check_only:
-        return False
-
-    print(f"  [ffmpeg] 下载中（~50-80 MB）: {url}")
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    tmp_archive = bin_dir / "_ffmpeg_tmp_archive"
-
-    try:
-        # 下载压缩包
-        _last_hook_pct: list[int] = [-1]
-
-        def _reporthook(count: int, block_size: int, total_size: int) -> None:
-            if total_size > 0:
-                mb = count * block_size / 1024 / 1024
-                pct = min(100, int(count * block_size * 100 / total_size))
-                if _IS_TTY:
-                    print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
-                elif pct // 10 != _last_hook_pct[0]:
-                    _last_hook_pct[0] = pct // 10
-                    print(f"  {pct}% ({mb:.1f} MB)", flush=True)
-
-        urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
-        print()
-
-        # 解压 ffmpeg 二进制
-        if url.endswith(".zip"):
-            with zipfile.ZipFile(tmp_archive, "r") as zf:
-                # 在 zip 内搜索 ffmpeg 或 ffmpeg.exe
-                target_name = "ffmpeg.exe" if system == "Windows" else "ffmpeg"
-                found = None
-                for name in zf.namelist():
-                    basename = Path(name).name
-                    if basename == target_name and not name.endswith("/"):
-                        found = name
-                        break
-                if not found:
-                    print(f"    ✗ 压缩包内未找到 {target_name}")
-                    return False
-                with zf.open(found) as src, open(dest, "wb") as dst:
-                    dst.write(src.read())
-        elif url.endswith(".tar.xz") or url.endswith(".tar.gz") or url.endswith(".tar.bz2"):
-            with tarfile.open(tmp_archive) as tf:
-                found = None
-                for member in tf.getmembers():
-                    if Path(member.name).name in ("ffmpeg", "ffmpeg.exe") and member.isfile():
-                        found = member
-                        break
-                if not found:
-                    print("    ✗ 压缩包内未找到 ffmpeg")
-                    return False
-                f_obj = tf.extractfile(found)
-                if f_obj:
-                    with open(dest, "wb") as dst:
-                        dst.write(f_obj.read())
-        else:
-            # 直接是二进制
-            import shutil
-            shutil.move(str(tmp_archive), str(dest))
-            tmp_archive = None  # type: ignore
-
-        if not dest.exists() or dest.stat().st_size == 0:
-            print("    ✗ 提取后文件缺失或为空")
-            return False
-
-        # 设置可执行权限（Mac/Linux）
-        if system != "Windows":
-            dest.chmod(0o755)
-
-        size_mb = dest.stat().st_size / 1024 / 1024
-        print(f"    ✓ FFmpeg 下载完成（{size_mb:.1f} MB）: {dest}")
-        return True
-
-    except Exception as e:
-        print(f"    ✗ FFmpeg 下载失败: {e}")
-        print("      提示：可手动下载 ffmpeg 静态二进制并放置到上述路径")
-        return False
-    finally:
-        if tmp_archive and Path(str(tmp_archive)).exists():
-            try:
-                Path(str(tmp_archive)).unlink()
-            except Exception:
-                pass
-
-
 def _bootstrap_download_deps() -> None:
-    """确保下载所需的基础包（huggingface_hub、requests）已安装。
-    这两个包是下载阶段必要工具，在任何引擎处理前预先安装。"""
-    import subprocess
-
+    """确保 huggingface_hub 和 requests 已安装（下载阶段必要工具）。"""
     needed = []
     try:
         import huggingface_hub  # noqa: F401
@@ -861,8 +471,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="检查并下载 AI 引擎 checkpoint 文件")
     parser.add_argument("--engine", help="只处理指定引擎（fish_speech / seed_vc / whisper / rvc）")
     parser.add_argument("--check-only", action="store_true", help="只检查，不下载")
-    parser.add_argument("--setup-only", action="store_true",
-                        help="只安装 pip 依赖和 FFmpeg，跳过 HF 模型下载（CI 构建用）")
     parser.add_argument("--force", action="store_true", help="强制重新下载（覆盖已有文件）")
     parser.add_argument("--json-progress", action="store_true",
                         help="以 JSON Lines 格式输出进度（供 Electron IPC 使用）")
@@ -878,8 +486,6 @@ def main() -> int:
     resources_root_env = os.getenv("RESOURCES_ROOT", "")
     resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
 
-    # CHECKPOINTS_DIR 由 Electron 生产模式传入（userData/checkpoints/），覆盖默认的
-    # resources_root/checkpoints/ 路径，避免写入只读的 app bundle
     checkpoints_dir_env = os.getenv("CHECKPOINTS_DIR", "").strip()
     checkpoints_base: "Path | None" = Path(checkpoints_dir_env).resolve() if checkpoints_dir_env else None
 
@@ -899,59 +505,40 @@ def main() -> int:
         print(f"✗ 引擎 '{args.engine}' 不在 manifest 中，可用: {list(engines)}")
         return 1
 
-    if args.setup_only:
-        mode = "仅安装依赖（跳过模型下载）"
-    elif args.check_only:
-        mode = "检查"
-    else:
-        mode = "检查并下载"
+    mode = "检查" if args.check_only else "检查并下载"
     print(f"=== {mode} checkpoint 文件 ===")
     print(f"resources_root: {resources_root}\n")
 
     sha256_updates: dict = {}
     all_ready = True
+
     for engine_name, cfg in engines.items():
         if args.engine and engine_name != args.engine:
             continue
         print(f"▶ {engine_name} (v{cfg.get('version', '?')})")
         emit("engine_start", engine=engine_name, version=cfg.get("version", "?"))
 
-        # 1. 下载 manifest checkpoint_files（--setup-only 时跳过）
-        if not args.setup_only:
-            ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force,
-                                    sha256_updates, checkpoints_base=checkpoints_base)
-            if not ok:
-                all_ready = False
+        # 下载 manifest checkpoint_files
+        ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force,
+                                sha256_updates, checkpoints_base=checkpoints_base)
+        if not ok:
+            all_ready = False
 
-        # 2. 下载额外 HF 缓存模型（--setup-only 时跳过）
-        if not args.setup_only and cfg.get("hf_cache_downloads"):
+        # 下载额外 HF 缓存模型
+        if cfg.get("hf_cache_downloads"):
             ok2 = download_hf_cache(engine_name, cfg, resources_root, args.check_only, args.force,
                                     checkpoints_base=checkpoints_base)
             if not ok2:
                 all_ready = False
 
-        # 3. 安装 pip 包（--check-only 时跳过，其余模式始终执行）
-        if not args.check_only:
-            if cfg.get("pip_packages"):
-                if engine_name == "rvc":
-                    setup_rvc_engine(project_root, False)
-                else:
-                    setup_pip_packages(engine_name, cfg, project_root, False)
-            elif engine_name == "rvc":
-                setup_rvc_engine(project_root, False)
+        # RVC base model 预下载（rvc-python 触发内置下载，需 setup 阶段已装好 rvc-python）
+        if engine_name == "rvc" and not args.check_only:
+            prefetch_rvc_base_models(project_root)
 
         print()
 
-    if sha256_updates and not args.check_only and not args.setup_only:
+    if sha256_updates and not args.check_only:
         save_sha256_to_manifest(manifest, manifest_path, sha256_updates)
-        print()
-
-    # FFmpeg 静态二进制（仅在无 --engine 过滤时处理）
-    if not args.engine:
-        print("▶ ffmpeg")
-        ok_ffmpeg = download_ffmpeg(project_root, args.check_only, args.force)
-        if not ok_ffmpeg:
-            all_ready = False
         print()
 
     if all_ready:

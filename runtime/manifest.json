@@ -1,45 +1,52 @@
 {
-  "_comment": "产物固化清单（Artifact Pinning Manifest）。定义各引擎的代码版本、checkpoint 路径与文件哈希。",
+  "_comment": "产物固化清单（Artifact Pinning Manifest）。pip_packages 在构建期装入 embedded Python；runtime_pip_packages 在首次启动时装入 userData/python-packages/。",
   "manifest_version": "1",
   "engines": {
     "fish_speech": {
-      "version": "1.5",
+      "version": "s1-mini",
+      "_note": "引擎已升级至 S1/S2 API，需 fishaudio/openaudio-s1-mini checkpoint（gated model，下载前需 HuggingFace 登录并接受条款）",
       "code_dir": "runtime/fish_speech/engine",
       "checkpoint_dir": "checkpoints/fish_speech",
       "pip_packages": [
-        "loguru", "natsort", "soundfile", "lightning", "loralib",
-        "pyrootutils", "pydantic", "transformers",
-        "hydra-core", "rich", "click", "tqdm",
+        "setuptools", "wheel",
+        "loguru", "natsort", "soundfile", "loralib",
+        "pyrootutils", "pydantic", "rich", "click", "tqdm"
+      ],
+      "runtime_pip_packages": [
+        "torch", "torchaudio",
+        "lightning", "hydra-core", "transformers",
         "descript-audio-codec", "descript-audiotools", "einops"
       ],
       "checkpoint_files": [
         {
           "path": "model.pth",
-          "sha256": "918dc960372cc1b77bbafb14c48ef7a1634ecf75d4eb85b78607223b780d6001",
-          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/model.pth",
-          "size_mb": 500,
+          "url": "https://huggingface.co/fishaudio/openaudio-s1-mini/resolve/main/model.pth",
+          "size_mb": 1740,
           "required": true
         },
         {
-          "path": "firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
-          "sha256": "01b81dbf753224a156c3fe139b88bf0b9a0f54b11bee864f95e66511c3ccd754",
-          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
-          "size_mb": 300,
+          "path": "codec.pth",
+          "url": "https://huggingface.co/fishaudio/openaudio-s1-mini/resolve/main/codec.pth",
+          "size_mb": 1870,
           "required": true
         },
         {
           "path": "config.json",
-          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/config.json",
+          "url": "https://huggingface.co/fishaudio/openaudio-s1-mini/resolve/main/config.json",
           "size_mb": 1,
-          "required": true,
-          "sha256": "a664db2371b8d3eb1e8caba60b3c4e13c6b82f1192df3f7fa8089141124e521b"
+          "required": true
         },
         {
           "path": "tokenizer.tiktoken",
-          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/tokenizer.tiktoken",
+          "url": "https://huggingface.co/fishaudio/openaudio-s1-mini/resolve/main/tokenizer.tiktoken",
           "size_mb": 1,
-          "required": true,
-          "sha256": "065011318f0534795a6479fb9640d05ae308eae6a4b590c7c48f71e472bc8dbc"
+          "required": true
+        },
+        {
+          "path": "special_tokens.json",
+          "url": "https://huggingface.co/fishaudio/openaudio-s1-mini/resolve/main/special_tokens.json",
+          "size_mb": 1,
+          "required": false
         }
       ],
       "env_key": "FISH_SPEECH_CHECKPOINT_DIR"
@@ -48,7 +55,14 @@
       "version": "2.0",
       "code_dir": "runtime/seed_vc/engine",
       "checkpoint_dir": "checkpoints/seed_vc",
-      "pip_packages": ["scipy"],
+      "pip_packages": [
+        "setuptools", "wheel", "huggingface_hub"
+      ],
+      "runtime_pip_packages": [
+        "torch", "torchaudio",
+        "numpy", "scipy", "librosa==0.10.2",
+        "soundfile", "einops", "omegaconf", "transformers"
+      ],
       "checkpoint_files": [
         {
           "path": "DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth",
@@ -113,6 +127,10 @@
       "checkpoint_dir": "checkpoints/rvc",
       "checkpoint_files": [],
       "pip_packages": ["rvc-python"],
+      "runtime_pip_packages": [
+        "torch", "torchaudio",
+        "av", "faiss-cpu", "ffmpeg-python", "praat-parselmouth", "pyworld", "torchcrepe"
+      ],
       "env_key": "RVC_CHECKPOINT_DIR"
     },
     "whisper": {
