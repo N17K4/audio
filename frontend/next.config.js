@@ -4,6 +4,9 @@ const nextConfig = {
   assetPrefix: './',
   trailingSlash: true,
   images: { unoptimized: true },
+  turbopack: {
+    root: '../',
+  },
 };
 
 module.exports = nextConfig;

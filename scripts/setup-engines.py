@@ -177,16 +177,46 @@ def _patch_fairseq_for_py312(py: str) -> None:
 
 
 def _install_fairseq_windows(py: str) -> bool:
-    """Windows 专用：下载 fairseq 0.12.2 源码，剥离 Cython C 扩展后安装纯 Python 部分。
+    """Windows 专用：下载 fairseq 0.12.2 源码，注入 monkey-patch 禁用所有 C 扩展后安装。
 
-    嵌入式 Python 不含 Python.h 头文件，无法编译 C 扩展。
+    嵌入式 Python 不含 Python.h 头文件，无法编译 Cython/C 扩展。
     RVC 推理只用到 fairseq 的纯 Python 部分（checkpoint_utils、hubert 模型类）。
+    策略：
+      1. 在 setup.py 顶部注入代码，覆盖 setuptools.setup 使其忽略 ext_modules
+      2. 提供 no-op cythonize 和假 numpy（避免 import 失败中断 setup.py 解析）
+      3. 移除 setup.py 中 Cython 导入行，防止在无 Cython 环境中 ImportError
+      4. --no-build-isolation：跳过 pip 隔离环境，不让 pip 单独安装 Cython 后再触发编译
     """
     _FAIRSEQ_SDIST = (
         "https://files.pythonhosted.org/packages/source/f/fairseq/fairseq-0.12.2.tar.gz"
     )
 
-    print("  [fairseq] 下载源码包（Windows 跳过 C 扩展安装）...")
+    # 注入到 setup.py 文件顶部的 monkey-patch
+    _INJECT = """\
+# === 以下由安装器注入：强制纯 Python 安装（禁用所有 C/Cython 扩展）===
+import setuptools as _st_inject
+_orig_st_setup = _st_inject.setup
+def _no_ext_setup(**kw):
+    kw.pop('ext_modules', None)
+    return _orig_st_setup(**kw)
+_st_inject.setup = _no_ext_setup
+# no-op cythonize（替代 from Cython.Build import cythonize）
+def cythonize(*_a, **_kw): return []
+# no-op Extension（若 setup.py 在 from setuptools import 之前引用了 Extension）
+class Extension:
+    def __init__(self, *_a, **_kw): pass
+# 假 numpy：避免 setup.py 顶层 import numpy 失败（只需 get_include 返回空串即可）
+try:
+    import numpy as _np_check  # noqa: F401
+except ImportError:
+    import types as _types, sys as _sys
+    _np_fake = _types.ModuleType('numpy')
+    _np_fake.get_include = lambda: ''
+    _sys.modules['numpy'] = _np_fake
+# === 注入结束 ===
+"""
+
+    print("  [fairseq] 下载源码包（Windows 纯 Python 模式）...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tarball = Path(tmpdir) / "fairseq.tar.gz"
         try:
@@ -202,28 +232,25 @@ def _install_fairseq_windows(py: str) -> bool:
             print(f"    ✗ 解压失败: {e}")
             return False
 
-        # 找到解压出的 fairseq-x.y.z 目录
         candidates = [p for p in Path(tmpdir).iterdir() if p.is_dir() and p.name.startswith("fairseq")]
         if not candidates:
             print("    ✗ 解压后未找到 fairseq 目录")
             return False
         fairseq_src = candidates[0]
 
-        # 修补 setup.py：移除 Cython/C 扩展，保留纯 Python 安装
         setup_py = fairseq_src / "setup.py"
         if setup_py.exists():
-            text = setup_py.read_text(encoding="utf-8")
-            # 移除 Cython 导入行
-            text = re.sub(r"^(from|import)\s+Cython[^\n]*\n", "# cython removed\n", text, flags=re.MULTILINE)
-            # 将 cythonize(...) 替换为空列表（支持多行参数）
-            text = re.sub(r"cythonize\(.*?\)", "[]", text, flags=re.DOTALL)
-            # 确保 ext_modules 为空列表
-            text = re.sub(r"ext_modules\s*=\s*\[[^\]]*\]", "ext_modules=[]", text, flags=re.DOTALL)
-            setup_py.write_text(text, encoding="utf-8")
-            print("    ✓ setup.py 已修补（C 扩展已剥离）")
+            original = setup_py.read_text(encoding="utf-8")
+            # 移除原有 Cython 导入行（防止在无 Cython 的主环境中 ImportError 中断执行）
+            patched = re.sub(r"^(from|import)\s+Cython[^\n]*\n", "", original, flags=re.MULTILINE)
+            # 在文件顶部注入 monkey-patch
+            setup_py.write_text(_INJECT + patched, encoding="utf-8")
+            print("    ✓ setup.py 已注入 no-ext monkey-patch")
 
+        # --no-build-isolation：不让 pip 创建隔离环境去安装 Cython，避免重新触发 C 编译
         r = subprocess.run(
-            [py, "-m", "pip", "install", str(fairseq_src), "--no-deps", "--quiet"],
+            [py, "-m", "pip", "install", str(fairseq_src),
+             "--no-build-isolation", "--no-deps", "--quiet"],
             capture_output=True, text=True, timeout=600,
         )
         if r.returncode != 0:

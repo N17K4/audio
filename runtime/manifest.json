@@ -153,7 +153,22 @@
       "version": "2.0",
       "code_dir": "runtime/rvc/engine",
       "checkpoint_dir": "checkpoints/rvc",
-      "checkpoint_files": [],
+      "checkpoint_files": [
+        {
+          "path": "hubert_base.pt",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt",
+          "size_mb": 360,
+          "required": false,
+          "_note": "ContentVec 特征提取器，RVC 音色训练时需要"
+        },
+        {
+          "path": "pretrained_v2/f0G40k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/pretrained_v2/f0G40k.pth",
+          "size_mb": 400,
+          "required": false,
+          "_note": "RVC v2 预训练生成器，音色训练后用作基础模型"
+        }
+      ],
       "pip_packages": [
         "rvc-python"
       ],

@@ -183,6 +183,12 @@ export default function Home() {
   const [trainFile, setTrainFile] = useState<File | null>(null);
   const [trainJobId, setTrainJobId] = useState('');
   const [trainJobStatus, setTrainJobStatus] = useState('');
+  const [trainProgress, setTrainProgress] = useState(0);
+  const [trainMessage, setTrainMessage] = useState('');
+  // 训练高级参数
+  const [trainEpochs, setTrainEpochs] = useState(0);
+  const [trainF0Method, setTrainF0Method] = useState('harvest');
+  const [trainSampleRate, setTrainSampleRate] = useState(40000);
 
   // ─── 共享样式常量 ─────────────────────────────────────────────────────────
   const fieldCls = 'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-700 dark:focus:border-indigo-400';
@@ -255,6 +261,7 @@ export default function Home() {
     setProcessingStartTime,
     setError,
     addInstantJobResult,
+    onNavigateTasks: navigateTasks,
   });
 
   const llm = useLLM({
@@ -311,16 +318,28 @@ export default function Home() {
   // ─── 训练 ─────────────────────────────────────────────────────────────────
   async function pollTrainJob(jobId: string) {
     if (!jobId) return;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+    // 训练可能需要数分钟；每 2s 轮询，最多轮询 30 分钟
+    const maxAttempts = 900;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(r => setTimeout(r, 2000));
       try {
         const res = await fetch(`${backend.backendBaseUrl}/train/${jobId}`);
         if (!res.ok) continue;
         const d = await res.json();
         const s = d?.status || '未知';
         setTrainJobStatus(s);
-        if (s === 'completed') { setSuccessMsg(`训练完成：${d.voice_id}`); return; }
-        if (s === 'failed') { setError(d?.error || '训练失败'); return; }
+        if (d?.progress != null) setTrainProgress(Number(d.progress));
+        if (d?.message) setTrainMessage(d.message);
+        if (s === 'completed') {
+          setTrainProgress(100);
+          setTrainMessage('训练完成');
+          setSuccessMsg(`训练完成：${d.voice_id}`);
+          return;
+        }
+        if (s === 'failed') {
+          setError(d?.error || '训练失败');
+          return;
+        }
       } catch { /**/ }
     }
   }
@@ -329,12 +348,16 @@ export default function Home() {
     if (!trainFile) { setError('请先选择训练数据集'); return; }
     if (!trainVoiceName.trim()) { setError('请输入音色名称'); return; }
     setError(''); setSuccessMsg(''); setTrainJobStatus('提交中');
+    setTrainProgress(0); setTrainMessage('');
     const normalized = trainVoiceName.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
     const autoVoiceId = `${normalized || 'voice'}_${Date.now().toString().slice(-6)}`;
     const fd = new FormData();
     fd.append('dataset', trainFile);
     fd.append('voice_id', autoVoiceId);
     fd.append('voice_name', trainVoiceName.trim());
+    fd.append('epochs', String(trainEpochs));
+    fd.append('f0_method', trainF0Method);
+    fd.append('sample_rate', String(trainSampleRate));
     try {
       const res = await fetch(`${backend.backendBaseUrl}/train`, { method: 'POST', body: fd });
       let data: any = null;
@@ -517,6 +540,14 @@ export default function Home() {
                 setTrainFile={setTrainFile}
                 trainJobId={trainJobId}
                 trainJobStatus={trainJobStatus}
+                trainProgress={trainProgress}
+                trainMessage={trainMessage}
+                trainEpochs={trainEpochs}
+                setTrainEpochs={setTrainEpochs}
+                trainF0Method={trainF0Method}
+                setTrainF0Method={setTrainF0Method}
+                trainSampleRate={trainSampleRate}
+                setTrainSampleRate={setTrainSampleRate}
                 onStartTraining={startTraining}
                 fieldCls={fieldCls}
                 fileCls={fileCls}

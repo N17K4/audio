@@ -69,6 +69,15 @@ interface VcPanelProps {
   setTrainFile: (v: File | null) => void;
   trainJobId: string;
   trainJobStatus: string;
+  trainProgress: number;
+  trainMessage: string;
+  // Training advanced
+  trainEpochs: number;
+  setTrainEpochs: (v: number) => void;
+  trainF0Method: string;
+  setTrainF0Method: (v: string) => void;
+  trainSampleRate: number;
+  setTrainSampleRate: (v: number) => void;
   onStartTraining: () => void;
   fieldCls: string;
   fileCls: string;
@@ -138,6 +147,14 @@ export default function VcPanel({
   setTrainFile,
   trainJobId,
   trainJobStatus,
+  trainProgress,
+  trainMessage,
+  trainEpochs,
+  setTrainEpochs,
+  trainF0Method,
+  setTrainF0Method,
+  trainSampleRate,
+  setTrainSampleRate,
   onStartTraining,
   fieldCls,
   fileCls,
@@ -329,25 +346,82 @@ export default function VcPanel({
       {/* 训练（折叠） */}
       <details className="border border-slate-200/80 dark:border-slate-700/80 rounded-2xl overflow-hidden dark:bg-slate-900">
         <summary className="text-sm font-medium text-slate-500 dark:text-slate-400 cursor-pointer px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors list-none flex items-center justify-between">
-          <span>RVC 模型训练（占位）</span>
+          <span>RVC 音色训练</span>
           <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </summary>
         <div className="px-5 pb-5 pt-3 space-y-4 border-t border-slate-100 dark:border-slate-800">
           <label className="block">
-            <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">音色名称</span>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all"
-              value={trainVoiceName} onChange={e => setTrainVoiceName(e.target.value)} />
+            <span className={labelCls}>音色名称</span>
+            <input className={fieldCls} value={trainVoiceName} onChange={e => setTrainVoiceName(e.target.value)} placeholder="我的音色" />
           </label>
           <label className="block">
-            <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">训练数据集</span>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-medium file:text-slate-600 transition-all" type="file"
+            <span className={labelCls}>训练数据集（ZIP 压缩包或单个音频文件）</span>
+            <input className={`${fileCls} w-full`} type="file" accept=".zip,.wav,.mp3,.flac,.ogg,.m4a"
               onChange={e => setTrainFile(e.target.files?.[0] || null)} />
+            <span className="text-xs text-slate-400 mt-1 block">建议提供 5-30 分钟本人语音，打包成 ZIP 上传效果最佳</span>
           </label>
-          {trainJobStatus && <p className="text-xs text-slate-500">状态：{trainJobStatus}（Job: {trainJobId}）</p>}
-          <button className="w-full rounded-xl bg-slate-700 hover:bg-slate-800 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartTraining}>
-            提交训练
+
+          {/* 高级设置 */}
+          <details className="border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
+            <summary className="text-xs font-medium text-slate-400 cursor-pointer px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 list-none flex items-center justify-between">
+              <span>高级设置</span>
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="px-4 pb-4 pt-2 space-y-3 border-t border-slate-50 dark:border-slate-700">
+              <label className="block">
+                <span className={labelCls}>精细训练轮数（{trainEpochs === 0 ? '仅构建索引（快速）' : `${trainEpochs} 轮`}）</span>
+                <input type="range" min={0} max={500} step={50} className="w-full accent-indigo-600"
+                  value={trainEpochs} onChange={e => setTrainEpochs(Number(e.target.value))} />
+                <span className="text-xs text-slate-400 mt-1 block">0 = 快速模式，仅构建 FAISS 特征索引（分钟级）；&gt;0 = 精细微调模型，效果更好但耗时更长（需要 GPU）</span>
+              </label>
+              <label className="block">
+                <span className={labelCls}>F0 提取方法</span>
+                <select className={fieldCls} value={trainF0Method} onChange={e => setTrainF0Method(e.target.value)}>
+                  <option value="harvest">harvest（稳定，推荐）</option>
+                  <option value="rmvpe">rmvpe（精度高，需要额外模型）</option>
+                  <option value="pm">pm（最快，精度低）</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className={labelCls}>目标采样率</span>
+                <select className={fieldCls} value={trainSampleRate} onChange={e => setTrainSampleRate(Number(e.target.value))}>
+                  <option value={40000}>40000 Hz（标准 RVC v2）</option>
+                  <option value={48000}>48000 Hz（高清）</option>
+                </select>
+              </label>
+            </div>
+          </details>
+
+          {/* 进度 */}
+          {trainJobStatus && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>状态：{trainJobStatus}</span>
+                {trainProgress > 0 && trainProgress < 100 && (
+                  <span>{trainProgress}%</span>
+                )}
+              </div>
+              {trainProgress > 0 && trainProgress < 100 && (
+                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${trainProgress}%` }} />
+                </div>
+              )}
+              {trainMessage && (
+                <p className="text-xs text-slate-400 truncate">{trainMessage}</p>
+              )}
+            </div>
+          )}
+
+          <button
+            className="w-full rounded-xl bg-slate-700 hover:bg-slate-800 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={onStartTraining}
+            disabled={trainJobStatus === 'running' || trainJobStatus === '排队中'}
+          >
+            {trainJobStatus === 'running' ? '训练中...' : trainJobStatus === '排队中' ? '排队中...' : '提交训练'}
           </button>
         </div>
       </details>
