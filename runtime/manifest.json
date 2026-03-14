@@ -1,0 +1,135 @@
+{
+  "_comment": "产物固化清单（Artifact Pinning Manifest）。定义各引擎的代码版本、checkpoint 路径与文件哈希。",
+  "manifest_version": "1",
+  "engines": {
+    "fish_speech": {
+      "version": "1.5",
+      "code_dir": "runtime/fish_speech/engine",
+      "checkpoint_dir": "checkpoints/fish_speech",
+      "pip_packages": [
+        "loguru", "natsort", "soundfile", "lightning", "loralib",
+        "pyrootutils", "pydantic", "transformers",
+        "hydra-core", "rich", "click", "tqdm",
+        "descript-audio-codec", "descript-audiotools", "einops"
+      ],
+      "checkpoint_files": [
+        {
+          "path": "model.pth",
+          "sha256": "918dc960372cc1b77bbafb14c48ef7a1634ecf75d4eb85b78607223b780d6001",
+          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/model.pth",
+          "size_mb": 500,
+          "required": true
+        },
+        {
+          "path": "firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
+          "sha256": "01b81dbf753224a156c3fe139b88bf0b9a0f54b11bee864f95e66511c3ccd754",
+          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
+          "size_mb": 300,
+          "required": true
+        },
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/config.json",
+          "size_mb": 1,
+          "required": true,
+          "sha256": "a664db2371b8d3eb1e8caba60b3c4e13c6b82f1192df3f7fa8089141124e521b"
+        },
+        {
+          "path": "tokenizer.tiktoken",
+          "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/main/tokenizer.tiktoken",
+          "size_mb": 1,
+          "required": true,
+          "sha256": "065011318f0534795a6479fb9640d05ae308eae6a4b590c7c48f71e472bc8dbc"
+        }
+      ],
+      "env_key": "FISH_SPEECH_CHECKPOINT_DIR"
+    },
+    "seed_vc": {
+      "version": "2.0",
+      "code_dir": "runtime/seed_vc/engine",
+      "checkpoint_dir": "checkpoints/seed_vc",
+      "pip_packages": ["scipy"],
+      "checkpoint_files": [
+        {
+          "path": "DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth",
+          "sha256": "8ec8841b20bb46df9f7e8e570a6946a4b87b940133c7f0e778487ff33841f720",
+          "url": "https://huggingface.co/Plachta/Seed-VC/resolve/main/DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth",
+          "size_mb": 200,
+          "required": true
+        },
+        {
+          "path": "config_dit_mel_seed_uvit_whisper_small_wavenet.yml",
+          "sha256": "27a91ac41bdb41d0b6951c63642d791b4a70d60b9fc5550eb645f9ddcb3c94da",
+          "url": "https://huggingface.co/Plachta/Seed-VC/resolve/main/config_dit_mel_seed_uvit_whisper_small_wavenet.yml",
+          "size_mb": 1,
+          "required": true
+        }
+      ],
+      "hf_cache_downloads": [
+        {
+          "repo_id": "funasr/campplus",
+          "filename": "campplus_cn_common.bin",
+          "cache_dir_rel": "checkpoints",
+          "size_mb": 25,
+          "note": "说话人特征提取（campplus）"
+        },
+        {
+          "repo_id": "nvidia/bigvgan_v2_22khz_80band_256x",
+          "cache_dir_rel": "checkpoints/hf_cache",
+          "size_mb": 1300,
+          "note": "BigVGAN 声码器（仅 generator，跳过 discriminator/3msteps）",
+          "ignore_patterns": [
+            "bigvgan_generator_3msteps.pt",
+            "bigvgan_discriminator_optimizer.pt",
+            "bigvgan_discriminator_optimizer_3msteps.pt"
+          ]
+        },
+        {
+          "repo_id": "openai/whisper-small",
+          "cache_dir_rel": "checkpoints/hf_cache",
+          "size_mb": 950,
+          "note": "Whisper-small 语义特征编码器（仅 safetensors，跳过 pytorch/flax/tf 格式）",
+          "ignore_patterns": [
+            "pytorch_model.bin",
+            "flax_model.msgpack",
+            "tf_model.h5",
+            "rust_model.ot",
+            "model.ckpt*"
+          ]
+        },
+        {
+          "repo_id": "lj1995/VoiceConversionWebUI",
+          "filename": "rmvpe.pt",
+          "cache_dir_rel": "checkpoints",
+          "size_mb": 200,
+          "note": "RMVPE F0 提取器，seed-vc f0_condition=True 时需要"
+        }
+      ],
+      "env_key": "SEED_VC_CHECKPOINT_DIR"
+    },
+    "rvc": {
+      "version": "2.0",
+      "code_dir": "runtime/rvc/engine",
+      "checkpoint_dir": "checkpoints/rvc",
+      "checkpoint_files": [],
+      "pip_packages": ["rvc-python"],
+      "env_key": "RVC_CHECKPOINT_DIR"
+    },
+    "whisper": {
+      "version": "large-v3",
+      "code_dir": "runtime/whisper/engine",
+      "checkpoint_dir": "checkpoints/whisper",
+      "checkpoint_files": [
+        {
+          "path": "model.pt",
+          "sha256": "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb",
+          "url": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
+          "size_mb": 1550,
+          "required": false,
+          "_note": "非必填：transformers pipeline 会自动缓存，或指定 hf model id"
+        }
+      ],
+      "env_key": "WHISPER_CHECKPOINT_DIR"
+    }
+  }
+}

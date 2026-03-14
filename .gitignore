@@ -4,6 +4,7 @@ dist/
 runtime/*
 !runtime/rvc/
 !runtime/rvc/**
+!runtime/manifest.json
 frontend/out/
 .DS_Store
 *.log
