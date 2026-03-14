@@ -42,12 +42,6 @@ jobs:
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
 
-      # ── 5. 克隆引擎源码（在 setup-runtime 之后，避免引擎 requirements.txt 冲突）
-      - name: 克隆引擎源码
-        run: |
-          git clone --depth 1 https://github.com/fishaudio/fish-speech runtime/fish_speech/engine
-          git clone --depth 1 https://github.com/Plachtaa/seed-vc      runtime/seed_vc/engine
-
       # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend

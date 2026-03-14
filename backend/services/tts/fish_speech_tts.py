@@ -34,7 +34,7 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str =
         cmd_tpl
         .replace("{text}", shlex.quote(text))
         .replace("{output}", str(output_path.resolve()))
-        .replace("{voice_ref}", voice_ref or "")
+        .replace("{voice_ref}", shlex.quote(voice_ref) if voice_ref else '""')
     )
     try:
         completed = subprocess.run(

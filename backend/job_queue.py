@@ -84,7 +84,7 @@ async def _run_vc_job(job_id: str, fn, *fn_args) -> None:
         except Exception as exc:
             logger.error("VC job %s 失败: %s", job_id, traceback.format_exc())
             job["status"] = "failed"
-            job["error"] = str(exc)
+            job["error"] = getattr(exc, "detail", None) or str(exc) or repr(exc)
         finally:
             job["completed_at"] = _t.time()
             # 清理临时参考音频
@@ -128,7 +128,7 @@ async def _run_tts_job(job_id: str, fn, *fn_args) -> None:
         except Exception as exc:
             logger.error("TTS job %s 失败: %s", job_id, traceback.format_exc())
             job["status"] = "failed"
-            job["error"] = str(exc)
+            job["error"] = getattr(exc, "detail", None) or str(exc) or repr(exc)
         finally:
             job["completed_at"] = _t.time()
             ref_tmp = job.pop("_ref_audio_tmp", None)

@@ -1,0 +1,8 @@
+{
+  "command": "",
+  "note": "留空则自动探测 engine/ 子目录。将 whisper/faster-whisper 仓库克隆到 engine/ 后无需修改此文件。也可直接留空使用内置 transformers pipeline（需在 runtime Python 中安装 transformers + torch）。",
+  "examples": [
+    "\"{python}\" \"runtime/whisper/engine/transcribe.py\" --input {input} --output {output} --model {model}",
+    "\"runtime/whisper/engine/infer.bat\" --input {input} --output {output} --model {model}"
+  ]
+}

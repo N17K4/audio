@@ -58,15 +58,9 @@ def emit(msg_type: str, **kwargs) -> None:
         print(kwargs.get("message", ""), flush=True)
 
 
-# ─── 版本锁定 ─────────────────────────────────────────────────────────────────
-REVISION_PINS: dict[str, str] = {
-    "fishaudio/fish-speech-1.5": "main",
-    "Plachta/Seed-VC":           "main",
-}
 
-
-def parse_hf_url(url: str) -> tuple[str, str] | None:
-    """从 HuggingFace resolve URL 解析出 repo_id 和 filename。"""
+def parse_hf_url(url: str) -> tuple[str, str, str] | None:
+    """从 HuggingFace resolve URL 解析出 (repo_id, filename, revision)。"""
     prefix = "https://huggingface.co/"
     if not url.startswith(prefix):
         return None
@@ -75,8 +69,9 @@ def parse_hf_url(url: str) -> tuple[str, str] | None:
     if len(parts) < 5 or parts[2] != "resolve":
         return None
     repo_id = f"{parts[0]}/{parts[1]}"
+    revision = parts[3]  # commit SHA 或 "main"
     filename = "/".join(parts[4:])
-    return repo_id, filename
+    return repo_id, filename, revision
 
 
 def sha256_file(path: Path) -> str:
@@ -124,9 +119,8 @@ def ensure_hf_login() -> bool:
     return True
 
 
-def download_via_hf_hub(repo_id: str, filename: str, dest_dir: Path) -> Path:
+def download_via_hf_hub(repo_id: str, filename: str, dest_dir: Path, revision: str = "main") -> Path:
     from huggingface_hub import hf_hub_download
-    revision = REVISION_PINS.get(repo_id, "main")
     token = get_hf_token()
     print(f"  [HF] {repo_id}/{filename}  revision={revision}"
           + ("  (已登录)" if token else "  (未登录)"))
@@ -243,9 +237,9 @@ def check_and_download(
         try:
             hf_info = parse_hf_url(url)
             if hf_info:
-                repo_id, filename = hf_info
+                repo_id, filename, revision = hf_info
                 try:
-                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir)
+                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
                     if downloaded.resolve() != dest.resolve():
                         downloaded.rename(dest)
                 except Exception as hf_err:
@@ -263,7 +257,7 @@ def check_and_download(
                             if "401" in str(http_err) or "403" in str(http_err):
                                 if ensure_hf_login():
                                     print(f"  [HF] 重试下载 {filename}")
-                                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir)
+                                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
                                     if downloaded.resolve() != dest.resolve():
                                         downloaded.rename(dest)
                                 else:
@@ -365,21 +359,24 @@ def download_hf_cache(
             continue
 
         cache_dir.mkdir(parents=True, exist_ok=True)
+        revision: str = item.get("revision", "main")
         try:
             if filename:
-                print(f"  [HF单文件] {repo_id}  {filename}  cache_dir={cache_dir}")
+                print(f"  [HF单文件] {repo_id}  {filename}  revision={revision}  cache_dir={cache_dir}")
                 hf_hub_download(
                     repo_id=repo_id,
                     filename=filename,
+                    revision=revision,
                     cache_dir=str(cache_dir),
                     token=token,
                 )
             else:
                 ignore_patterns: list[str] = item.get("ignore_patterns", [])
-                print(f"  [HF快照] {repo_id}  cache_dir={cache_dir}"
+                print(f"  [HF快照] {repo_id}  revision={revision}  cache_dir={cache_dir}"
                       + (f"  忽略: {ignore_patterns}" if ignore_patterns else ""))
                 snapshot_download(
                     repo_id=repo_id,
+                    revision=revision,
                     cache_dir=str(cache_dir),
                     token=token,
                     ignore_patterns=ignore_patterns or None,

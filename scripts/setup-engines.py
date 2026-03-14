@@ -295,6 +295,247 @@ if __name__ == "__main__":
     return rvc_ok
 
 
+# ─── Fish Speech engine 源码 ─────────────────────────────────────────────────
+
+_FISH_SPEECH_TAG = "v1.5.0"
+_FISH_SPEECH_REPO = "https://github.com/fishaudio/fish-speech"
+
+# clone 后需删除的目录（训练/服务/数据，推理不需要）
+_FISH_SPEECH_RM_DIRS = [
+    "tools/server", "tools/webui", "tools/sensevoice",
+    "fish_speech/datasets", "fish_speech/callbacks",
+    "fish_speech/models/dac",
+]
+# 只保留这些顶层目录/文件
+_FISH_SPEECH_KEEP = ["fish_speech", "tools", ".project-root"]
+
+_FISH_SPEECH_UTILS_INIT = """\
+from .context import autocast_exclude_mps
+from .logger import RankedLogger
+from .utils import set_seed
+
+__all__ = ["autocast_exclude_mps", "RankedLogger", "set_seed"]
+"""
+
+_FISH_SPEECH_LOGGER = """\
+import logging
+from typing import Mapping, Optional
+
+
+class RankedLogger(logging.LoggerAdapter):
+    \"\"\"推理专用轻量 logger（去除 lightning_utilities 依赖）。\"\"\"
+
+    def __init__(
+        self,
+        name: str = __name__,
+        rank_zero_only: bool = True,
+        extra: Optional[Mapping[str, object]] = None,
+    ) -> None:
+        logger = logging.getLogger(name)
+        super().__init__(logger=logger, extra=extra)
+        self.rank_zero_only = rank_zero_only
+
+    def log(self, level: int, msg: str, rank: Optional[int] = None, *args, **kwargs) -> None:
+        if self.isEnabledFor(level):
+            msg, kwargs = self.process(msg, kwargs)
+            self.logger.log(level, msg, *args, **kwargs)
+"""
+
+_FISH_SPEECH_UTILS = """\
+import random
+import numpy as np
+import torch
+from .logger import RankedLogger
+
+log = RankedLogger(__name__, rank_zero_only=True)
+
+
+def set_seed(seed: int):
+    if seed < 0:
+        seed = -seed
+    if seed > (1 << 31):
+        seed = 1 << 31
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    if torch.backends.cudnn.is_available():
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+"""
+
+
+def setup_fish_speech_engine(project_root: Path) -> bool:
+    """克隆 fish-speech v1.5.0 并精简到推理所需文件。"""
+    import shutil
+
+    engine_dir = project_root / "runtime" / "fish_speech" / "engine"
+    sentinel = engine_dir / "tools" / "inference_engine" / "__init__.py"
+
+    if sentinel.exists():
+        print(f"  ✓ fish_speech engine 已存在（{sentinel}）")
+        return True
+
+    print(f"  [fish_speech] 克隆 {_FISH_SPEECH_REPO} @ {_FISH_SPEECH_TAG} ...")
+    tmp_dir = project_root / "runtime" / "fish_speech" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+
+    r = subprocess.run(
+        ["git", "clone", "--depth", "1", "--branch", _FISH_SPEECH_TAG,
+         _FISH_SPEECH_REPO, str(tmp_dir)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        print(f"  ✗ 克隆失败: {r.stderr.strip()[:300]}")
+        return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+
+    # 只复制推理需要的顶层条目
+    for item in _FISH_SPEECH_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    # 删除训练专用目录
+    for rel in _FISH_SPEECH_RM_DIRS:
+        p = engine_dir / rel
+        if p.exists():
+            shutil.rmtree(p)
+
+    # 删除训练专用 utils 文件，替换为推理精简版
+    utils_dir = engine_dir / "fish_speech" / "utils"
+    # spectrogram.py 保留：vqgan/inference.py 通过 hydra 实例化 LogMelSpectrogram
+    # file.py (utils/file.py) 保留检查：tools/file.py 是单独文件，utils/file.py 训练专用可删
+    for fname in ["braceexpand.py", "instantiators.py",
+                  "logging_utils.py", "rich_utils.py"]:
+        (utils_dir / fname).unlink(missing_ok=True)
+    (utils_dir / "__init__.py").write_text(_FISH_SPEECH_UTILS_INIT, encoding="utf-8")
+    (utils_dir / "logger.py").write_text(_FISH_SPEECH_LOGGER, encoding="utf-8")
+    (utils_dir / "utils.py").write_text(_FISH_SPEECH_UTILS, encoding="utf-8")
+
+    # MPS 兼容补丁：torch.isin 要求两个张量 dtype 相同
+    # codebooks 是 torch.int，但 semantic_ids_tensor 默认创建为 int64，在 MPS 上触发错误
+    _patch_fish_speech_generate(engine_dir)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ fish_speech engine 就绪（{n} 个文件）")
+    return True
+
+
+def _patch_fish_speech_generate(engine_dir: Path) -> None:
+    """修复 MPS torch.isin dtype 不匹配问题（需要两个张量 dtype 一致）。"""
+    # 1) tools/llama/generate.py — decode_one_token_ar_agent / decode_one_token_naive_agent
+    target1 = engine_dir / "tools" / "llama" / "generate.py"
+    if target1.exists():
+        text = target1.read_text(encoding="utf-8")
+        patched = text.replace(
+            "semantic_ids_tensor = torch.tensor(semantic_ids, device=codebooks.device)",
+            "semantic_ids_tensor = torch.tensor(semantic_ids, device=codebooks.device, dtype=codebooks.dtype)",
+        )
+        if patched != text:
+            target1.write_text(patched, encoding="utf-8")
+            print("  ✓ generate.py MPS dtype 补丁已应用")
+
+    # 2) fish_speech/models/text2semantic/llama.py — embed() 中 semantic_token_ids_tensor
+    target2 = engine_dir / "fish_speech" / "models" / "text2semantic" / "llama.py"
+    if target2.exists():
+        text = target2.read_text(encoding="utf-8")
+        patched = text.replace(
+            "self.semantic_token_ids, device=inp.device\n        )",
+            "self.semantic_token_ids, device=inp.device, dtype=inp.dtype\n        )",
+        )
+        if patched != text:
+            target2.write_text(patched, encoding="utf-8")
+            print("  ✓ llama.py MPS dtype 补丁已应用")
+
+
+# ─── Seed-VC engine 源码 ──────────────────────────────────────────────────────
+
+# 无 tag，固定到已验证的 commit SHA（无法用 --branch，改用 init+fetch）
+_SEED_VC_REPO = "https://github.com/Plachtaa/seed-vc"
+_SEED_VC_COMMIT = "51383efd921027683c89e5348211d93ff12ac2a8"
+
+# clone 后删除的目录/文件（v2 API、openvoice后处理、astral量化、CUDA C++源码）
+_SEED_VC_RM = [
+    "modules/openvoice",
+    "modules/astral_quantization",
+    "modules/v2",
+    "modules/bigvgan/alias_free_activation/cuda",
+    # encodec.py 保留：wavenet.py → encodec.SConv1d
+    "configs/v2",
+    "configs/astral_quantization",
+    "inference_v2.py",
+    "seed_vc_wrapper.py",
+]
+# 只复制这些顶层条目
+_SEED_VC_KEEP = ["modules", "configs", "hf_utils.py", "inference.py"]
+
+
+def setup_seed_vc_engine(project_root: Path) -> bool:
+    """克隆 seed-vc 并精简到推理所需文件。"""
+    import shutil
+
+    engine_dir = project_root / "runtime" / "seed_vc" / "engine"
+    sentinel = engine_dir / "inference.py"
+
+    if sentinel.exists():
+        print(f"  ✓ seed_vc engine 已存在（{sentinel}）")
+        return True
+
+    print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
+    tmp_dir = project_root / "runtime" / "seed_vc" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True)
+
+    # seed-vc 无 tag，用 init + fetch 固定到指定 commit（浅克隆）
+    for cmd in [
+        ["git", "init", str(tmp_dir)],
+        ["git", "-C", str(tmp_dir), "remote", "add", "origin", _SEED_VC_REPO],
+        ["git", "-C", str(tmp_dir), "fetch", "--depth", "1", "origin", _SEED_VC_COMMIT],
+        ["git", "-C", str(tmp_dir), "checkout", "FETCH_HEAD"],
+    ]:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"  ✗ 失败（{' '.join(cmd[-2:])}）: {r.stderr.strip()[:300]}")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in _SEED_VC_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _SEED_VC_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ seed_vc engine 就绪（{n} 个文件）")
+    return True
+
+
 # ─── FFmpeg ───────────────────────────────────────────────────────────────────
 
 def download_ffmpeg(project_root: Path) -> bool:
@@ -421,6 +662,16 @@ def main_build() -> int:
         if not ok:
             all_ok = False
         print()
+
+    print("▶ fish_speech engine")
+    if not setup_fish_speech_engine(project_root):
+        all_ok = False
+    print()
+
+    print("▶ seed_vc engine")
+    if not setup_seed_vc_engine(project_root):
+        all_ok = False
+    print()
 
     print("▶ ffmpeg")
     if not download_ffmpeg(project_root):

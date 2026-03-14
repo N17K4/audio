@@ -1,33 +1,69 @@
+# ─── JS / Node ────────────────────────────────────────────────────────────────
 node_modules/
 package-lock.json
-dist/
-runtime/*
-!runtime/rvc/
-!runtime/rvc/**
-!runtime/manifest.json
-frontend/out/
-.DS_Store
-*.log
-*.exe
-*.pdb
-.claude
-.clauderules
-*.zip
-.next
 frontend/next-env.d.ts
-*memorybank*
+frontend/out/
+.next
+*.tsbuildinfo
+
+# ─── 构建产物 ─────────────────────────────────────────────────────────────────
+dist/
+
+# ─── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 .venv/
+
+# ─── 模型权重（models/ 目录下） ────────────────────────────────────────────────
 models/**/*.pth
 models/**/*.onnx
 models/**/*.pt
 models/**/*.ckpt
 models/**/*.safetensors
 models/**/*.index
+
+# ─── runtime 目录 ─────────────────────────────────────────────────────────────
+# 默认忽略 runtime/ 下所有内容，然后逐一解除需要跟踪的目录
+runtime/*
+!runtime/manifest.json
+
+# rvc：全部跟踪（engine/infer.py 由 setup-engines.py 生成，需要版本控制）
+!runtime/rvc/
+!runtime/rvc/**
+
+# whisper：全部跟踪
+!runtime/whisper/
+!runtime/whisper/**
+
+# fish_speech：跟踪 wrapper 脚本；engine/ 由 git clone 动态获取，不跟踪
+!runtime/fish_speech/
+!runtime/fish_speech/**
+runtime/fish_speech/engine/
+
+# seed_vc：跟踪 wrapper 脚本；engine/ 由 git clone 动态获取，不跟踪
+!runtime/seed_vc/
+!runtime/seed_vc/**
+runtime/seed_vc/engine/
+
+# ─── checkpoints / 大模型 ──────────────────────────────────────────────────────
 checkpoints/
+
+# ─── 日志 & 临时文件 ───────────────────────────────────────────────────────────
+*.log
+temp/
+
+# ─── 系统 & IDE ───────────────────────────────────────────────────────────────
+.DS_Store
+*.zip
+*.exe
+*.pdb
+
+# ─── Claude 相关（本地开发工具，不进版本库） ──────────────────────────────────
+.claude
+.clauderules
 CLAUDE*
 README.md
-*.tsbuildinfo
-temp/
+*memorybank*
+
+.env
