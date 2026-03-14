@@ -1,12 +1,55 @@
 import { useState, useEffect } from 'react';
 import type { Job } from '../types';
 
+const STORAGE_KEY = 'ai_tool_jobs';
+const MAX_STORED = 200;
+
+function loadStoredJobs(): Job[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as Job[];
+  } catch { return []; }
+}
+
+function saveJobs(jobs: Job[]) {
+  try {
+    // 只持久化已完成/失败的任务，进行中的重启后无意义
+    const toStore = jobs
+      .filter(j => j.status === 'completed' || j.status === 'failed')
+      .slice(0, MAX_STORED);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+  } catch { /**/ }
+}
+
+/**
+ * 将后端返回的任务列表与本地状态合并：
+ * - 后端有的任务以后端数据为准（状态更新）
+ * - 本地 instant_* 任务不在后端，保留
+ * - 按 created_at 降序排列
+ */
+function mergeJobs(prev: Job[], backendJobs: Job[]): Job[] {
+  const backendMap = new Map(backendJobs.map(j => [j.id, j]));
+  const localOnly = prev.filter(j => !backendMap.has(j.id));
+  const merged = [...backendJobs, ...localOnly];
+  merged.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  return merged;
+}
+
 export function useJobs(
   backendBaseUrl: string,
   backendReady: boolean,
   onNavigateTasks: () => void,
 ) {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobsRaw] = useState<Job[]>(() => loadStoredJobs());
+
+  function setJobs(updater: Job[] | ((prev: Job[]) => Job[])) {
+    setJobsRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      saveJobs(next);
+      return next;
+    });
+  }
 
   // 轮询进行中的任务
   useEffect(() => {
@@ -18,7 +61,7 @@ export function useJobs(
         const r = await fetch(`${backendBaseUrl}/jobs`);
         if (!r.ok) return;
         const d = await r.json();
-        setJobs(d.jobs || []);
+        setJobs(prev => mergeJobs(prev, d.jobs || []));
       } catch { /**/ }
     }, 2000);
     return () => clearTimeout(timer);
@@ -30,7 +73,7 @@ export function useJobs(
       const r = await fetch(`${backendBaseUrl}/jobs`);
       if (!r.ok) return;
       const d = await r.json();
-      setJobs(d.jobs || []);
+      setJobs(prev => mergeJobs(prev, d.jobs || []));
     } catch { /**/ }
   }
 
@@ -49,7 +92,6 @@ export function useJobs(
       error: result.error || null,
     };
     setJobs(prev => [job, ...prev]);
-    // 直接切到任务列表，不调 fetchJobs（fetchJobs 会覆盖掉本地刚加的即时任务）
     onNavigateTasks();
   }
 

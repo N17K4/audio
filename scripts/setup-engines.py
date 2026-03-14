@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -175,6 +176,64 @@ def _patch_fairseq_for_py312(py: str) -> None:
     print("    ✓ fairseq Python 3.12 兼容补丁已应用")
 
 
+def _install_fairseq_windows(py: str) -> bool:
+    """Windows 专用：下载 fairseq 0.12.2 源码，剥离 Cython C 扩展后安装纯 Python 部分。
+
+    嵌入式 Python 不含 Python.h 头文件，无法编译 C 扩展。
+    RVC 推理只用到 fairseq 的纯 Python 部分（checkpoint_utils、hubert 模型类）。
+    """
+    _FAIRSEQ_SDIST = (
+        "https://files.pythonhosted.org/packages/source/f/fairseq/fairseq-0.12.2.tar.gz"
+    )
+
+    print("  [fairseq] 下载源码包（Windows 跳过 C 扩展安装）...")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tarball = Path(tmpdir) / "fairseq.tar.gz"
+        try:
+            urllib.request.urlretrieve(_FAIRSEQ_SDIST, str(tarball))
+        except Exception as e:
+            print(f"    ✗ 下载失败: {e}")
+            return False
+
+        try:
+            with tarfile.open(tarball, "r:gz") as tf:
+                tf.extractall(tmpdir)
+        except Exception as e:
+            print(f"    ✗ 解压失败: {e}")
+            return False
+
+        # 找到解压出的 fairseq-x.y.z 目录
+        candidates = [p for p in Path(tmpdir).iterdir() if p.is_dir() and p.name.startswith("fairseq")]
+        if not candidates:
+            print("    ✗ 解压后未找到 fairseq 目录")
+            return False
+        fairseq_src = candidates[0]
+
+        # 修补 setup.py：移除 Cython/C 扩展，保留纯 Python 安装
+        setup_py = fairseq_src / "setup.py"
+        if setup_py.exists():
+            text = setup_py.read_text(encoding="utf-8")
+            # 移除 Cython 导入行
+            text = re.sub(r"^(from|import)\s+Cython[^\n]*\n", "# cython removed\n", text, flags=re.MULTILINE)
+            # 将 cythonize(...) 替换为空列表（支持多行参数）
+            text = re.sub(r"cythonize\(.*?\)", "[]", text, flags=re.DOTALL)
+            # 确保 ext_modules 为空列表
+            text = re.sub(r"ext_modules\s*=\s*\[[^\]]*\]", "ext_modules=[]", text, flags=re.DOTALL)
+            setup_py.write_text(text, encoding="utf-8")
+            print("    ✓ setup.py 已修补（C 扩展已剥离）")
+
+        r = subprocess.run(
+            [py, "-m", "pip", "install", str(fairseq_src), "--no-deps", "--quiet"],
+            capture_output=True, text=True, timeout=600,
+        )
+        if r.returncode != 0:
+            print(f"    ✗ 安装失败: {r.stderr.strip()[-400:]}")
+            return False
+
+        print("    ✓ fairseq 安装成功（纯 Python 模式）")
+        return True
+
+
 def _install_rvc_python(py: str) -> bool:
     def pip(*args: str) -> bool:
         r = subprocess.run(
@@ -187,7 +246,10 @@ def _install_rvc_python(py: str) -> bool:
 
     pip("setuptools<72")
     print("  [pip] 安装 fairseq (--no-deps) ...")
-    if not pip("fairseq==0.12.2", "--no-deps"):
+    if platform.system() == "Windows":
+        if not _install_fairseq_windows(py):
+            return False
+    elif not pip("fairseq==0.12.2", "--no-deps"):
         return False
     _patch_fairseq_for_py312(py)
     pip("bitarray")

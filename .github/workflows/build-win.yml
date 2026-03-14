@@ -28,7 +28,8 @@ jobs:
         run: npm install -g pnpm
 
       # ── 3. 下载并解压 Windows 嵌入式 Python 3.10 ─────────────────────────────
-      # 使用 3.10：fairseq==0.12.2 有 cp310-win_amd64 预编译 wheel，3.11+ 无 wheel 需编译
+      # 使用 3.10：rvc-python 在 3.10 上兼容性最好；fairseq 无 Windows 预编译 wheel，
+      # setup-engines.py 会下载源码并剥离 C 扩展后安装纯 Python 部分
       - name: 准备 Windows 嵌入式 Python
         shell: pwsh
         run: |

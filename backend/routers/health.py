@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 
-from config import BACKEND_HOST, BACKEND_PORT, MODEL_ROOT, TASK_CAPABILITIES, _MANIFEST
+from config import BACKEND_HOST, BACKEND_PORT, MODEL_ROOT, TASK_CAPABILITIES, _MANIFEST, load_settings, save_settings
 from utils.engine import get_checkpoint_dir
 from utils.voices import list_voices
 from pathlib import Path
+import job_queue
 
 router = APIRouter()
 
@@ -44,3 +45,19 @@ async def runtime_info():
 @router.get("/capabilities")
 async def get_capabilities():
     return {"tasks": TASK_CAPABILITIES}
+
+
+@router.get("/settings")
+async def get_settings():
+    s = load_settings()
+    return {"local_concurrency": max(1, min(4, int(s.get("local_concurrency", 1))))}
+
+
+@router.post("/settings")
+async def update_settings(local_concurrency: int = Body(..., embed=True)):
+    n = max(1, min(4, local_concurrency))
+    s = load_settings()
+    s["local_concurrency"] = n
+    save_settings(s)
+    job_queue.set_local_concurrency(n)
+    return {"local_concurrency": n}

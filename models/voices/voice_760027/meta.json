@@ -1,0 +1,13 @@
+{
+  "voice_id": "voice_760027",
+  "name": "我的音色",
+  "engine": "rvc",
+  "sample_rate": 44100,
+  "model_file": "model.pth",
+  "index_file": "index.index",
+  "inference_mode": "command",
+  "inference_command": "",
+  "trained_from": "/var/folders/ns/6pzqldnx75925pnh3v5_84180000gn/T/ai-tool-temp/train-data/3194d02b-98e7-4676-805f-05956e7fb776.wav",
+  "trained_at": "2026-03-14T23:26:03.040511",
+  "note": "placeholder artifact; replace with real trained model files and inference_command"
+}

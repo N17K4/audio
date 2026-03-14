@@ -13,7 +13,7 @@ except Exception:
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from config import DOWNLOAD_DIR, MAX_LOCAL_QUEUE, BACKEND_HOST, BACKEND_PORT
-from job_queue import JOBS, _make_job, _run_tts_job
+from job_queue import JOBS, LOCAL_SEM, _make_job, _run_tts_job
 from logging_setup import logger
 from services.llm.gemini_llm import run_gemini_audio_understanding, run_gemini_realtime_bootstrap
 from services.llm.github_llm import run_github_llm
@@ -141,11 +141,12 @@ async def task_stt(
             model=model or "gemini-2.5-flash",
         )
     elif p == "whisper":
-        result = await run_whisper_stt(
-            content=content,
-            filename=file.filename or "audio.webm",
-            model=model or "base",
-        )
+        async with LOCAL_SEM:
+            result = await run_whisper_stt(
+                content=content,
+                filename=file.filename or "audio.webm",
+                model=model or "base",
+            )
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported STT provider: {provider}")
     if output_dir.strip() and result.get("text"):

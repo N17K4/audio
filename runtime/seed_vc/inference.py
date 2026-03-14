@@ -125,7 +125,8 @@ def _start_worker(checkpoint_pth: str, config_yml: str, socket_path: str, pid_pa
          "--config", config_yml,
          "--socket_path", socket_path],
         stdout=subprocess.PIPE,
-        stderr=sys.stderr,
+        # stderr=subprocess.DEVNULL 避免 worker 继承上层 capture_output pipe 导致死锁
+        stderr=subprocess.DEVNULL,
         env=os.environ.copy(),
         text=True,
     )
@@ -182,13 +183,13 @@ def run_subprocess_fallback(args, checkpoint_dir: str, project_root: Path) -> in
     tmp_dir = Path(tempfile.mkdtemp(prefix="seedvc_out_"))
     try:
         f0_flag = "--f0-condition True" if args.f0_condition else ""
-        no_pp_flag = "--no-postprocess" if args.no_postprocess else ""
+        # --no-postprocess 是 wrapper 层参数，engine/inference.py 不支持，不向下传递
         cmd = (
             f'"{py}" "{engine_script}" '
             f'--source "{args.source}" --target "{args.target}" --output "{tmp_dir}" '
             f'--diffusion-steps {args.diffusion_steps} '
             f'--semi-tone-shift {args.pitch_shift} {f0_flag} '
-            f'--inference-cfg-rate {args.cfg_rate} {no_pp_flag} '
+            f'--inference-cfg-rate {args.cfg_rate} '
             f'--checkpoint "{checkpoint_pth}" --config "{checkpoint_yml}"'
         )
         print(f"[seed_vc] 执行推理命令: {cmd}", file=sys.stderr, flush=True)

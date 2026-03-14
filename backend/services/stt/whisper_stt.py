@@ -36,7 +36,9 @@ async def run_whisper_stt(content: bytes, filename: str, model: str = "base") ->
             .replace("{model}", model)
         )
         try:
-            completed = subprocess.run(
+            import asyncio
+            completed = await asyncio.to_thread(
+                subprocess.run,
                 cmd, shell=True, check=False, capture_output=True, text=True, timeout=600,
                 env=build_engine_env("whisper"),
             )

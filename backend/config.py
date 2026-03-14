@@ -40,6 +40,27 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
 # 本地任务队列上限（queued+running）
 MAX_LOCAL_QUEUE = 5
 
+# ─── 用户设置（持久化到 MODEL_ROOT/settings.json）────────────────────────────
+SETTINGS_PATH = MODEL_ROOT / "settings.json"
+
+
+def load_settings() -> Dict:
+    if SETTINGS_PATH.exists():
+        try:
+            return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def save_settings(data: Dict) -> None:
+    SETTINGS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+_SETTINGS: Dict = load_settings()
+# 本地推理并发数：1（串行）~ 4，默认 1（保守安全）
+LOCAL_CONCURRENCY: int = max(1, min(4, int(_SETTINGS.get("local_concurrency", 1))))
+
 TASK_CAPABILITIES = {
     "asr": ["whisper", "openai", "gemini"],
     "llm": ["gemini", "openai", "ollama", "github"],

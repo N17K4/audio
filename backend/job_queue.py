@@ -4,15 +4,21 @@ import uuid
 from pathlib import Path
 from typing import Dict
 
-from config import MAX_LOCAL_QUEUE
+from config import MAX_LOCAL_QUEUE, LOCAL_CONCURRENCY
 from logging_setup import logger
 
 # 所有异步任务（TTS / VC）的状态存储，key=job_id
 JOBS: Dict[str, Dict] = {}
 # 训练任务状态存储
 TRAIN_JOBS: Dict[str, Dict] = {}
-# 本地推理信号量：同时只允许 1 个本地推理（RVC/Seed-VC/FishSpeech 共享 GPU/CPU 内存）
-LOCAL_SEM = asyncio.Semaphore(1)
+# 本地推理信号量：控制同时运行的本地推理数（RVC/Seed-VC/FishSpeech/Whisper 共享 GPU/CPU 内存）
+LOCAL_SEM = asyncio.Semaphore(LOCAL_CONCURRENCY)
+
+
+def set_local_concurrency(n: int) -> None:
+    """动态更新本地推理并发数，立即对新提交任务生效。"""
+    global LOCAL_SEM
+    LOCAL_SEM = asyncio.Semaphore(max(1, n))
 
 
 def _make_job(job_type: str, label: str, provider: str, is_local: bool) -> Dict:
