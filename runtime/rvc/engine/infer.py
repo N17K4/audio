@@ -9,15 +9,16 @@ import sys
 from pathlib import Path
 
 # rvc-python 内部会忽略 device="cpu" 参数，自动检测并选择 MPS。
-# 但 MPS 下 fairseq 某些算子会触发 SIGSEGV，因此强制禁用 MPS，回退到 CPU。
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # 不支持的 MPS 算子 fallback 到 CPU
-os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
+# 但 MPS 下 fairseq 某些算子会触发 SIGSEGV，因此必须在 torch import 之前
+# 完全禁用 MPS——不能设 PYTORCH_ENABLE_MPS_FALLBACK=1（那会启用 MPS）。
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
 
 # rvc-python 的 config 模块在 import 时立刻调用 torch.backends.mps.is_available()
 # 并将结果固化为设备选择——传入 device="cpu" 也无效。
 # 通过 patch 让它拿到 False，从而走 CPU 分支，避免 fairseq/MPS SIGSEGV。
 import torch as _torch
 _torch.backends.mps.is_available = lambda: False
+_torch.backends.mps.is_built = lambda: False
 
 
 def detect_version(model_path: str) -> str:

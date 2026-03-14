@@ -1393,7 +1393,7 @@ export default function Home() {
         })()}
 
         {/* 任务页标题栏 */}
-        {!showHome && !showTasks && (
+        {!showHome && !showTasks && !showSystem && (
           <header className="flex items-center gap-3.5 pb-1">
             <TaskIcon task={taskType} size={36} />
             <div>
@@ -1404,7 +1404,7 @@ export default function Home() {
         )}
 
         {/* ══ TTS 面板 ══ */}
-        {!showHome && !showTasks && taskType === 'tts' && (
+        {!showHome && !showTasks && !showSystem && taskType === 'tts' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
             {ProviderRow()}
             <div className="border-t border-slate-100 dark:border-slate-800" />
@@ -1453,7 +1453,7 @@ export default function Home() {
         )}
 
         {/* ══ VC 面板 ══ */}
-        {!showHome && !showTasks && taskType === 'vc' && (
+        {!showHome && !showTasks && !showSystem && taskType === 'vc' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
             {ProviderRow()}
             <div className="border-t border-slate-100 dark:border-slate-800" />
@@ -1634,7 +1634,7 @@ export default function Home() {
         )}
 
         {/* ══ ASR 面板 ══ */}
-        {!showHome && !showTasks && taskType === 'asr' && (
+        {!showHome && !showTasks && !showSystem && taskType === 'asr' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
             {ProviderRow()}
             <div className="border-t border-slate-100 dark:border-slate-800" />
@@ -1667,7 +1667,7 @@ export default function Home() {
         )}
 
         {/* ══ LLM 聊天面板 ══ */}
-        {!showHome && !showTasks && taskType === 'llm' && (
+        {!showHome && !showTasks && !showSystem && taskType === 'llm' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: '540px' }}>
             {/* 顶部配置栏 */}
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 space-y-4">
@@ -1734,7 +1734,7 @@ export default function Home() {
         )}
 
         {/* ══ 语音对话面板 ══ */}
-        {!showHome && !showTasks && taskType === 'voice_chat' && (
+        {!showHome && !showTasks && !showSystem && taskType === 'voice_chat' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: '660px' }}>
             {/* 顶部配置区（常显） */}
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 space-y-4">
@@ -1875,7 +1875,7 @@ export default function Home() {
         )}
 
         {/* ══ 格式转换面板 ══ */}
-        {!showHome && !showTasks && taskType === 'media' && (
+        {!showHome && !showTasks && !showSystem && taskType === 'media' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
 
             {/* 操作选择 */}
@@ -1949,7 +1949,7 @@ export default function Home() {
         )}
 
         {/* 格式转换结果 */}
-        {!showHome && !showTasks && taskType === 'media' && mediaResultUrl && (
+        {!showHome && !showTasks && !showSystem && taskType === 'media' && mediaResultUrl && (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-panel space-y-3 dark:bg-slate-900 dark:border-slate-700/80">
             <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">转换结果</h2>
             <audio controls src={mediaResultUrl} className="w-full" />
@@ -1960,7 +1960,7 @@ export default function Home() {
         )}
 
         {/* ── 处理中进度条 ── */}
-        {!showHome && !showTasks && status === 'processing' && (
+        {!showHome && !showTasks && !showSystem && status === 'processing' && (
           <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 px-5 py-4 space-y-3">
             <div className="flex items-center gap-3">
               <svg className="w-5 h-5 text-indigo-500 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
@@ -2002,20 +2002,20 @@ export default function Home() {
         )}
 
         {/* ── 全局结果区 ── */}
-        {!showHome && !showTasks && error && (
+        {!showHome && !showTasks && !showSystem && error && (
           <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-5 py-4 text-sm text-rose-700 dark:text-rose-300 flex gap-3">
             <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.072 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
             <span className="font-semibold leading-relaxed break-all">{error}</span>
           </div>
         )}
-        {!showHome && !showTasks && successMsg && !error && (
+        {!showHome && !showTasks && !showSystem && successMsg && !error && (
           <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 px-5 py-3.5 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
             <span className="font-medium">{successMsg}</span>
           </div>
         )}
 
-        {!showHome && !showTasks && resultUrl && taskType !== 'voice_chat' && (
+        {!showHome && !showTasks && !showSystem && resultUrl && taskType !== 'voice_chat' && (
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-panel space-y-3 dark:bg-slate-900 dark:border-slate-700/80">
             <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">音频结果</h2>
             <audio controls src={resultUrl} className="w-full" />
@@ -2027,7 +2027,7 @@ export default function Home() {
 
 
         {/* ── 原始响应 ── */}
-        {!showHome && !showTasks && lastResponse && (
+        {!showHome && !showTasks && !showSystem && lastResponse && (
           <details className="rounded-2xl border border-slate-200/80 bg-white shadow-card overflow-hidden dark:bg-slate-900 dark:border-slate-700/80">
             <summary className="cursor-pointer select-none px-5 py-3.5 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 list-none flex items-center justify-between transition-colors">
               <span>原始响应</span>
@@ -2037,7 +2037,7 @@ export default function Home() {
           </details>
         )}
 
-        {!showHome && !showTasks && (
+        {!showHome && !showTasks && !showSystem && (
           <div className="flex justify-end">
             <button className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 transition-colors shadow-sm"
               onClick={() => { setError(''); setSuccessMsg(''); setResultUrl(''); setResultText(''); setLastResponse(''); setSuccessModal(null); }}>
@@ -2047,17 +2047,8 @@ export default function Home() {
         )}
 
         {/* ══ 系统工具 ══ */}
-        {showSystem && <details className="rounded-2xl border border-slate-200/80 bg-white shadow-card overflow-hidden dark:bg-slate-900 dark:border-slate-700/80"
-          open={sysOpen} onToggle={e => setSysOpen((e.target as HTMLDetailsElement).open)}>
-          <summary className="cursor-pointer select-none px-5 py-4 text-sm font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50 list-none flex items-center justify-between transition-colors">
-            <span className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-              系统工具
-            </span>
-            <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${sysOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-          </summary>
-
-          <div className="px-5 pb-6 space-y-6 border-t border-slate-100 dark:border-slate-800 pt-5">
+        {showSystem && <div className="rounded-2xl border border-slate-200/80 bg-white shadow-card overflow-hidden dark:bg-slate-900 dark:border-slate-700/80">
+          <div className="px-5 pb-6 space-y-6 pt-5">
 
             {/* 健康检查 */}
             <div className="space-y-3">
@@ -2171,7 +2162,7 @@ export default function Home() {
             )}
 
           </div>
-        </details>}
+        </div>}
 
           </div>{/* max-w-3xl */}
         </div>{/* p-4 */}
