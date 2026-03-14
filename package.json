@@ -100,7 +100,7 @@
           "!engine/tests/**",
           "!engine/docs/**"
         ]
-      },
+      }
     ],
     "directories": {
       "output": "dist"
