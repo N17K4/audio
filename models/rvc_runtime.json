@@ -1,0 +1,6 @@
+﻿{
+  "python": "python",
+  "infer_script": "C:\\rvc\\infer_cli.py",
+  "args_template": "--input {input} --output {output} --model {model} --index {index}",
+  "note": "Set infer_script to your local RVC inference script. This template will be used by all voices when voice meta.json has empty inference_command."
+}

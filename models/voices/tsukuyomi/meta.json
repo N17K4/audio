@@ -1,0 +1,10 @@
+{
+  "voice_id": "tsukuyomi",
+  "name": "月読调 v2",
+  "engine": "rvc",
+  "sample_rate": 40000,
+  "model_file": "model.pth",
+  "index_file": "",
+  "inference_mode": "command",
+  "inference_command": ""
+}

@@ -1,0 +1,27 @@
+# 依赖
+node_modules
+frontend/node_modules
+frontend/.next
+
+# 构建产物
+frontend/out
+dist
+
+# 大型运行时 & 模型（体积大，不进 build context）
+runtime
+models
+checkpoints
+
+# 日志 & 临时文件
+logs
+temp
+
+# 版本控制
+.git
+
+# 模型权重文件（防漏）
+*.pth
+*.onnx
+*.pt
+*.ckpt
+*.safetensors

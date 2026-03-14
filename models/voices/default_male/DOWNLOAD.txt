@@ -1,0 +1,12 @@
+默认男声音色包下载说明
+
+推荐搜索页：
+https://huggingface.co/models?search=rvc%20male
+
+下载后放到当前目录，至少包含：
+- model.pth
+可选：
+- index.index
+
+放完后执行：
+pnpm run dist

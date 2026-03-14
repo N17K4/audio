@@ -1,0 +1,11 @@
+{
+  "voice_id": "default_male",
+  "name": "Default Male",
+  "engine": "rvc",
+  "sample_rate": 44100,
+  "model_file": "model.pth",
+  "index_file": "index.index",
+  "inference_mode": "command",
+  "inference_command": "",
+  "note": "Set inference_command to your local RVC inference CLI command template."
+}

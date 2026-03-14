@@ -1,0 +1,36 @@
+模型安装说明（新手）
+
+目标：
+把模型文件放到这三个目录：
+- models/voices/default_female/
+- models/voices/default_male/
+- models/voices/default_kid/
+
+一、下载 RVC 引擎（必须）
+1) 打开官方发布页：
+   https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/releases
+2) 或直接下载：
+   - Nvidia: https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/RVC1006Nvidia.7z
+   - AMD/Intel: https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/RVC1006AMD_Intel.7z
+3) 用 7-Zip 解压到：
+   runtime/rvc/engine/
+
+二、下载音色模型（female/male/kid）
+推荐搜索页：
+- female: https://huggingface.co/models?search=rvc%20female
+- male:   https://huggingface.co/models?search=rvc%20male
+- kid:    https://huggingface.co/models?search=rvc%20kid
+
+每个音色目录至少放入：
+- model.pth
+可选：
+- index.index
+
+三、放置后操作
+1) 重新打包：
+   pnpm run dist
+2) 启动应用，等待顶部显示 Backend Connected
+3) 在 Voice Changer 中选择音色并测试录音
+
+注意：
+- 不需要把模型放到系统其他目录，全部放在项目内即可。

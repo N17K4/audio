@@ -1,0 +1,131 @@
+{
+  "name": "ai-tool",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
+    "setup": "pnpm install && cd frontend && pnpm install && cd .. && node scripts/setup-runtime.js",
+    "setup:runtime": "node scripts/setup-runtime.js",
+    "setup:dev": "cd backend && (poetry install || (poetry lock && poetry install))",
+    "checkpoints": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py",
+    "checkpoints:check": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py --check-only",
+    "checkpoints:force": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py --force",
+    "build:frontend": "cd frontend && pnpm build",
+    "dist:both": "pnpm run build:frontend && electron-builder --mac --win",
+    "predist": "pkill -f 'AI Tool' 2>/dev/null || true",
+    "dist": "pnpm run build:frontend && electron-builder --mac",
+    "dist:win": "pnpm run build:frontend && electron-builder --win",
+    "docker": "docker compose up --build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-reload": "2.0.0-alpha.1",
+    "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "com.ai.voice",
+    "productName": "AI Tool",
+    "asar": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "overview.html",
+      "overview-preload.js",
+      "frontend/out/**/*",
+      "backend/**/*",
+      "models/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime/manifest.json",
+        "to": "runtime/manifest.json"
+      },
+      {
+        "from": "runtime/rvc/",
+        "to": "runtime/rvc/",
+        "filter": [
+          "**/*",
+          "!engine/.git/**",
+          "!engine/tests/**",
+          "!engine/docs/**"
+        ]
+      },
+      {
+        "from": "runtime/fish_speech/",
+        "to": "runtime/fish_speech/",
+        "filter": [
+          "**/*",
+          "!engine/.git/**",
+          "!engine/docs/**",
+          "!engine/docker/**",
+          "!engine/compose*.yml",
+          "!engine/dockerfile*",
+          "!engine/mkdocs.yml",
+          "!engine/*.pdf",
+          "!engine/*.ipynb",
+          "!engine/tests/**",
+          "!engine/tools/webui/**"
+        ]
+      },
+      {
+        "from": "runtime/seed_vc/",
+        "to": "runtime/seed_vc/",
+        "filter": [
+          "**/*",
+          "!engine/.git/**",
+          "!engine/train.py",
+          "!engine/train_v2.py",
+          "!engine/data/**",
+          "!engine/eval.py",
+          "!engine/EVAL.md",
+          "!engine/baselines/**",
+          "!engine/examples/**",
+          "!engine/assets/**",
+          "!engine/real-time-gui.py",
+          "!engine/app*.py",
+          "!engine/conda-*.yaml"
+        ]
+      },
+      {
+        "from": "runtime/whisper/",
+        "to": "runtime/whisper/",
+        "filter": [
+          "**/*",
+          "!engine/.git/**",
+          "!engine/tests/**",
+          "!engine/docs/**"
+        ]
+      },
+      {
+        "from": "checkpoints/",
+        "to": "checkpoints/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "target": "dir",
+      "extraResources": [
+        {
+          "from": "runtime/mac/python/",
+          "to": "runtime/mac/python/"
+        }
+      ]
+    },
+    "win": {
+      "target": "dir",
+      "extraResources": [
+        {
+          "from": "runtime/win/python/",
+          "to": "runtime/win/python/"
+        }
+      ]
+    }
+  }
+}

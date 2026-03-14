@@ -1,0 +1,4 @@
+# 本地 poetry 配置（仅作用于 backend/ 目录）
+# 禁止建 virtualenv，直接把包装进当前 Python 的 site-packages
+[virtualenvs]
+create = false

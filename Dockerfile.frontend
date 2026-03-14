@@ -1,0 +1,20 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+COPY frontend/package.json frontend/pnpm-lock.yaml* ./
+
+RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+
+COPY frontend/ ./
+
+RUN pnpm build
+
+# ── 静态文件用 nginx 托管 ──────────────────────────────────────────────────────
+FROM nginx:alpine
+
+COPY --from=builder /app/out /usr/share/nginx/html
+
+EXPOSE 80
