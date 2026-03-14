@@ -111,7 +111,11 @@ const pyExe = process.platform === "win32"
 
 // 用内置 Python 解析 pyproject.toml → 输出 pip 可用的依赖列表
 const parseScript = `
-import tomllib, sys, json
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+import sys, json
 with open(sys.argv[1], 'rb') as f:
     data = tomllib.load(f)
 deps = data['tool']['poetry']['dependencies']

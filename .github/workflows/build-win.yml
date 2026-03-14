@@ -45,7 +45,7 @@ jobs:
           & "$dest\python.exe" get-pip.py --quiet
           Remove-Item "get-pip.py"
           & "$dest\python.exe" -m pip --version
-          & "$dest\python.exe" -m pip install setuptools wheel --quiet
+          & "$dest\python.exe" -m pip install setuptools wheel tomli --quiet
 
       # ── 4. 安装 Node 依赖 + Python 后端依赖（不含引擎 requirements.txt）────────
       - name: 安装依赖（pnpm install + setup-runtime）
