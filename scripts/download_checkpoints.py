@@ -20,6 +20,17 @@ import os
 import sys
 from pathlib import Path
 
+# ─── Windows 控制台 UTF-8 修复 ────────────────────────────────────────────────
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# ─── CI 环境检测：非 TTY 时禁用 HuggingFace hub 进度条 ─────────────────────
+_IS_TTY: bool = sys.stdout.isatty()
+if not _IS_TTY:
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
 # ─── 版本锁定（锁定到具体 commit hash，防止仓库更新导致文件变化）─────────────────
 # 从 HuggingFace 仓库 Files → History 页面获取 commit hash
 REVISION_PINS: dict[str, str] = {
@@ -111,6 +122,7 @@ def download_via_requests(url: str, dest_path: Path) -> None:
     resp.raise_for_status()
     total = int(resp.headers.get("content-length", 0))
     done = 0
+    last_reported = -1
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     with open(dest_path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=65536):
@@ -119,7 +131,11 @@ def download_via_requests(url: str, dest_path: Path) -> None:
             if total:
                 pct = done * 100 // total
                 mb = done / 1024 / 1024
-                print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
+                if _IS_TTY:
+                    print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
+                elif pct // 10 != last_reported:
+                    last_reported = pct // 10
+                    print(f"  {pct}% ({mb:.1f} MB)", flush=True)
     print()
 
 
@@ -693,11 +709,17 @@ def download_ffmpeg(project_root: Path, check_only: bool, force: bool) -> bool:
 
     try:
         # 下载压缩包
+        _last_hook_pct: list[int] = [-1]
+
         def _reporthook(count: int, block_size: int, total_size: int) -> None:
             if total_size > 0:
                 mb = count * block_size / 1024 / 1024
                 pct = min(100, int(count * block_size * 100 / total_size))
-                print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
+                if _IS_TTY:
+                    print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
+                elif pct // 10 != _last_hook_pct[0]:
+                    _last_hook_pct[0] = pct // 10
+                    print(f"  {pct}% ({mb:.1f} MB)", flush=True)
 
         urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
         print()

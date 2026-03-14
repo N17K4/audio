@@ -335,8 +335,8 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
         raise HTTPException(status_code=500, detail=f"Inference command execution failed: {exc}") from exc
 
     if completed.returncode != 0:
-        stdout = (completed.stdout or "").strip()[:2000]
-        stderr = (completed.stderr or "").strip()[:2000]
+        stdout = (completed.stdout or "").strip()[:10000]
+        stderr = (completed.stderr or "").strip()[:10000]
         logger.error("RVC 推理失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
         raise HTTPException(
             status_code=500,
@@ -571,16 +571,16 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str =
             env=build_engine_env("fish_speech"),
         )
     except subprocess.TimeoutExpired as exc:
-        stdout = (exc.stdout or b"").decode(errors="replace").strip()[:2000] if exc.stdout else ""
-        stderr = (exc.stderr or b"").decode(errors="replace").strip()[:2000] if exc.stderr else ""
+        stdout = (exc.stdout or b"").decode(errors="replace").strip()[:10000] if exc.stdout else ""
+        stderr = (exc.stderr or b"").decode(errors="replace").strip()[:10000] if exc.stderr else ""
         logger.error("Fish Speech 超时（600s）\ncmd: %s\nstdout: %s\nstderr: %s", cmd, stdout, stderr)
         raise HTTPException(status_code=500, detail=f"Fish Speech command timed out after 600s. stdout={stdout} stderr={stderr}") from exc
     except Exception as exc:
         logger.error("Fish Speech 启动失败: %s\ncmd: %s", exc, cmd)
         raise HTTPException(status_code=500, detail=f"Fish Speech command failed: {exc}") from exc
     if completed.returncode != 0:
-        stdout = (completed.stdout or "").strip()[:2000]
-        stderr = (completed.stderr or "").strip()[:2000]
+        stdout = (completed.stdout or "").strip()[:10000]
+        stderr = (completed.stderr or "").strip()[:10000]
         logger.error("Fish Speech 失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
         raise HTTPException(status_code=500, detail=f"Fish Speech failed (code={completed.returncode}): {stderr}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
@@ -634,8 +634,8 @@ def run_seed_vc_cmd(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Seed-VC command failed: {exc}") from exc
     if completed.returncode != 0:
-        stdout = (completed.stdout or "").strip()[:2000]
-        stderr = (completed.stderr or "").strip()[:2000]
+        stdout = (completed.stdout or "").strip()[:10000]
+        stderr = (completed.stderr or "").strip()[:10000]
         logger.error("Seed-VC 失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
         raise HTTPException(status_code=500, detail=f"Seed-VC failed (code={completed.returncode}): {stderr}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
@@ -717,8 +717,8 @@ async def run_whisper_stt(content: bytes, filename: str, model: str = "base") ->
             raise HTTPException(status_code=500, detail=f"Whisper command failed: {exc}") from exc
 
         if completed.returncode != 0:
-            stdout = (completed.stdout or "").strip()[:2000]
-            stderr = (completed.stderr or "").strip()[:2000]
+            stdout = (completed.stdout or "").strip()[:10000]
+            stderr = (completed.stderr or "").strip()[:10000]
             logger.error("Whisper 失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
             raise HTTPException(
                 status_code=500,
