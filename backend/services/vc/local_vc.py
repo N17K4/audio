@@ -207,18 +207,30 @@ def run_seed_vc_cmd(
     # 仅在模板无对应占位符时才追加（避免双重传递）
     if "{diffusion_steps}" not in cmd_tpl:
         cmd += extra_args
+    logger.info("[Seed-VC] 启动子进程 (diffusion_steps=%s pitch_shift=%s f0=%s)", diffusion_steps, pitch_shift, f0_condition)
+    logger.info("[Seed-VC] 输入: %s  参考: %s", input_path.name, Path(voice_ref).name if voice_ref else "(空)")
     try:
         completed = subprocess.run(
-            cmd, shell=True, check=False, capture_output=True, text=True, timeout=600,
+            cmd, shell=True, check=False, capture_output=True, text=True, timeout=1800,
             env=build_engine_env("seed_vc"),
         )
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or b"").decode(errors="replace").strip()[:5000] if isinstance(exc.stdout, bytes) else (exc.stdout or "")[:5000]
+        stderr = (exc.stderr or b"").decode(errors="replace").strip()[:5000] if isinstance(exc.stderr, bytes) else (exc.stderr or "")[:5000]
+        logger.error("[Seed-VC] 超时 (1800s)\nstderr: %s\nstdout: %s", stderr, stdout)
+        raise HTTPException(status_code=500, detail=f"Seed-VC 超时（1800s），请检查日志。stderr={stderr[:500]}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Seed-VC command failed: {exc}") from exc
+    # 不论成功失败，均输出 stderr（内含 worker 启动/推理进度日志）
+    if completed.stderr and completed.stderr.strip():
+        for line in completed.stderr.strip().splitlines()[-50:]:
+            logger.info("[Seed-VC] %s", line)
     if completed.returncode != 0:
-        stdout = (completed.stdout or "").strip()[:10000]
-        stderr = (completed.stderr or "").strip()[:10000]
-        logger.error("Seed-VC 失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+        stdout = (completed.stdout or "").strip()[:5000]
+        stderr = (completed.stderr or "").strip()[:5000]
+        logger.error("[Seed-VC] 失败 (code=%s)\nstdout: %s", completed.returncode, stdout)
         raise HTTPException(status_code=500, detail=f"Seed-VC failed (code={completed.returncode}): {stderr}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
-        logger.error("Seed-VC 完成但输出文件缺失: %s", output_path)
+        logger.error("[Seed-VC] 完成但输出文件缺失: %s", output_path)
         raise HTTPException(status_code=500, detail="Seed-VC finished but output file is missing/empty")
+    logger.info("[Seed-VC] 完成，输出: %s (%.1f KB)", output_path.name, output_path.stat().st_size / 1024)

@@ -25,6 +25,9 @@ async def delete_job(job_id: str):
     job = JOBS.pop(job_id, None)
     if not job:
         raise HTTPException(status_code=404, detail=f"任务不存在: {job_id}")
+    task = job.get("_task")
+    if task and not task.done():
+        task.cancel()
     return {"ok": True}
 
 

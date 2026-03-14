@@ -118,8 +118,16 @@ async def convert(
             raw_input_path.unlink(missing_ok=True)
             input_path = wav_input_path
         else:
-            logger.warning("所有 ffmpeg 均无法转换 %s，使用原始文件", raw_ext)
-            input_path = raw_input_path
+            # 所有 ffmpeg 均失败：Seed-VC/RVC 无法处理 webm 等容器格式，直接拒绝
+            raw_input_path.unlink(missing_ok=True)
+            tried = ", ".join(_ffmpeg_candidates) if _ffmpeg_candidates else "（未找到任何 ffmpeg）"
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"无法将 {raw_ext} 格式转换为 WAV：所有 ffmpeg 均失败（{tried}）。"
+                    "请录制/上传 WAV / MP3 / FLAC 等格式，或安装系统 ffmpeg（brew install ffmpeg）。"
+                ),
+            )
     else:
         input_path = raw_input_path
     output_path = DOWNLOAD_DIR / f"{task_id}_output.wav"

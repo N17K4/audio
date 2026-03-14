@@ -68,6 +68,16 @@ function getLogDir() {
   return LOGS_DIR;
 }
 
+// ─── Checkpoint 目录 ───────────────────────────────────────────────────────
+// dev:  <项目根>/checkpoints/（不变）
+// prod: app.getPath('userData')/checkpoints/（跨版本持久，%AppData% 合规）
+function getCheckpointsDir() {
+  if (!app.isPackaged) {
+    return path.join(__dirname, 'checkpoints');
+  }
+  return path.join(app.getPath('userData'), 'checkpoints');
+}
+
 // ─── 磁盘大小计算 ─────────────────────────────────────────────────────────────
 function getDirSize(dirPath) {
   let total = 0;
@@ -186,6 +196,165 @@ function getAvailablePort() {
   });
 }
 
+// ─── Backend 就绪检测 ─────────────────────────────────────────────────────
+function waitBackendReady(baseUrl, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    function poll() {
+      const req = http.get(`${baseUrl}/health`, { timeout: 3000 }, (res) => {
+        res.resume();
+        if (res.statusCode === 200) return resolve();
+        if (Date.now() - start > timeoutMs) return reject(new Error('Backend 启动超时'));
+        setTimeout(poll, 1500);
+      });
+      req.on('error', () => {
+        if (Date.now() - start > timeoutMs) return reject(new Error('Backend 启动超时'));
+        setTimeout(poll, 1500);
+      });
+    }
+    poll();
+  });
+}
+
+function fetchRuntimeInfo(baseUrl) {
+  return new Promise((resolve) => {
+    const req = http.get(`${baseUrl}/runtime/info`, { timeout: 5000 }, (res) => {
+      let body = '';
+      res.on('data', d => { body += d; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); } catch { resolve({ engines: {} }); }
+      });
+    });
+    req.on('error', () => resolve({ engines: {} }));
+  });
+}
+
+// ─── 首次下载引导窗口 ─────────────────────────────────────────────────────
+let setupGuideWin = null;
+let downloadProc = null;
+
+function openSetupGuideWindow(missingEngines) {
+  return new Promise((resolve) => {
+    setupGuideWin = new BrowserWindow({
+      width: 680,
+      height: 520,
+      title: '首次使用 — 下载 AI 模型',
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'setup-guide-preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+    setupGuideWin.setMenu(null);
+    setupGuideWin.loadFile(path.join(__dirname, 'setup-guide.html'));
+    setupGuideWin.webContents.once('did-finish-load', () => {
+      // 读取 manifest 获取文件大小信息
+      let manifest = {};
+      try {
+        const mp = app.isPackaged
+          ? path.join(process.resourcesPath, 'runtime', 'manifest.json')
+          : path.join(__dirname, 'runtime', 'manifest.json');
+        manifest = JSON.parse(fs.readFileSync(mp, 'utf-8'));
+      } catch {}
+      setupGuideWin.webContents.send('setup:info', { missingEngines, manifest });
+    });
+    setupGuideWin.on('closed', () => {
+      setupGuideWin = null;
+      resolve();
+    });
+  });
+}
+
+// ─── Setup IPC handlers ───────────────────────────────────────────────────
+
+ipcMain.handle('setup:startDownload', (_event, opts) => {
+  const hfEndpoint = (opts && opts.hfEndpoint) ? opts.hfEndpoint.trim() : '';
+  const ckptDir = getCheckpointsDir();
+  fs.mkdirSync(ckptDir, { recursive: true });
+
+  const scriptPath = path.join(__dirname, 'scripts', 'download_checkpoints.py');
+  const isMac = process.platform === 'darwin';
+  const pyPath = app.isPackaged
+    ? (isMac
+        ? path.join(process.resourcesPath, 'runtime', 'mac', 'python', 'bin', 'python3')
+        : path.join(process.resourcesPath, 'runtime', 'win', 'python', 'python.exe'))
+    : (isMac
+        ? path.join(__dirname, 'runtime', 'mac', 'python', 'bin', 'python3')
+        : path.join(__dirname, 'runtime', 'win', 'python', 'python.exe'));
+
+  const env = {
+    ...process.env,
+    RESOURCES_ROOT: app.isPackaged ? process.resourcesPath : __dirname,
+    CHECKPOINTS_DIR: ckptDir,
+    ...(hfEndpoint ? { HF_ENDPOINT: hfEndpoint } : {}),
+  };
+
+  downloadProc = spawn(pyPath, [scriptPath, '--json-progress'], { env, shell: false });
+
+  downloadProc.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n').filter(Boolean);
+    for (const line of lines) {
+      try {
+        const msg = JSON.parse(line);
+        if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+          setupGuideWin.webContents.send('setup:progress', msg);
+        }
+      } catch { /* 非 JSON 行忽略 */ }
+    }
+  });
+  downloadProc.stderr.on('data', (data) => {
+    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+      setupGuideWin.webContents.send('setup:progress',
+        { type: 'log', message: data.toString().trim() });
+    }
+  });
+  downloadProc.on('close', (code) => {
+    downloadProc = null;
+    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+      setupGuideWin.webContents.send('setup:done', { exitCode: code });
+    }
+  });
+  return { ok: true };
+});
+
+ipcMain.handle('setup:cancelDownload', () => {
+  if (downloadProc) { downloadProc.kill(); downloadProc = null; }
+  return { ok: true };
+});
+
+ipcMain.handle('setup:testHfConnectivity', () => {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const req = https.get('https://huggingface.co', { timeout: 5000 }, (res) => {
+      res.resume();
+      resolve({ reachable: res.statusCode < 500 });
+    });
+    req.on('error', () => resolve({ reachable: false }));
+    req.setTimeout(5000, () => { req.destroy(); resolve({ reachable: false }); });
+  });
+});
+
+ipcMain.handle('setup:saveConfig', (_event, cfg) => {
+  const cfgPath = path.join(app.getPath('userData'), 'app-config.json');
+  let existing = {};
+  try { existing = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')); } catch {}
+  fs.writeFileSync(cfgPath, JSON.stringify({ ...existing, ...cfg }, null, 2), 'utf-8');
+  return { ok: true };
+});
+
+ipcMain.handle('setup:loadConfig', () => {
+  const cfgPath = path.join(app.getPath('userData'), 'app-config.json');
+  try { return JSON.parse(fs.readFileSync(cfgPath, 'utf-8')); } catch { return {}; }
+});
+
+ipcMain.handle('setup:closeWindow', () => {
+  if (setupGuideWin && !setupGuideWin.isDestroyed()) setupGuideWin.close();
+  return { ok: true };
+});
+
 async function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
@@ -270,8 +439,11 @@ async function createWindow() {
       BACKEND_HOST: '127.0.0.1',
       BACKEND_PORT: backendPort,
       ...(LOGS_DIR ? { LOGS_DIR } : {}),
-      // 打包后 runtime/、checkpoints/ 在 Resources/ 下，不在 app/ 里
-      ...(app.isPackaged ? { RESOURCES_ROOT: process.resourcesPath } : {}),
+      // 打包后 runtime/ 在 Resources/ 下；checkpoints 在 userData（跨版本持久）
+      ...(app.isPackaged ? {
+        RESOURCES_ROOT: process.resourcesPath,
+        CHECKPOINTS_DIR: getCheckpointsDir(),
+      } : {}),
     },
   });
 
@@ -280,6 +452,22 @@ async function createWindow() {
   pyProcess.stdout.on('data', (data) => { process.stdout.write(`[Backend] ${data}`); });
   pyProcess.stderr.on('data', (data) => { process.stderr.write(`[Backend] ${data}`); });
   pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err));
+
+  // 生产模式：等 backend 就绪 → 检测模型 → 若缺失则弹引导窗口
+  if (!isDev) {
+    try {
+      await waitBackendReady(backendBaseUrl, 90000);
+      const runtimeInfo = await fetchRuntimeInfo(backendBaseUrl);
+      const missingEngines = Object.entries(runtimeInfo.engines || {})
+        .filter(([, v]) => !v.ready)
+        .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
+      if (missingEngines.length > 0) {
+        await openSetupGuideWindow(missingEngines);
+      }
+    } catch (err) {
+      console.error('[Setup] 检测模型状态失败:', err.message);
+    }
+  }
 
   if (isDev) {
     await win.loadURL('http://localhost:3000');
@@ -296,12 +484,17 @@ ipcMain.handle('app:getDiskUsage', () => {
   const isMac = process.platform === 'darwin';
   const runtimePlatform = isMac ? 'mac' : 'win';
 
+  const ckptRoot = getCheckpointsDir();
   const measureRes = (relPath) => {
     const full = path.join(resRoot, relPath);
     return dirExists(full) ? getDirSize(full) : 0;
   };
   const measureApp = (relPath) => {
     const full = path.join(__dirname, relPath);
+    return dirExists(full) ? getDirSize(full) : 0;
+  };
+  const measureCkpt = (engine) => {
+    const full = path.join(ckptRoot, engine);
     return dirExists(full) ? getDirSize(full) : 0;
   };
 
@@ -324,7 +517,7 @@ ipcMain.handle('app:getDiskUsage', () => {
       key: 'fish_speech_ckpt',
       label: 'Fish Speech 模型',
       sub: 'checkpoints/fish_speech/',
-      size: measureRes('checkpoints/fish_speech'),
+      size: measureCkpt('fish_speech'),
       deletable: false,
     },
     {
@@ -338,7 +531,7 @@ ipcMain.handle('app:getDiskUsage', () => {
       key: 'seed_vc_ckpt',
       label: 'Seed-VC 模型',
       sub: 'checkpoints/seed_vc/',
-      size: measureRes('checkpoints/seed_vc'),
+      size: measureCkpt('seed_vc'),
       deletable: false,
     },
     {
@@ -352,7 +545,7 @@ ipcMain.handle('app:getDiskUsage', () => {
       key: 'whisper_ckpt',
       label: 'Whisper 模型',
       sub: 'checkpoints/whisper/',
-      size: measureRes('checkpoints/whisper'),
+      size: measureCkpt('whisper'),
       deletable: false,
     },
     {
@@ -361,10 +554,9 @@ ipcMain.handle('app:getDiskUsage', () => {
       sub: 'checkpoints/hf_cache/',
       size: (() => {
         // hf_cache 目录：Seed-VC / Fish Speech 等通过 HF hub 下载时产生
-        const d = path.join(resRoot, 'checkpoints', 'hf_cache');
+        const d = path.join(ckptRoot, 'hf_cache');
         if (dirExists(d)) return getDirSize(d);
         // 兼容旧版：扫描 checkpoints/ 下所有 models--* 目录
-        const ckptRoot = path.join(resRoot, 'checkpoints');
         if (!dirExists(ckptRoot)) return 0;
         let total = 0;
         try {
@@ -428,7 +620,7 @@ ipcMain.handle('app:getDiskUsage', () => {
 
 // ─── IPC：删除模型 ────────────────────────────────────────────────────────────
 ipcMain.handle('app:deleteModels', (_event, engine) => {
-  const ckptDir = path.join(__dirname, 'checkpoints', engine);
+  const ckptDir = path.join(getCheckpointsDir(), engine);
   if (!dirExists(ckptDir)) {
     return { ok: true, note: '目录不存在，无需删除' };
   }
@@ -475,6 +667,10 @@ ipcMain.on('log:renderer', (_event, level, message) => {
 ipcMain.handle('dialog:selectDir', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   return result.canceled ? '' : (result.filePaths[0] || '');
+});
+
+app.on('before-quit', () => {
+  if (downloadProc) { downloadProc.kill(); downloadProc = null; }
 });
 
 app.on('window-all-closed', () => {

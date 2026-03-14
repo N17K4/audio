@@ -46,14 +46,7 @@ jobs:
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
 
-      # ── 5. 下载模型 checkpoint ────────────────────────────────────────────────
-      - name: 下载模型（checkpoints）
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          runtime/mac/python/bin/python3 scripts/download_checkpoints.py
-
-      # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
+      # ── 5. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend
 
@@ -73,17 +66,22 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           du -sh "$ZIP_NAME"
 
-      # ── 9a. 上传到 GitHub Release（tag 触发时）───────────────────────────────
-      - name: 上传到 Release
+      # ── 9a. 创建 GitHub Release（tag 触发时）────────────────────────────────
+      # 安装包约 3 GB（Python runtime + 引擎代码，不含 checkpoints）
+      # 仍超过 GitHub Release 单文件 2 GB 限制，不直接上传文件，用户从 Artifact 下载
+      - name: 创建 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ZIP_NAME }}
           generate_release_notes: true
+          body: |
+            > **下载安装包**：安装包约 3 GB，超过 GitHub Release 文件限制。
+            > 请前往本次构建的 [Actions 页面](../../actions)，在 Artifacts 区域下载 `${{ env.ZIP_NAME }}`。
+            > Artifact 保留 30 天。
+            > AI 模型（约 6 GB）将在首次启动时引导下载，支持 HuggingFace 镜像。
 
-      # ── 9b. 上传为 Artifact（手动触发时，保留 30 天）─────────────────────────
+      # ── 9b. 上传为 Artifact（始终执行，含 tag push）──────────────────────────
       - name: 上传为 Artifact
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ZIP_NAME }}

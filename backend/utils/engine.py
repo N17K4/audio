@@ -13,6 +13,7 @@ from config import (
     SEED_VC_ENGINE_JSON,
     WHISPER_ENGINE_JSON,
     _MANIFEST,
+    CHECKPOINTS_ROOT,
 )
 from logging_setup import logger
 
@@ -259,7 +260,7 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     cfg = engines.get(engine, {})
     env_key = cfg.get("env_key") or f"{engine.upper()}_CHECKPOINT_DIR"
     # HF 缓存统一指向 checkpoints/hf_cache（绝对路径，避免相对路径错位）
-    hf_cache = str(RESOURCES_ROOT / "checkpoints" / "hf_cache")
+    hf_cache = str(CHECKPOINTS_ROOT / "hf_cache")
     merged = {
         **os.environ,
         env_key: get_checkpoint_dir(engine),
@@ -283,4 +284,7 @@ def get_checkpoint_dir(engine: str) -> str:
     if env_val:
         return env_val
     rel = cfg.get("checkpoint_dir", f"checkpoints/{engine}")
+    # rel 格式为 "checkpoints/fish_speech"，去掉前缀后拼 CHECKPOINTS_ROOT
+    if rel.startswith("checkpoints/"):
+        return str((CHECKPOINTS_ROOT / rel[len("checkpoints/"):]).resolve())
     return str((RESOURCES_ROOT / rel).resolve())

@@ -31,6 +31,26 @@ _IS_TTY: bool = sys.stdout.isatty()
 if not _IS_TTY:
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
+# ─── HuggingFace 镜像端点（中国用户可设置 HF_ENDPOINT=https://hf-mirror.com）──
+HF_ENDPOINT: str = os.getenv("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
+
+def apply_hf_endpoint(url: str) -> str:
+    """将 URL 中的 huggingface.co 替换为配置的镜像端点（HTTP 直连下载时使用）。
+    hf_hub_download / snapshot_download 原生读取 HF_ENDPOINT 环境变量，无需此函数。"""
+    if HF_ENDPOINT != "https://huggingface.co":
+        return url.replace("https://huggingface.co", HF_ENDPOINT)
+    return url
+
+# ─── JSON Lines 进度输出（供 Electron IPC 使用）────────────────────────────
+_JSON_MODE: bool = False
+
+def emit(msg_type: str, **kwargs) -> None:
+    """输出结构化进度消息。--json-progress 时输出 JSON Lines，否则普通打印。"""
+    if _JSON_MODE:
+        print(json.dumps({"type": msg_type, **kwargs}, ensure_ascii=False), flush=True)
+    elif msg_type == "log":
+        print(kwargs.get("message", ""), flush=True)
+
 # ─── 版本锁定（锁定到具体 commit hash，防止仓库更新导致文件变化）─────────────────
 # 从 HuggingFace 仓库 Files → History 页面获取 commit hash
 REVISION_PINS: dict[str, str] = {
@@ -117,7 +137,9 @@ def download_via_hf_hub(repo_id: str, filename: str, dest_dir: Path) -> Path:
 
 def download_via_requests(url: str, dest_path: Path) -> None:
     import requests
+    url = apply_hf_endpoint(url)
     print(f"  [HTTP] {url}")
+    emit("log", message=f"  [HTTP] {url}")
     resp = requests.get(url, stream=True, timeout=60)
     resp.raise_for_status()
     total = int(resp.headers.get("content-length", 0))
@@ -131,12 +153,16 @@ def download_via_requests(url: str, dest_path: Path) -> None:
             if total:
                 pct = done * 100 // total
                 mb = done / 1024 / 1024
-                if _IS_TTY:
+                if _IS_TTY and not _JSON_MODE:
                     print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
                 elif pct // 10 != last_reported:
                     last_reported = pct // 10
-                    print(f"  {pct}% ({mb:.1f} MB)", flush=True)
-    print()
+                    if not _JSON_MODE:
+                        print(f"  {pct}% ({mb:.1f} MB)", flush=True)
+                    emit("progress", file=dest_path.name, pct=pct,
+                         mb=round(mb, 1), total_mb=round(total / 1024 / 1024, 1))
+    if not _JSON_MODE:
+        print()
 
 
 def check_and_download(
@@ -146,9 +172,13 @@ def check_and_download(
     check_only: bool,
     force: bool,
     sha256_updates: dict,   # {engine_name: {rel_path: sha256}} 收集需要写回的哈希
+    checkpoints_base: "Path | None" = None,  # 若设置则覆盖 checkpoints/ 基础路径
 ) -> bool:
     checkpoint_dir_rel = cfg.get("checkpoint_dir", f"checkpoints/{engine_name}")
-    checkpoint_dir = resources_root / checkpoint_dir_rel
+    if checkpoints_base is not None and checkpoint_dir_rel.startswith("checkpoints/"):
+        checkpoint_dir = checkpoints_base / checkpoint_dir_rel[len("checkpoints/"):]
+    else:
+        checkpoint_dir = resources_root / checkpoint_dir_rel
     checkpoint_files: list[dict] = cfg.get("checkpoint_files", [])
 
     if not checkpoint_files:
@@ -196,6 +226,7 @@ def check_and_download(
         size_str = f"~{size_mb:.0f} MB" if size_mb else "未知大小"
         status = "必填" if required else "可选"
         print(f"  ✗ {rel_path}  [{status}] {size_str}")
+        emit("file_start", engine=engine_name, file=rel_path, size_mb=size_mb)
 
         if check_only:
             if required:
@@ -252,14 +283,17 @@ def check_and_download(
                 actual = sha256_file(dest)
                 sha256_updates.setdefault(engine_name, {})[rel_path] = actual
                 print(f"    ✓ 下载完成  {dest.stat().st_size // 1024 // 1024} MB  sha256={actual[:12]}…")
+                emit("file_done", engine=engine_name, file=rel_path, ok=True)
                 if expected_sha256 and actual != expected_sha256:
                     print(f"    ⚠ SHA256 与 manifest 预期不符，文件可能已更新，已记录新哈希")
             else:
                 print(f"    ✗ 下载后文件异常")
+                emit("file_done", engine=engine_name, file=rel_path, ok=False, error="下载后文件异常")
                 if required:
                     all_ok = False
         except Exception as e:
             print(f"    ✗ 下载失败: {e}")
+            emit("file_done", engine=engine_name, file=rel_path, ok=False, error=str(e))
             if "401" in str(e) or "403" in str(e):
                 print(f"    提示：可设置环境变量 HF_TOKEN=xxx 后重试")
             if required:
@@ -292,6 +326,7 @@ def download_hf_cache(
     resources_root: Path,
     check_only: bool,
     force: bool,
+    checkpoints_base: "Path | None" = None,  # 若设置则覆盖 checkpoints/ 基础路径
 ) -> bool:
     """下载需要写入 HF 缓存格式的额外模型（如 campplus、BigVGAN、Whisper-small）。"""
     downloads: list[dict] = cfg.get("hf_cache_downloads", [])
@@ -313,7 +348,10 @@ def download_hf_cache(
         cache_dir_rel: str = item.get("cache_dir_rel", "checkpoints/hf_cache")
         size_mb: float = item.get("size_mb", 0)
         note: str = item.get("note", "")
-        cache_dir = resources_root / cache_dir_rel
+        if checkpoints_base is not None and cache_dir_rel.startswith("checkpoints/"):
+            cache_dir = checkpoints_base / cache_dir_rel[len("checkpoints/"):]
+        else:
+            cache_dir = resources_root / cache_dir_rel
 
         size_str = f"~{size_mb:.0f} MB" if size_mb else "未知大小"
         label = f"{repo_id}/{filename}" if filename else repo_id
@@ -819,11 +857,15 @@ def _bootstrap_download_deps() -> None:
 
 
 def main() -> int:
+    global _JSON_MODE
     parser = argparse.ArgumentParser(description="检查并下载 AI 引擎 checkpoint 文件")
     parser.add_argument("--engine", help="只处理指定引擎（fish_speech / seed_vc / whisper / rvc）")
     parser.add_argument("--check-only", action="store_true", help="只检查，不下载")
     parser.add_argument("--force", action="store_true", help="强制重新下载（覆盖已有文件）")
+    parser.add_argument("--json-progress", action="store_true",
+                        help="以 JSON Lines 格式输出进度（供 Electron IPC 使用）")
     args = parser.parse_args()
+    _JSON_MODE = args.json_progress
 
     if not args.check_only:
         _bootstrap_download_deps()
@@ -833,6 +875,11 @@ def main() -> int:
 
     resources_root_env = os.getenv("RESOURCES_ROOT", "")
     resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
+
+    # CHECKPOINTS_DIR 由 Electron 生产模式传入（userData/checkpoints/），覆盖默认的
+    # resources_root/checkpoints/ 路径，避免写入只读的 app bundle
+    checkpoints_dir_env = os.getenv("CHECKPOINTS_DIR", "").strip()
+    checkpoints_base: "Path | None" = Path(checkpoints_dir_env).resolve() if checkpoints_dir_env else None
 
     manifest_path = resources_root / "runtime" / "manifest.json"
     if not manifest_path.exists():
@@ -860,15 +907,18 @@ def main() -> int:
         if args.engine and engine_name != args.engine:
             continue
         print(f"▶ {engine_name} (v{cfg.get('version', '?')})")
+        emit("engine_start", engine=engine_name, version=cfg.get("version", "?"))
 
         # 1. 下载 manifest checkpoint_files
-        ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force, sha256_updates)
+        ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force,
+                                sha256_updates, checkpoints_base=checkpoints_base)
         if not ok:
             all_ready = False
 
         # 2. 下载额外 HF 缓存模型（如 seed_vc 的 campplus / BigVGAN / Whisper-small）
         if cfg.get("hf_cache_downloads"):
-            ok2 = download_hf_cache(engine_name, cfg, resources_root, args.check_only, args.force)
+            ok2 = download_hf_cache(engine_name, cfg, resources_root, args.check_only, args.force,
+                                    checkpoints_base=checkpoints_base)
             if not ok2:
                 all_ready = False
 
@@ -899,9 +949,11 @@ def main() -> int:
 
     if all_ready:
         print("✓ 所有必填 checkpoint 文件就绪")
+        emit("all_done", ok=True)
         return 0
     else:
         print("✗ 存在缺失的必填 checkpoint 文件")
+        emit("all_done", ok=False)
         return 1
 
 

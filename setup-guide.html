@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>首次使用 — 下载 AI 模型</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font: 14px/1.6 "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid #3c3c3c;
+  }
+  .header h1 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #e8e8e8;
+  }
+  .header p {
+    margin: 0;
+    font-size: 13px;
+    color: #888;
+  }
+  .content {
+    flex: 1;
+    padding: 16px 24px;
+    overflow-y: auto;
+  }
+  .footer {
+    padding: 14px 24px;
+    border-top: 1px solid #3c3c3c;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  /* ── 阶段 ── */
+  .phase { display: none; }
+  .phase.active { display: contents; }
+
+  /* ── 引擎列表 ── */
+  .engine-list { margin: 0; padding: 0; list-style: none; }
+  .engine-list li {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: #252526;
+    margin-bottom: 8px;
+    gap: 12px;
+  }
+  .engine-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }
+  .engine-info { flex: 1; }
+  .engine-name { font-weight: 600; color: #e8e8e8; }
+  .engine-files { font-size: 12px; color: #888; margin-top: 2px; }
+  .engine-size { font-size: 13px; color: #569cd6; flex-shrink: 0; }
+
+  /* ── 镜像设置 ── */
+  .mirror-row {
+    margin-top: 16px;
+    background: #252526;
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+  .mirror-row label { font-size: 13px; color: #ccc; display: block; margin-bottom: 6px; }
+  .mirror-row input[type=text] {
+    width: 100%;
+    background: #1e1e1e;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+  }
+  .mirror-row input:focus { border-color: #569cd6; }
+  .mirror-hint { font-size: 12px; color: #888; margin-top: 6px; }
+  .mirror-hint.warn { color: #f0c060; }
+  .mirror-hint.ok { color: #4ec9b0; }
+
+  /* ── 进度 ── */
+  .progress-section { margin-bottom: 14px; }
+  .progress-label {
+    font-size: 13px;
+    color: #ccc;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .progress-bar-wrap {
+    height: 8px;
+    background: #3c3c3c;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: #569cd6;
+    border-radius: 4px;
+    transition: width 0.3s;
+    width: 0%;
+  }
+  .log-area {
+    background: #0d0d0d;
+    border: 1px solid #3c3c3c;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font: 12px/1.5 "Menlo", "Consolas", monospace;
+    color: #9cdcfe;
+    height: 220px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .log-line.err { color: #f48771; }
+  .log-line.warn { color: #f0c060; }
+
+  /* ── 完成 ── */
+  .result-box {
+    text-align: center;
+    padding: 24px 0 16px;
+  }
+  .result-icon { font-size: 48px; margin-bottom: 12px; }
+  .result-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .result-sub { font-size: 13px; color: #888; }
+  .error-detail {
+    margin-top: 14px;
+    background: #2a1a1a;
+    border: 1px solid #7a3535;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #f48771;
+    text-align: left;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+
+  /* ── 按钮 ── */
+  button {
+    border: none;
+    border-radius: 5px;
+    padding: 7px 18px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-primary { background: #0e639c; color: #fff; }
+  .btn-primary:hover { background: #1177bb; }
+  .btn-primary:disabled { background: #2a4a6a; color: #666; cursor: not-allowed; }
+  .btn-secondary { background: #3c3c3c; color: #d4d4d4; }
+  .btn-secondary:hover { background: #4a4a4a; }
+  .btn-danger { background: #6b2020; color: #f48771; }
+  .btn-danger:hover { background: #7a2525; }
+</style>
+</head>
+<body>
+
+<!-- ══════ 阶段1：信息确认 ══════ -->
+<div id="phase-info" class="phase active">
+  <div class="header">
+    <h1>首次使用 — 需要下载 AI 模型</h1>
+    <p>以下引擎的模型文件尚未下载，首次运行需要联网下载约 <strong id="total-size">计算中…</strong></p>
+  </div>
+  <div class="content">
+    <ul class="engine-list" id="engine-list"></ul>
+    <div class="mirror-row">
+      <label>HuggingFace 下载地址（中国大陆用户请填镜像）</label>
+      <input type="text" id="hf-endpoint" placeholder="留空自动检测，或填写：https://hf-mirror.com">
+      <div class="mirror-hint" id="mirror-hint">正在检测 huggingface.co 连通性…</div>
+    </div>
+  </div>
+  <div class="footer">
+    <button class="btn-secondary" onclick="skipDownload()">稍后下载（关闭）</button>
+    <button class="btn-primary" id="btn-start" onclick="startDownload()" disabled>开始下载</button>
+  </div>
+</div>
+
+<!-- ══════ 阶段2：下载进度 ══════ -->
+<div id="phase-progress" class="phase">
+  <div class="header">
+    <h1>正在下载模型…</h1>
+    <p id="progress-subtitle">准备中</p>
+  </div>
+  <div class="content">
+    <div class="progress-section">
+      <div class="progress-label">
+        <span id="progress-file">—</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+    </div>
+    <div class="log-area" id="log-area"></div>
+  </div>
+  <div class="footer">
+    <button class="btn-danger" onclick="cancelDownload()">取消下载</button>
+  </div>
+</div>
+
+<!-- ══════ 阶段3：完成 / 失败 ══════ -->
+<div id="phase-done" class="phase">
+  <div class="header" style="border:none">
+    <h1 id="done-title">下载完成</h1>
+    <p id="done-sub"></p>
+  </div>
+  <div class="content">
+    <div class="result-box">
+      <div class="result-icon" id="done-icon">✅</div>
+      <div class="result-title" id="done-msg">所有模型已就绪，关闭此窗口即可开始使用。</div>
+      <div class="result-sub" id="done-hint"></div>
+      <div class="error-detail" id="error-detail" style="display:none"></div>
+    </div>
+  </div>
+  <div class="footer" id="done-footer">
+    <button class="btn-primary" onclick="closeWindow()">关闭，继续使用</button>
+  </div>
+</div>
+
+<script>
+let _engines = [];
+let _manifest = {};
+
+// ─── 工具 ──────────────────────────────────────────────────────────────────
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function fmtSize(mb) {
+  if (mb >= 1024) return (mb / 1024).toFixed(1) + ' GB';
+  return mb.toFixed(0) + ' MB';
+}
+
+function appendLog(text, cls) {
+  const area = document.getElementById('log-area');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (cls ? ' ' + cls : '');
+  line.textContent = text;
+  area.appendChild(line);
+  area.scrollTop = area.scrollHeight;
+}
+
+// ─── 阶段1 初始化 ──────────────────────────────────────────────────────────
+window.setupAPI.onInfo(({ missingEngines, manifest }) => {
+  _engines = missingEngines;
+  _manifest = manifest || {};
+
+  const engineIcons = {
+    fish_speech: '🐟',
+    seed_vc: '🌱',
+    whisper: '🎙️',
+    rvc: '🎵',
+  };
+
+  const list = document.getElementById('engine-list');
+  let totalMb = 0;
+
+  for (const { engine, files } of missingEngines) {
+    const engines = (_manifest.engines || {});
+    const engineCfg = engines[engine] || {};
+    const fileList = engineCfg.files || [];
+
+    let engineMb = 0;
+    const fileLabels = [];
+    for (const f of fileList) {
+      if (files.length === 0 || files.includes(f.filename)) {
+        const mb = f.size_mb || 0;
+        engineMb += mb;
+        fileLabels.push(`${f.filename}（${fmtSize(mb)}）`);
+      }
+    }
+    totalMb += engineMb;
+
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="engine-icon">${engineIcons[engine] || '📦'}</div>
+      <div class="engine-info">
+        <div class="engine-name">${engine}</div>
+        <div class="engine-files">${fileLabels.length ? fileLabels.join('、') : '模型文件'}</div>
+      </div>
+      <div class="engine-size">${engineMb > 0 ? fmtSize(engineMb) : '—'}</div>
+    `;
+    list.appendChild(li);
+  }
+
+  document.getElementById('total-size').textContent = totalMb > 0 ? fmtSize(totalMb) : '若干 GB';
+
+  // 检测连通性
+  window.setupAPI.testHfConnectivity().then(({ reachable }) => {
+    const hint = document.getElementById('mirror-hint');
+    if (reachable) {
+      hint.textContent = '✓ huggingface.co 可正常访问';
+      hint.className = 'mirror-hint ok';
+    } else {
+      hint.textContent = '✗ huggingface.co 无法访问，建议填写镜像地址（如 https://hf-mirror.com）';
+      hint.className = 'mirror-hint warn';
+    }
+    document.getElementById('btn-start').disabled = false;
+  });
+
+  // 读取已保存配置
+  window.setupAPI.loadConfig().then(cfg => {
+    if (cfg.hfEndpoint) {
+      document.getElementById('hf-endpoint').value = cfg.hfEndpoint;
+    }
+  });
+});
+
+// ─── 开始下载 ──────────────────────────────────────────────────────────────
+async function startDownload() {
+  const endpoint = document.getElementById('hf-endpoint').value.trim();
+  if (endpoint) {
+    await window.setupAPI.saveConfig({ hfEndpoint: endpoint });
+  }
+  showPhase('phase-progress');
+  await window.setupAPI.startDownload({ hfEndpoint: endpoint });
+}
+
+function skipDownload() {
+  window.setupAPI.closeWindow();
+}
+
+// ─── 进度处理 ──────────────────────────────────────────────────────────────
+let _currentFile = '';
+
+window.setupAPI.onProgress((msg) => {
+  switch (msg.type) {
+    case 'engine_start':
+      appendLog(`▶ 开始下载引擎：${msg.engine}`);
+      document.getElementById('progress-subtitle').textContent = `正在下载：${msg.engine}`;
+      break;
+    case 'file_start':
+      _currentFile = msg.file || '';
+      document.getElementById('progress-file').textContent = _currentFile;
+      document.getElementById('progress-pct').textContent = '0%';
+      document.getElementById('progress-fill').style.width = '0%';
+      appendLog(`  ↓ ${_currentFile}${msg.size_mb ? '（' + fmtSize(msg.size_mb) + '）' : ''}`);
+      break;
+    case 'progress': {
+      const pct = Math.min(100, Math.max(0, msg.pct || 0));
+      document.getElementById('progress-pct').textContent = pct + '%';
+      document.getElementById('progress-fill').style.width = pct + '%';
+      break;
+    }
+    case 'file_done':
+      if (msg.ok) {
+        appendLog(`  ✓ ${msg.file || _currentFile} 完成`);
+      } else {
+        appendLog(`  ✗ ${msg.file || _currentFile} 失败：${msg.error || '未知错误'}`, 'err');
+      }
+      break;
+    case 'log':
+      if (msg.message) appendLog(msg.message);
+      break;
+    default:
+      if (msg.message) appendLog(msg.message);
+  }
+});
+
+window.setupAPI.onDone(({ exitCode }) => {
+  const ok = exitCode === 0;
+  showPhase('phase-done');
+  document.getElementById('done-icon').textContent = ok ? '✅' : '❌';
+  document.getElementById('done-title').textContent = ok ? '下载完成' : '下载失败';
+  document.getElementById('done-msg').textContent = ok
+    ? '所有模型已就绪，关闭此窗口即可开始使用。'
+    : '部分模型下载失败，可关闭后在设置中重新下载，或忽略继续使用。';
+
+  const footer = document.getElementById('done-footer');
+  if (!ok) {
+    footer.innerHTML = `
+      <button class="btn-secondary" onclick="retryDownload()">重试下载</button>
+      <button class="btn-primary" onclick="closeWindow()">忽略，继续使用</button>
+    `;
+  }
+});
+
+// ─── 取消 / 重试 ───────────────────────────────────────────────────────────
+function cancelDownload() {
+  window.setupAPI.cancelDownload();
+  showPhase('phase-info');
+}
+
+function retryDownload() {
+  document.getElementById('log-area').innerHTML = '';
+  showPhase('phase-progress');
+  const endpoint = '';
+  window.setupAPI.loadConfig().then(cfg => {
+    window.setupAPI.startDownload({ hfEndpoint: cfg.hfEndpoint || '' });
+  });
+}
+
+function closeWindow() {
+  window.setupAPI.closeWindow();
+}
+</script>
+</body>
+</html>

@@ -77,6 +77,10 @@ async def _run_vc_job(job_id: str, fn, *fn_args) -> None:
             result_url = await asyncio.to_thread(fn, *fn_args)
             job["result_url"] = result_url
             job["status"] = "completed"
+        except asyncio.CancelledError:
+            job["status"] = "failed"
+            job["error"] = "已中断"
+            raise
         except Exception as exc:
             logger.error("VC job %s 失败: %s", job_id, traceback.format_exc())
             job["status"] = "failed"
@@ -117,6 +121,10 @@ async def _run_tts_job(job_id: str, fn, *fn_args) -> None:
             job["result_url"] = result.get("result_url")
             job["result_text"] = result.get("text") or result.get("message") or ""
             job["status"] = "completed"
+        except asyncio.CancelledError:
+            job["status"] = "failed"
+            job["error"] = "已中断"
+            raise
         except Exception as exc:
             logger.error("TTS job %s 失败: %s", job_id, traceback.format_exc())
             job["status"] = "failed"

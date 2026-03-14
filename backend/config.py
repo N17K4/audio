@@ -10,6 +10,15 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 RESOURCES_ROOT = Path(os.getenv("RESOURCES_ROOT", str(APP_ROOT))).resolve()
 RUNTIME_ROOT = RESOURCES_ROOT / "runtime"
 
+# 模型 checkpoints 目录：生产模式由 Electron 传入 CHECKPOINTS_DIR（userData/checkpoints/）
+# 开发模式回退到项目根下的 checkpoints/
+_CHECKPOINTS_DIR_ENV = os.getenv("CHECKPOINTS_DIR", "").strip()
+CHECKPOINTS_ROOT = (
+    Path(_CHECKPOINTS_DIR_ENV).resolve()
+    if _CHECKPOINTS_DIR_ENV
+    else RESOURCES_ROOT / "checkpoints"
+)
+
 MODEL_ROOT = Path(os.getenv("MODEL_ROOT", str(APP_ROOT / "models"))).resolve()
 VOICES_DIR = MODEL_ROOT / "voices"
 UPLOADS_DIR = MODEL_ROOT / "uploads"
@@ -63,7 +72,7 @@ _MANIFEST: Dict = _load_manifest()
 
 
 def setup_dirs():
-    for d in [VOICES_DIR, UPLOADS_DIR, DOWNLOAD_DIR, TRAIN_DATA_DIR, LOGS_DIR]:
+    for d in [VOICES_DIR, UPLOADS_DIR, DOWNLOAD_DIR, TRAIN_DATA_DIR, LOGS_DIR, CHECKPOINTS_ROOT]:
         d.mkdir(parents=True, exist_ok=True)
 
 

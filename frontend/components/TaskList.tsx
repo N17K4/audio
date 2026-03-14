@@ -63,14 +63,25 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs }:
             <p className="text-xs text-rose-500 break-all pt-0.5">{job.error}</p>
           )}
         </div>
-        <button
-          className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-rose-500 transition-colors"
-          onClick={async () => {
-            await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
-            setJobs(prev => prev.filter(j => j.id !== job.id));
-          }}>
-          删除
-        </button>
+        {(job.status === 'queued' || job.status === 'running') ? (
+          <button
+            className="shrink-0 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-800/50 px-2.5 py-1 text-xs text-orange-500 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+            onClick={async () => {
+              await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+              setJobs(prev => prev.filter(j => j.id !== job.id));
+            }}>
+            中断
+          </button>
+        ) : (
+          <button
+            className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-rose-500 transition-colors"
+            onClick={async () => {
+              await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+              setJobs(prev => prev.filter(j => j.id !== job.id));
+            }}>
+            删除
+          </button>
+        )}
       </div>
     );
   }
