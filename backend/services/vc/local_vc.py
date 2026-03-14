@@ -10,7 +10,7 @@ except Exception:
 
 from fastapi import HTTPException
 
-from config import DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT, ELEVENLABS_BASE_URL, ELEVENLABS_STS_PATH_TEMPLATE
+from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT, ELEVENLABS_BASE_URL, ELEVENLABS_STS_PATH_TEMPLATE
 from logging_setup import logger
 from utils.auth import parse_cloud_auth_header, require_httpx
 from utils.engine import build_engine_env, get_default_rvc_command_template, get_seed_vc_command_template
@@ -77,6 +77,7 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
             text=True,
             timeout=600,
             env=merged_env,
+            cwd=str(APP_ROOT),  # fairseq/HuBERT 在 backend/ 目录下会 SIGSEGV，需从项目根目录启动
         )
     except Exception as exc:
         logger.error("RVC 推理命令执行异常: %s", exc)
