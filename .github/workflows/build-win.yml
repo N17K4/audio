@@ -32,7 +32,7 @@ jobs:
       - name: 准备 Windows 嵌入式 Python
         shell: pwsh
         run: |
-          $ver  = "3.10.16"
+          $ver  = "3.10.11"
           $dest = "runtime\win\python"
           $url  = "https://www.python.org/ftp/python/$ver/python-$ver-embed-amd64.zip"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null

@@ -59,6 +59,13 @@ def main() -> int:
     model_path  = str(Path(args.model).resolve())
     index_path  = str(Path(args.index).resolve()) if args.index else ""
 
+    # macOS ARM：faiss-cpu 读取 index 文件时会 SIGSEGV（无法被 Python 捕获）
+    # 跳过 index 文件，降级到无 index 推理（音质略低但可用）
+    import sys as _sys, platform as _platform
+    if index_path and _sys.platform == "darwin" and _platform.machine() == "arm64":
+        print(f"[rvc] macOS ARM 跳过 index 文件（faiss-cpu SIGSEGV 规避）: {index_path}", file=sys.stderr)
+        index_path = ""
+
     version = detect_version(model_path)
 
     # 从环境变量读取质量参数（fallback），CLI 参数优先
