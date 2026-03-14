@@ -340,7 +340,7 @@ def download_ffmpeg(project_root: Path) -> bool:
         print()
 
         target_name = "ffmpeg.exe" if system == "Windows" else "ffmpeg"
-        if url.endswith(".zip"):
+        if url.endswith(".zip") or url.endswith("/zip"):
             with zipfile.ZipFile(tmp_archive, "r") as zf:
                 found = next(
                     (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
