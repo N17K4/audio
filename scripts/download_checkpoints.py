@@ -861,6 +861,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="检查并下载 AI 引擎 checkpoint 文件")
     parser.add_argument("--engine", help="只处理指定引擎（fish_speech / seed_vc / whisper / rvc）")
     parser.add_argument("--check-only", action="store_true", help="只检查，不下载")
+    parser.add_argument("--setup-only", action="store_true",
+                        help="只安装 pip 依赖和 FFmpeg，跳过 HF 模型下载（CI 构建用）")
     parser.add_argument("--force", action="store_true", help="强制重新下载（覆盖已有文件）")
     parser.add_argument("--json-progress", action="store_true",
                         help="以 JSON Lines 格式输出进度（供 Electron IPC 使用）")
@@ -897,7 +899,12 @@ def main() -> int:
         print(f"✗ 引擎 '{args.engine}' 不在 manifest 中，可用: {list(engines)}")
         return 1
 
-    mode = "检查" if args.check_only else "检查并下载"
+    if args.setup_only:
+        mode = "仅安装依赖（跳过模型下载）"
+    elif args.check_only:
+        mode = "检查"
+    else:
+        mode = "检查并下载"
     print(f"=== {mode} checkpoint 文件 ===")
     print(f"resources_root: {resources_root}\n")
 
@@ -909,33 +916,33 @@ def main() -> int:
         print(f"▶ {engine_name} (v{cfg.get('version', '?')})")
         emit("engine_start", engine=engine_name, version=cfg.get("version", "?"))
 
-        # 1. 下载 manifest checkpoint_files
-        ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force,
-                                sha256_updates, checkpoints_base=checkpoints_base)
-        if not ok:
-            all_ready = False
+        # 1. 下载 manifest checkpoint_files（--setup-only 时跳过）
+        if not args.setup_only:
+            ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force,
+                                    sha256_updates, checkpoints_base=checkpoints_base)
+            if not ok:
+                all_ready = False
 
-        # 2. 下载额外 HF 缓存模型（如 seed_vc 的 campplus / BigVGAN / Whisper-small）
-        if cfg.get("hf_cache_downloads"):
+        # 2. 下载额外 HF 缓存模型（--setup-only 时跳过）
+        if not args.setup_only and cfg.get("hf_cache_downloads"):
             ok2 = download_hf_cache(engine_name, cfg, resources_root, args.check_only, args.force,
                                     checkpoints_base=checkpoints_base)
             if not ok2:
                 all_ready = False
 
-        # 3. 安装 pip 包（manifest 中声明的）
-        if cfg.get("pip_packages"):
-            if engine_name == "rvc":
-                # RVC 需要特殊处理（fairseq 兼容 + base_model 预下载）
-                setup_rvc_engine(project_root, args.check_only)
-            else:
-                setup_pip_packages(engine_name, cfg, project_root, args.check_only)
-        elif engine_name == "rvc":
-            # rvc 即使无 pip_packages 也要跑引擎初始化
-            setup_rvc_engine(project_root, args.check_only)
+        # 3. 安装 pip 包（--check-only 时跳过，其余模式始终执行）
+        if not args.check_only:
+            if cfg.get("pip_packages"):
+                if engine_name == "rvc":
+                    setup_rvc_engine(project_root, False)
+                else:
+                    setup_pip_packages(engine_name, cfg, project_root, False)
+            elif engine_name == "rvc":
+                setup_rvc_engine(project_root, False)
 
         print()
 
-    if sha256_updates and not args.check_only:
+    if sha256_updates and not args.check_only and not args.setup_only:
         save_sha256_to_manifest(manifest, manifest_path, sha256_updates)
         print()
 

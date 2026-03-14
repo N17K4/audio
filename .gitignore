@@ -30,3 +30,4 @@ checkpoints/
 CLAUDE*
 README.md
 *.tsbuildinfo
+temp/

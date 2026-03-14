@@ -1,9 +1,7 @@
 name: 构建 Windows 安装包
 
 on:
-  # 手动触发（在 Actions 页面点 Run workflow）
   workflow_dispatch:
-  # 或者推送 v* tag 自动触发（如 git tag v1.0.0 && git push --tags）
   push:
     tags:
       - 'v*'
@@ -40,64 +38,111 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile "python-embed.zip"
           Expand-Archive -Path "python-embed.zip" -DestinationPath $dest -Force
           Remove-Item "python-embed.zip"
-          # 启用 site-packages：取消注释 _pth 里的 import site
           $pth = "$dest\python312._pth"
           (Get-Content $pth) -replace '#import site', 'import site' | Set-Content $pth
-          # 安装 pip
           Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "get-pip.py"
           & "$dest\python.exe" get-pip.py --quiet
           Remove-Item "get-pip.py"
           & "$dest\python.exe" -m pip --version
 
-      # ── 4. 安装 Node 依赖 + Python 后端/引擎依赖 ─────────────────────────────
+      # ── 4. 克隆引擎源码 ───────────────────────────────────────────────────────
+      - name: 克隆引擎源码
+        run: |
+          git clone --depth 1 https://github.com/fishaudio/fish-speech runtime/fish_speech/engine
+          git clone --depth 1 https://github.com/Plachtaa/seed-vc      runtime/seed_vc/engine
+
+      # ── 5. 安装 Node 依赖 + Python 后端/引擎依赖（含 torch 等重型包）─────────
       - name: 安装依赖（pnpm install + setup-runtime）
         run: |
           pnpm install
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
 
-      # ── 5. 构建前端静态文件 ───────────────────────────────────────────────────
+      # ── 6. 安装引擎专属 pip 包 + FFmpeg（跳过 HF 模型下载）─────────────────
+      - name: 安装引擎 pip 包 + FFmpeg
+        shell: pwsh
+        run: |
+          & "runtime\win\python\python.exe" scripts/download_checkpoints.py --setup-only
+
+      # ── 7. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend
 
-      # ── 7. electron-builder 打包 Windows ─────────────────────────────────────
+      # ── 8. electron-builder 打包 Windows ─────────────────────────────────────
       - name: 打包 Electron（Windows）
         run: npx electron-builder --win
 
-      # ── 8. 压缩产物 ───────────────────────────────────────────────────────────
+      # ── 9. 压缩产物 ───────────────────────────────────────────────────────────
       - name: 压缩 dist
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
           if (-not $tag -or $tag -eq "") { $tag = "dev" }
           $zipName = "AI-Tool-win-$tag.zip"
-          # 动态找 electron-builder 实际输出目录（win-unpacked / win-ia32-unpacked 等）
           $distDir = Get-ChildItem -Path "dist" -Directory | Where-Object { $_.Name -like "*unpacked*" } | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $distDir) { Write-Error "dist 下未找到 *unpacked 目录，打包可能失败"; exit 1 }
+          if (-not $distDir) { Write-Error "dist 下未找到 *unpacked 目录"; exit 1 }
           Write-Host "压缩目录：$distDir"
-          # 用 7-Zip 替代 Compress-Archive，可靠性更好
           & "C:\Program Files\7-Zip\7z.exe" a -tzip "$zipName" "$distDir\*"
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
           $size = (Get-Item $zipName).Length / 1GB
           Write-Host "打包完成：$zipName（$([math]::Round($size,2)) GB）"
 
-      # ── 9a. 创建 GitHub Release（tag 触发时）────────────────────────────────
-      # 安装包约 3 GB（Python runtime + 引擎代码，不含 checkpoints）
-      # 可能超过 GitHub Release 单文件 2 GB 限制，用户从 Artifact 下载
+      # ── 10. 分卷处理（超 1.9 GB 时切分）──────────────────────────────────────
+      - name: 分卷处理
+        shell: pwsh
+        run: |
+          $zipName = $env:ZIP_NAME
+          $size = (Get-Item $zipName).Length
+          Write-Host "压缩包大小：$([math]::Round($size/1GB,2)) GB"
+          if ($size -gt 1900000000) {
+            Write-Host "超过 1.9 GB，开始分卷..."
+            $partSize = [int64](1900 * 1024 * 1024)
+            $stream = [System.IO.File]::OpenRead($zipName)
+            $buf = New-Object byte[] $partSize
+            $partIndex = 0
+            while ($true) {
+              $read = $stream.Read($buf, 0, $buf.Length)
+              if ($read -eq 0) { break }
+              $partFile = "$zipName.part$(([string]$partIndex).PadLeft(2,'0'))"
+              [System.IO.File]::WriteAllBytes($partFile, $buf[0..($read-1)])
+              Write-Host "  写入：$partFile（$([math]::Round($read/1MB,1)) MB）"
+              $partIndex++
+            }
+            $stream.Close()
+            Remove-Item $zipName
+          } else {
+            Write-Host "无需分卷，直接上传"
+          }
+
+      # ── 11a. 创建 GitHub Release 并上传安装包（tag 触发时）──────────────────
       - name: 创建 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          files: ${{ env.ZIP_NAME }}*
           body: |
-            > **下载安装包**：请前往本次构建的 [Actions 页面](../../actions)，在 Artifacts 区域下载 `${{ env.ZIP_NAME }}`。
-            > Artifact 保留 30 天。
-            > AI 模型（约 6 GB）将在首次启动时引导下载，支持 HuggingFace 镜像。
+            ## 下载说明
 
-      # ── 9b. 上传为 Artifact（始终执行，保留 30 天）──────────────────────────
+            **Windows 安装包已附在本页面的 Assets 中。**
+
+            > AI 模型（约 6 GB）将在首次启动时弹窗引导下载，支持设置 HuggingFace 镜像。
+
+            **若文件被分卷**（出现多个 `.part00` `.part01` 文件），在 PowerShell 中合并：
+            ```powershell
+            $parts = Get-ChildItem "AI-Tool-win-*.zip.part*" | Sort-Object Name
+            $out = [System.IO.File]::OpenWrite("AI-Tool-win.zip")
+            foreach ($p in $parts) {
+              $bytes = [System.IO.File]::ReadAllBytes($p.FullName)
+              $out.Write($bytes, 0, $bytes.Length)
+            }
+            $out.Close()
+            ```
+
+      # ── 11b. 上传为 Artifact（始终执行，作为备份）───────────────────────────
       - name: 上传为 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}*
           retention-days: 30
