@@ -567,14 +567,14 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str =
     )
     try:
         completed = subprocess.run(
-            cmd, shell=True, check=False, capture_output=True, text=True, timeout=600,
+            cmd, shell=True, check=False, capture_output=True, text=True, timeout=1200,
             env=build_engine_env("fish_speech"),
         )
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or b"").decode(errors="replace").strip()[:10000] if exc.stdout else ""
         stderr = (exc.stderr or b"").decode(errors="replace").strip()[:10000] if exc.stderr else ""
-        logger.error("Fish Speech 超时（600s）\ncmd: %s\nstdout: %s\nstderr: %s", cmd, stdout, stderr)
-        raise HTTPException(status_code=500, detail=f"Fish Speech command timed out after 600s. stdout={stdout} stderr={stderr}") from exc
+        logger.error("Fish Speech 超时（1200s）\ncmd: %s\nstdout: %s\nstderr: %s", cmd, stdout, stderr)
+        raise HTTPException(status_code=500, detail=f"Fish Speech command timed out after 1200s. stdout={stdout} stderr={stderr}") from exc
     except Exception as exc:
         logger.error("Fish Speech 启动失败: %s\ncmd: %s", exc, cmd)
         raise HTTPException(status_code=500, detail=f"Fish Speech command failed: {exc}") from exc
@@ -1702,12 +1702,32 @@ async def convert(
             detail=f"本地推理队列已满（{MAX_LOCAL_QUEUE} 个），请等待当前任务完成后再提交。",
         )
 
-    # 保存输入文件
-    file_ext = os.path.splitext(file.filename or "")[1] or ".wav"
+    # 保存输入文件，本地引擎统一转为 WAV（rvc_python/torchaudio 不支持 webm 等容器格式）
+    raw_ext = (os.path.splitext(file.filename or "")[1] or ".wav").lower()
     task_id = str(uuid.uuid4())
-    input_path = DOWNLOAD_DIR / f"{task_id}_input{file_ext}"
-    output_path = DOWNLOAD_DIR / f"{task_id}_output{file_ext}"
-    input_path.write_bytes(content)
+    raw_input_path = DOWNLOAD_DIR / f"{task_id}_input{raw_ext}"
+    raw_input_path.write_bytes(content)
+    _SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
+    if raw_ext not in _SUPPORTED_AUDIO_EXTS:
+        wav_input_path = DOWNLOAD_DIR / f"{task_id}_input.wav"
+        _ffmpeg = get_ffmpeg_binary()
+        if _ffmpeg:
+            try:
+                subprocess.run(
+                    [_ffmpeg, "-y", "-i", str(raw_input_path), str(wav_input_path)],
+                    capture_output=True, check=True, timeout=60,
+                )
+                raw_input_path.unlink(missing_ok=True)
+                input_path = wav_input_path
+            except Exception as _conv_err:
+                logger.warning("输入格式转换失败，使用原始文件: %s", _conv_err)
+                input_path = raw_input_path
+        else:
+            input_path = raw_input_path
+    else:
+        input_path = raw_input_path
+    output_path = DOWNLOAD_DIR / f"{task_id}_output.wav"
+    file_ext = ".wav"
 
     prov = provider.strip().lower()
     filename_label = (file.filename or "audio").split("/")[-1]

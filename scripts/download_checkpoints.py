@@ -222,7 +222,12 @@ def check_and_download(
                     is_auth_err = ("401" in str(hf_err) or "403" in str(hf_err)
                                    or "authentication" in str(hf_err).lower()
                                    or "Unauthorized" in str(hf_err))
-                    if is_auth_err:
+                    is_import_err = isinstance(hf_err, ImportError)
+                    if is_import_err:
+                        # huggingface_hub 未安装，直接 HTTP 下载（公开仓库可行）
+                        print(f"    [提示] huggingface_hub 未安装，回退到 HTTP 直连下载")
+                        download_via_requests(url, dest)
+                    elif is_auth_err:
                         # 先尝试直接 HTTP（部分仓库无需登录）
                         try:
                             download_via_requests(url, dest)
@@ -784,12 +789,44 @@ def download_ffmpeg(project_root: Path, check_only: bool, force: bool) -> bool:
                 pass
 
 
+def _bootstrap_download_deps() -> None:
+    """确保下载所需的基础包（huggingface_hub、requests）已安装。
+    这两个包是下载阶段必要工具，在任何引擎处理前预先安装。"""
+    import subprocess
+
+    needed = []
+    try:
+        import huggingface_hub  # noqa: F401
+    except ImportError:
+        needed.append("huggingface_hub")
+    try:
+        import requests  # noqa: F401
+    except ImportError:
+        needed.append("requests")
+
+    if not needed:
+        return
+
+    print(f"[bootstrap] 安装下载依赖: {', '.join(needed)}")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", *needed, "--quiet"],
+        capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode == 0:
+        print(f"[bootstrap] 安装成功")
+    else:
+        print(f"[bootstrap] 安装失败（将继续尝试）: {result.stderr.strip()[:200]}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="检查并下载 AI 引擎 checkpoint 文件")
     parser.add_argument("--engine", help="只处理指定引擎（fish_speech / seed_vc / whisper / rvc）")
     parser.add_argument("--check-only", action="store_true", help="只检查，不下载")
     parser.add_argument("--force", action="store_true", help="强制重新下载（覆盖已有文件）")
     args = parser.parse_args()
+
+    if not args.check_only:
+        _bootstrap_download_deps()
 
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent

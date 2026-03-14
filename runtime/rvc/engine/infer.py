@@ -75,14 +75,21 @@ def main() -> int:
     rms_mix_rate = args.rms_mix_rate if args.rms_mix_rate is not None else float(_os.environ.get("RVC_RMS_MIX_RATE", "0.25"))
     protect      = args.protect      if args.protect      is not None else float(_os.environ.get("RVC_PROTECT", "0.33"))
 
+    import time as _time
     try:
-        print(f"[rvc] 初始化 RVCInference device=cpu", file=sys.stderr)
+        print(f"[rvc] 初始化 RVCInference device=cpu", file=sys.stderr, flush=True)
+        _t0 = _time.monotonic()
         rvc = RVCInference(device="cpu")
-        print(f"[rvc] 加载模型: {model_path}  version={version}  index={index_path!r}", file=sys.stderr)
+        print(f"[rvc] RVCInference 初始化完成 ({_time.monotonic()-_t0:.1f}s)", file=sys.stderr, flush=True)
+
+        print(f"[rvc] 加载模型: {model_path}  version={version}  index={index_path!r}", file=sys.stderr, flush=True)
+        _t1 = _time.monotonic()
         rvc.load_model(model_path, version=version, index_path=index_path)
+        print(f"[rvc] 模型加载完成 ({_time.monotonic()-_t1:.1f}s)", file=sys.stderr, flush=True)
+
         print(f"[rvc] 设置参数: f0up_key={f0_up_key} f0method={f0_method} "
               f"filter_radius={filter_radius} index_rate={index_rate} "
-              f"rms_mix_rate={rms_mix_rate} protect={protect}", file=sys.stderr)
+              f"rms_mix_rate={rms_mix_rate} protect={protect}", file=sys.stderr, flush=True)
         rvc.set_params(
             f0up_key=f0_up_key,
             f0method=f0_method,
@@ -91,9 +98,10 @@ def main() -> int:
             rms_mix_rate=rms_mix_rate,
             protect=protect,
         )
-        print(f"[rvc] 开始推理: {input_path} -> {output_path}", file=sys.stderr)
+        print(f"[rvc] 开始推理: {input_path} -> {output_path}", file=sys.stderr, flush=True)
+        _t2 = _time.monotonic()
         rvc.infer_file(input_path, output_path)
-        print(f"[rvc] 推理完成", file=sys.stderr)
+        print(f"[rvc] 推理完成 ({_time.monotonic()-_t2:.1f}s，总计 {_time.monotonic()-_t0:.1f}s)", file=sys.stderr, flush=True)
     except Exception as e:
         import traceback
         print(f"[rvc] 推理失败: {e}", file=sys.stderr)

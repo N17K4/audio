@@ -123,10 +123,9 @@
         {
           "path": "model.pt",
           "sha256": "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb",
-          "url": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
           "size_mb": 1550,
           "required": false,
-          "_note": "非必填：transformers pipeline 会自动缓存，或指定 hf model id"
+          "_note": "非必填：transformers pipeline 会自动缓存，或指定 hf model id；不预置 url 避免 CI 白白下载 1.5 GB"
         }
       ],
       "env_key": "WHISPER_CHECKPOINT_DIR"

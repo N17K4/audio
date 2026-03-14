@@ -198,18 +198,12 @@ export default function Home() {
   // 通用结果
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [resultUrl, setResultUrl] = useState('');
-  const [resultText, setResultText] = useState('');
-  const [lastResponse, setLastResponse] = useState('');
   const [status, setStatus] = useState<Status>('idle');
 
-  // ─── 处理计时 & 弹窗 ────────────────────────────────────────────────────────
+  // ─── 处理计时 ───────────────────────────────────────────────────────────────
   const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [processingPhaseStr, setProcessingPhaseStr] = useState('');
-  const [successModal, setSuccessModal] = useState<{
-    feature: string; sec: number; resultPath: string; outDir: string; resultText: string;
-  } | null>(null);
 
   // ─── 运行环境检测（避免 SSR hydration mismatch） ──────────────────────────
   const [isElectron, setIsElectron] = useState(false);
@@ -305,7 +299,6 @@ export default function Home() {
   const [mediaOutputFormat, setMediaOutputFormat] = useState('mp3');
   const [mediaStartTime, setMediaStartTime] = useState('');
   const [mediaDuration, setMediaDuration] = useState('');
-  const [mediaResultUrl, setMediaResultUrl] = useState('');
 
   // 录音（VC 用）
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -502,6 +495,24 @@ export default function Home() {
     } catch { /**/ }
   }
 
+  function addInstantJobResult(
+    type: string, label: string, provider: string, isLocal: boolean,
+    result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
+  ) {
+    const now = Date.now() / 1000;
+    const job: Job = {
+      id: `instant_${Date.now()}`,
+      type, label, provider, is_local: isLocal,
+      status: result.status,
+      created_at: now, started_at: now, completed_at: now,
+      result_url: result.result_url || null,
+      result_text: result.result_text || null,
+      error: result.error || null,
+    };
+    setJobs(prev => [job, ...prev]);
+    navigate('tasks');
+  }
+
   async function pollJobResult(jobId: string, timeoutMs = 180000): Promise<Job> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -524,48 +535,17 @@ export default function Home() {
     throw new Error('等待任务超时（3 分钟）');
   }
 
-  // ─── 通用 postTask ────────────────────────────────────────────────────────
-  async function postTask(path: string, fill: (fd: FormData) => void) {
-    setError(''); setSuccessMsg(''); setResultText(''); setResultUrl(''); setLastResponse(''); setSuccessModal(null);
-    const t0 = Date.now();
-    setProcessingStartTime(t0);
-    setStatus('processing');
-    const ctrl = new AbortController();
-    abortCtrlRef.current = ctrl;
-    try {
-      const fd = new FormData();
-      fill(fd);
-      const res = await fetch(`${backendBaseUrl}${path}`, { method: 'POST', body: fd, signal: ctrl.signal });
-      const data = await safeJson(res);
-      setLastResponse(JSON.stringify(data, null, 2));
-      if (!res.ok) throw new Error(`任务失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
-      if (data?.result_url) {
-        setResultUrl(data.result_url);
-      }
-      const textOut = data?.text || data?.message || data?.summary || data?.result_text || '';
-      if (textOut) setResultText(String(textOut));
-      const elapsed = Math.round((Date.now() - t0) / 1000);
-      setSuccessModal({ feature: TASK_LABELS[taskType], sec: elapsed, resultPath: data?.result_url || '', outDir: outputDir || '', resultText: String(textOut) });
-      setSuccessMsg(`${TASK_LABELS[taskType]} 请求已发送`);
-    } catch (e: any) {
-      if (e?.name === 'AbortError') { setError('已取消'); }
-      else { setError(e instanceof Error ? e.message : '任务失败'); }
-    } finally {
-      setStatus('idle');
-      setProcessingStartTime(null);
-      abortCtrlRef.current = null;
-    }
-  }
 
   // ─── TTS ─────────────────────────────────────────────────────────────────
   async function runTts() {
     if (!ttsText.trim()) { setError('请输入合成文本'); return; }
     if (!outputDir.trim()) { setError('请填写输出目录'); return; }
     if (needsAuth && !apiKey.trim()) { setError('该服务商需要 API 密钥'); return; }
-    setError(''); setSuccessMsg(''); setResultUrl(''); setResultText(''); setLastResponse(''); setSuccessModal(null);
+    setError('');
     const t0 = Date.now();
     setProcessingStartTime(t0);
     setStatus('processing');
+    const label = `TTS · ${ttsText.slice(0, 30) + (ttsText.length > 30 ? '…' : '')}`;
     try {
       const fd = new FormData();
       fd.append('provider', selectedProvider);
@@ -580,20 +560,14 @@ export default function Home() {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(`任务失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
       if (data?.job_id) {
-        // 本地推理：加入队列，跳转到任务列表
-        const pending: Job = { id: data.job_id, type: 'tts', label: `TTS · ${(ttsText.slice(0, 30) + (ttsText.length > 30 ? '…' : ''))}`, provider: selectedProvider, is_local: true, status: 'queued', created_at: Date.now() / 1000, started_at: null, completed_at: null, result_url: null, result_text: null, error: null };
+        const pending: Job = { id: data.job_id, type: 'tts', label, provider: selectedProvider, is_local: true, status: 'queued', created_at: Date.now() / 1000, started_at: null, completed_at: null, result_url: null, result_text: null, error: null };
         setJobs(prev => [pending, ...prev]);
-        setSuccessMsg('任务已加入队列，可在「任务列表」中查看进度');
         navigate('tasks');
       } else {
-        setLastResponse(JSON.stringify(data, null, 2));
-        if (data?.result_url) setResultUrl(data.result_url);
-        const elapsed = Math.round((Date.now() - t0) / 1000);
-        setSuccessModal({ feature: 'TTS 文本转语音', sec: elapsed, resultPath: data?.result_url || '', outDir: outputDir || '', resultText: '' });
-        setSuccessMsg('TTS 完成');
+        addInstantJobResult('tts', label, selectedProvider, false, { status: 'completed', result_url: data?.result_url || undefined });
       }
     } catch (e: any) {
-      setError(e instanceof Error ? e.message : '任务失败');
+      addInstantJobResult('tts', label, selectedProvider, false, { status: 'failed', error: e instanceof Error ? e.message : '任务失败' });
     } finally {
       setStatus('idle');
       setProcessingStartTime(null);
@@ -638,7 +612,7 @@ export default function Home() {
     if (isSeedVc && !vcRefAudio) { setStatus('idle'); setError('请上传 Seed-VC 参考音频'); return; }
     if (!outputDir.trim()) { setStatus('idle'); setError('请填写输出目录'); return; }
     if (needsAuth && !apiKey.trim()) { setStatus('idle'); setError('该服务商需要 API 密钥'); return; }
-    setError(''); setSuccessMsg(''); setResultUrl(''); setResultText(''); setLastResponse(''); setSuccessModal(null);
+    setError('');
     setStatus('processing');
     const t0 = Date.now();
     setProcessingStartTime(t0);
@@ -671,23 +645,21 @@ export default function Home() {
       const res = await fetch(`${backendBaseUrl}/convert`, { method: 'POST', body: fd, signal: ctrl.signal });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(`转换失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
+      const vcLabel = `VC · ${selectedProvider}`;
       if (data?.job_id) {
-        const pending: Job = { id: data.job_id, type: 'vc', label: `VC · ${selectedProvider}`, provider: selectedProvider, is_local: true, status: 'queued', created_at: Date.now() / 1000, started_at: null, completed_at: null, result_url: null, result_text: null, error: null };
+        const pending: Job = { id: data.job_id, type: 'vc', label: vcLabel, provider: selectedProvider, is_local: true, status: 'queued', created_at: Date.now() / 1000, started_at: null, completed_at: null, result_url: null, result_text: null, error: null };
         setJobs(prev => [pending, ...prev]);
-        setSuccessMsg('转换任务已加入队列，可在「任务列表」中查看进度');
         navigate('tasks');
       } else {
-        setLastResponse(JSON.stringify(data, null, 2));
         const url = data?.result_url;
         if (!url) throw new Error('响应中无结果链接');
-        setResultUrl(url);
-        const elapsed = Math.round((Date.now() - t0) / 1000);
-        setSuccessMsg(`已用 ${selectedProvider} / ${selectedVoiceId} 完成转换`);
-        setSuccessModal({ feature: 'VC 音色转换', sec: elapsed, resultPath: url, outDir: outputDir || '', resultText: '' });
+        addInstantJobResult('vc', vcLabel, selectedProvider, false, { status: 'completed', result_url: url });
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') { setError('已取消'); }
-      else { setError(e instanceof Error ? e.message : '转换失败'); }
+      else {
+        addInstantJobResult('vc', `VC · ${selectedProvider}`, selectedProvider, false, { status: 'failed', error: e instanceof Error ? e.message : '转换失败' });
+      }
     } finally {
       setStatus('idle');
       setProcessingStartTime(null);
@@ -767,24 +739,45 @@ export default function Home() {
   async function runAsr() {
     if (!asrFile) { setError('请选择音频文件'); return; }
     if (needsAuth && !apiKey.trim()) { setError('该服务商需要 API 密钥'); return; }
-    await postTask('/tasks/stt', fd => {
-      fd.append('provider', selectedProvider);
-      fd.append('file', asrFile);
-      fd.append('model', asrModel);
-      fd.append('api_key', apiKey);
-      fd.append('cloud_endpoint', cloudEndpoint);
-    });
-  }
-
-  // ─── 格式转换 ──────────────────────────────────────────────────────────────
-  async function runMediaConvert() {
-    if (!mediaFile) { setError('请选择要转换的文件'); return; }
-    setError(''); setSuccessMsg(''); setMediaResultUrl(''); setLastResponse(''); setSuccessModal(null);
+    setError('');
     const t0 = Date.now();
     setProcessingStartTime(t0);
     setStatus('processing');
     const ctrl = new AbortController();
     abortCtrlRef.current = ctrl;
+    const label = `STT · ${asrFile.name}`;
+    try {
+      const fd = new FormData();
+      fd.append('provider', selectedProvider);
+      fd.append('file', asrFile);
+      fd.append('model', asrModel);
+      fd.append('api_key', apiKey);
+      fd.append('cloud_endpoint', cloudEndpoint);
+      const res = await fetch(`${backendBaseUrl}/tasks/stt`, { method: 'POST', body: fd, signal: ctrl.signal });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(`任务失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
+      const textOut = String(data?.text || data?.message || data?.summary || data?.result_text || '');
+      addInstantJobResult('asr', label, selectedProvider, isLocal, { status: 'completed', result_text: textOut });
+    } catch (e: any) {
+      if (e?.name === 'AbortError') { setError('已取消'); }
+      else { addInstantJobResult('asr', label, selectedProvider, isLocal, { status: 'failed', error: e instanceof Error ? e.message : '任务失败' }); }
+    } finally {
+      setStatus('idle');
+      setProcessingStartTime(null);
+      abortCtrlRef.current = null;
+    }
+  }
+
+  // ─── 格式转换 ──────────────────────────────────────────────────────────────
+  async function runMediaConvert() {
+    if (!mediaFile) { setError('请选择要转换的文件'); return; }
+    setError('');
+    const t0 = Date.now();
+    setProcessingStartTime(t0);
+    setStatus('processing');
+    const ctrl = new AbortController();
+    abortCtrlRef.current = ctrl;
+    const label = `格式转换 · ${mediaFile.name}`;
     try {
       const fd = new FormData();
       fd.append('file', mediaFile);
@@ -795,17 +788,13 @@ export default function Home() {
       fd.append('output_dir', outputDir);
       const res = await fetch(`${backendBaseUrl}/tasks/media-convert`, { method: 'POST', body: fd, signal: ctrl.signal });
       const data = await safeJson(res);
-      setLastResponse(JSON.stringify(data, null, 2));
       if (!res.ok) throw new Error(`转换失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
       const url = data?.result_url || '';
       if (!url) throw new Error('响应中无结果链接');
-      setMediaResultUrl(url);
-      const elapsed = Math.round((Date.now() - t0) / 1000);
-      setSuccessMsg('格式转换完成');
-      setSuccessModal({ feature: '格式转换', sec: elapsed, resultPath: url, outDir: outputDir || '', resultText: '' });
+      addInstantJobResult('media', label, 'ffmpeg', false, { status: 'completed', result_url: url });
     } catch (e: any) {
       if (e?.name === 'AbortError') { setError('已取消'); }
-      else { setError(e instanceof Error ? e.message : '转换失败'); }
+      else { addInstantJobResult('media', label, 'ffmpeg', false, { status: 'failed', error: e instanceof Error ? e.message : '转换失败' }); }
     } finally {
       setStatus('idle');
       setProcessingStartTime(null);
@@ -1302,8 +1291,8 @@ export default function Home() {
             return <span className="rounded-full bg-rose-100 dark:bg-rose-900/50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">失败</span>;
           }
           function TypeBadge({ job }: { job: Job }) {
-            const color = job.type === 'tts' ? 'bg-indigo-600' : job.type === 'vc' ? 'bg-violet-600' : 'bg-slate-600';
-            const abbr = job.type === 'tts' ? 'TTS' : job.type === 'vc' ? 'VC' : job.type.toUpperCase().slice(0, 3);
+            const color = job.type === 'tts' ? 'bg-indigo-600' : job.type === 'vc' ? 'bg-violet-600' : job.type === 'asr' ? 'bg-sky-600' : job.type === 'media' ? 'bg-teal-600' : 'bg-slate-600';
+            const abbr = job.type === 'tts' ? 'TTS' : job.type === 'vc' ? 'VC' : job.type === 'asr' ? 'STT' : job.type === 'media' ? 'FMT' : job.type.toUpperCase().slice(0, 3);
             return <span className={`rounded-lg ${color} px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide`}>{abbr}</span>;
           }
           function JobRow({ job }: { job: Job }) {
@@ -1326,6 +1315,9 @@ export default function Home() {
                       <audio controls src={job.result_url} className="w-full h-8" />
                       <a href={job.result_url} target="_blank" rel="noreferrer" className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
                     </div>
+                  )}
+                  {job.status === 'completed' && job.result_text && (
+                    <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2 leading-relaxed mt-1">{job.result_text}</pre>
                   )}
                   {job.status === 'failed' && job.error && (
                     <p className="text-xs text-rose-500 break-all pt-0.5">{job.error}</p>
@@ -1656,13 +1648,6 @@ export default function Home() {
             <button className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-button-primary transition-all duration-150 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed" onClick={runAsr} disabled={status === 'processing'}>
               {status === 'processing' ? '处理中...' : '开始识别'}
             </button>
-
-            {resultText && (
-              <div className="space-y-2">
-                <span className="block text-xs font-medium text-slate-400 uppercase tracking-wide">识别结果</span>
-                <pre className="whitespace-pre-wrap rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{resultText}</pre>
-              </div>
-            )}
           </section>
         )}
 
@@ -1948,17 +1933,6 @@ export default function Home() {
           </section>
         )}
 
-        {/* 格式转换结果 */}
-        {!showHome && !showTasks && !showSystem && taskType === 'media' && mediaResultUrl && (
-          <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-panel space-y-3 dark:bg-slate-900 dark:border-slate-700/80">
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">转换结果</h2>
-            <audio controls src={mediaResultUrl} className="w-full" />
-            <p className="text-xs text-slate-400 break-all">
-              <a className="text-indigo-500 hover:text-indigo-700 underline transition-colors" href={mediaResultUrl} target="_blank" rel="noreferrer">{mediaResultUrl}</a>
-            </p>
-          </section>
-        )}
-
         {/* ── 处理中进度条 ── */}
         {!showHome && !showTasks && !showSystem && status === 'processing' && (
           <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 px-5 py-4 space-y-3">
@@ -2001,7 +1975,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── 全局结果区 ── */}
+        {/* ── 表单校验 / 操作提示 ── */}
         {!showHome && !showTasks && !showSystem && error && (
           <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-5 py-4 text-sm text-rose-700 dark:text-rose-300 flex gap-3">
             <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.072 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
@@ -2012,37 +1986,6 @@ export default function Home() {
           <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 px-5 py-3.5 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
             <span className="font-medium">{successMsg}</span>
-          </div>
-        )}
-
-        {!showHome && !showTasks && !showSystem && resultUrl && taskType !== 'voice_chat' && (
-          <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-panel space-y-3 dark:bg-slate-900 dark:border-slate-700/80">
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">音频结果</h2>
-            <audio controls src={resultUrl} className="w-full" />
-            <p className="text-xs text-slate-400 break-all">
-              <a className="text-indigo-500 hover:text-indigo-700 underline transition-colors" href={resultUrl} target="_blank" rel="noreferrer">{resultUrl}</a>
-            </p>
-          </section>
-        )}
-
-
-        {/* ── 原始响应 ── */}
-        {!showHome && !showTasks && !showSystem && lastResponse && (
-          <details className="rounded-2xl border border-slate-200/80 bg-white shadow-card overflow-hidden dark:bg-slate-900 dark:border-slate-700/80">
-            <summary className="cursor-pointer select-none px-5 py-3.5 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 list-none flex items-center justify-between transition-colors">
-              <span>原始响应</span>
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-            </summary>
-            <pre className="px-5 pb-5 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed max-h-64">{lastResponse}</pre>
-          </details>
-        )}
-
-        {!showHome && !showTasks && !showSystem && (
-          <div className="flex justify-end">
-            <button className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 transition-colors shadow-sm"
-              onClick={() => { setError(''); setSuccessMsg(''); setResultUrl(''); setResultText(''); setLastResponse(''); setSuccessModal(null); }}>
-              清空结果
-            </button>
           </div>
         )}
 
@@ -2168,52 +2111,6 @@ export default function Home() {
         </div>{/* p-4 */}
       </div>{/* flex-1 main scroll */}
 
-      {/* ── 成功弹窗 ── */}
-      {successModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setSuccessModal(null)} />
-          <div className="relative rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 w-full max-w-sm space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-slate-100">{successModal.feature} 完成</h3>
-                <p className="text-xs text-slate-400 mt-0.5">耗时 {successModal.sec} 秒</p>
-              </div>
-            </div>
-            {(successModal.resultPath || successModal.outDir || successModal.resultText) && (
-              <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-4 space-y-2.5 text-xs">
-                {successModal.resultPath && (
-                  <div>
-                    <span className="font-medium text-slate-500 dark:text-slate-400">输出文件</span>
-                    <p className="text-slate-700 dark:text-slate-300 break-all mt-0.5">{successModal.resultPath}</p>
-                  </div>
-                )}
-                {successModal.outDir && (
-                  <div>
-                    <span className="font-medium text-slate-500 dark:text-slate-400">输出目录</span>
-                    <p className="text-slate-700 dark:text-slate-300 break-all mt-0.5">{successModal.outDir}</p>
-                  </div>
-                )}
-                {successModal.resultText && (
-                  <div>
-                    <span className="font-medium text-slate-500 dark:text-slate-400">识别内容</span>
-                    <p className="text-slate-700 dark:text-slate-300 mt-0.5 line-clamp-3">{successModal.resultText}</p>
-                  </div>
-                )}
-              </div>
-            )}
-            <button
-              className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2 text-sm font-medium text-white transition-colors"
-              onClick={() => setSuccessModal(null)}>
-              确认
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
