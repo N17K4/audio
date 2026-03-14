@@ -12,6 +12,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
 
     steps:
       # ── 1. 拉代码 ────────────────────────────────────────────────────────────
@@ -77,7 +79,11 @@ jobs:
           $tag = "${{ github.ref_name }}"
           if (-not $tag -or $tag -eq "") { $tag = "dev" }
           $zipName = "AI-Tool-win-$tag.zip"
-          Compress-Archive -Path "dist\win-arm64-unpacked\*" -DestinationPath $zipName
+          # 动态找 electron-builder 实际输出目录（win-unpacked / win-ia32-unpacked 等）
+          $distDir = Get-ChildItem -Path "dist" -Directory | Where-Object { $_.Name -like "*unpacked*" } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $distDir) { Write-Error "dist 下未找到 *unpacked 目录，打包可能失败"; exit 1 }
+          Write-Host "压缩目录：$distDir"
+          Compress-Archive -Path "$distDir\*" -DestinationPath $zipName
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
           $size = (Get-Item $zipName).Length / 1GB
           Write-Host "打包完成：$zipName（$([math]::Round($size,2)) GB）"

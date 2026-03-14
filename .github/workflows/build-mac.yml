@@ -12,6 +12,8 @@ jobs:
   build-macos:
     runs-on: macos-14   # Apple Silicon (arm64)，与发布包架构一致
     timeout-minutes: 120
+    permissions:
+      contents: write
 
     steps:
       # ── 1. 拉代码 ────────────────────────────────────────────────────────────

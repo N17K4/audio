@@ -1,0 +1,98 @@
+import { useState, useEffect } from 'react';
+import type { CapabilityMap, VoiceInfo } from '../types';
+import { DEFAULT_CAPS } from '../constants';
+import { waitForBackend, rlog } from '../utils';
+
+export function useBackend() {
+  const [backendBaseUrl, setBackendBaseUrl] = useState('');
+  const [backendReady, setBackendReady] = useState(false);
+  const [capabilities, setCapabilities] = useState<CapabilityMap>(DEFAULT_CAPS);
+  const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const [engineVersions, setEngineVersions] = useState<Record<string, { version: string; ready: boolean }>>({});
+  const [error, setError] = useState('');
+  const [selectedVoiceId, setSelectedVoiceId] = useState('');
+  const [vchatVoiceId, setVchatVoiceId] = useState('');
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (api?.getBackendBaseUrl) {
+      api.getBackendBaseUrl()
+        .then(url => { if (url) { setBackendBaseUrl(url); rlog('INFO', '后端地址:', url); } })
+        .catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
+    } else {
+      setBackendBaseUrl('http://127.0.0.1:8000');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!backendBaseUrl) return;
+    let cancelled = false;
+    (async () => {
+      const ok = await waitForBackend(backendBaseUrl);
+      if (cancelled) return;
+      setBackendReady(ok);
+      if (!ok) { setError(`后端无法访问：${backendBaseUrl}`); return; }
+      setError('');
+      await Promise.all([fetchCapabilities(backendBaseUrl), fetchVoices(backendBaseUrl), fetchEngineVersions(backendBaseUrl)]);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendBaseUrl]);
+
+  async function fetchEngineVersions(baseUrl: string) {
+    try {
+      const r = await fetch(`${baseUrl}/runtime/info`);
+      if (!r.ok) return;
+      const d = await r.json();
+      const versions: Record<string, { version: string; ready: boolean }> = {};
+      for (const [k, v] of Object.entries(d.engines || {})) {
+        const e = v as any;
+        versions[k] = { version: e.version || 'unknown', ready: e.ready ?? false };
+      }
+      setEngineVersions(versions);
+    } catch { /**/ }
+  }
+
+  async function fetchCapabilities(baseUrl: string) {
+    try {
+      const r = await fetch(`${baseUrl}/capabilities`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d?.tasks) setCapabilities(d.tasks);
+    } catch { /**/ }
+  }
+
+  async function fetchVoices(baseUrl?: string) {
+    const url = baseUrl || backendBaseUrl;
+    try {
+      const r = await fetch(`${url}/voices`);
+      if (!r.ok) throw new Error(`加载音色失败（${r.status}）`);
+      const d = await r.json();
+      const list: VoiceInfo[] = d.voices || [];
+      setVoices(list);
+      if (list.length > 0) {
+        setSelectedVoiceId(v => v || list[0].voice_id);
+        setVchatVoiceId(v => v || list[0].voice_id);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '获取音色列表失败');
+    }
+  }
+
+  return {
+    backendBaseUrl,
+    backendReady,
+    capabilities,
+    voices,
+    engineVersions,
+    error,
+    setError,
+    selectedVoiceId,
+    setSelectedVoiceId,
+    vchatVoiceId,
+    setVchatVoiceId,
+    fetchVoices: () => fetchVoices(),
+    fetchCapabilities: () => fetchCapabilities(backendBaseUrl),
+    fetchEngineVersions: () => fetchEngineVersions(backendBaseUrl),
+  };
+}

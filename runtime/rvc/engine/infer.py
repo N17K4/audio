@@ -69,7 +69,8 @@ def main() -> int:
     # 从环境变量读取质量参数（fallback），CLI 参数优先
     import os as _os
     f0_up_key    = args.f0_up_key    if args.f0_up_key    is not None else int(_os.environ.get("RVC_F0_UP_KEY", "0"))
-    f0_method    = args.f0_method    if args.f0_method    is not None else _os.environ.get("RVC_F0_METHOD", "rmvpe")
+    # rmvpe 依赖 fairseq，在 macOS ARM CPU 模式下会 SIGSEGV；改用 harvest（pyworld，无神经网络依赖）
+    f0_method    = args.f0_method    if args.f0_method    is not None else _os.environ.get("RVC_F0_METHOD", "harvest")
     filter_radius= args.filter_radius if args.filter_radius is not None else int(_os.environ.get("RVC_FILTER_RADIUS", "3"))
     index_rate   = args.index_rate   if args.index_rate   is not None else float(_os.environ.get("RVC_INDEX_RATE", "0.75"))
     rms_mix_rate = args.rms_mix_rate if args.rms_mix_rate is not None else float(_os.environ.get("RVC_RMS_MIX_RATE", "0.25"))
