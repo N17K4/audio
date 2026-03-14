@@ -1,0 +1,89 @@
+name: 构建 macOS 安装包
+
+on:
+  # 手动触发（在 Actions 页面点 Run workflow）
+  workflow_dispatch:
+  # 或者推送 v* tag 自动触发（如 git tag v1.0.0 && git push --tags）
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    runs-on: macos-14   # Apple Silicon (arm64)，与发布包架构一致
+    timeout-minutes: 120
+
+    steps:
+      # ── 1. 拉代码 ────────────────────────────────────────────────────────────
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # ── 2. 准备 Node 环境 ─────────────────────────────────────────────────────
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      # ── 3. 创建嵌入式 Python 虚拟环境 ────────────────────────────────────────
+      # Mac 没有 Windows 那样的 embeddable 包；用系统 Python 创建 venv
+      # setup-runtime.js 检测到 runtime/mac/python/bin/python3 后会接管安装依赖
+      - name: 准备 Mac 嵌入式 Python（venv）
+        run: |
+          python3 --version
+          python3 -m venv runtime/mac/python
+          runtime/mac/python/bin/python3 -m pip install --upgrade pip --quiet
+          runtime/mac/python/bin/python3 -m pip --version
+
+      # ── 4. 安装 Node 依赖 + Python 后端/引擎依赖 ─────────────────────────────
+      - name: 安装依赖（pnpm install + setup-runtime）
+        run: |
+          pnpm install
+          cd frontend && pnpm install && cd ..
+          node scripts/setup-runtime.js
+
+      # ── 5. 下载模型 checkpoint ────────────────────────────────────────────────
+      - name: 下载模型（checkpoints）
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          runtime/mac/python/bin/python3 scripts/download_checkpoints.py
+
+      # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
+      - name: 构建前端
+        run: pnpm run build:frontend
+
+      # ── 7. electron-builder 打包 macOS ───────────────────────────────────────
+      - name: 打包 Electron（macOS）
+        run: npx electron-builder --mac
+
+      # ── 8. 压缩产物（ditto 保留 Mac 扩展属性和符号链接）─────────────────────
+      - name: 压缩 dist
+        run: |
+          TAG="${{ github.ref_name }}"
+          [ -z "$TAG" ] && TAG="dev"
+          ZIP_NAME="AI-Tool-mac-${TAG}.zip"
+          # ditto -c -k 保留 symlinks / xattrs，比普通 zip 更适合 .app 包
+          ditto -c -k --sequesterRsrc --keepParent \
+            "dist/mac-arm64/AI Tool.app" "$ZIP_NAME"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          du -sh "$ZIP_NAME"
+
+      # ── 9a. 上传到 GitHub Release（tag 触发时）───────────────────────────────
+      - name: 上传到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          generate_release_notes: true
+
+      # ── 9b. 上传为 Artifact（手动触发时，保留 30 天）─────────────────────────
+      - name: 上传为 Artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 30
