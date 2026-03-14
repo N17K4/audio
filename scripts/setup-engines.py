@@ -211,11 +211,13 @@ def setup_rvc_engine(project_root: Path) -> bool:
         [py, "-c", "from rvc_python.infer import RVCInference"],
         capture_output=True,
     )
-    if check.returncode == 0:
+    rvc_ok = check.returncode == 0
+    if rvc_ok:
         print("  ✓ rvc-python  (已安装)")
     else:
         print("  ✗ rvc-python  (未安装)")
-        if _install_rvc_python(py):
+        rvc_ok = _install_rvc_python(py)
+        if rvc_ok:
             print("    ✓ rvc-python 安装完成")
         else:
             print("    ✗ rvc-python 安装失败，RVC 功能不可用")
@@ -290,7 +292,7 @@ if __name__ == "__main__":
         )
         print(f"    ✓ 已创建 runtime/rvc/engine/infer.py")
 
-    return True
+    return rvc_ok
 
 
 # ─── FFmpeg ───────────────────────────────────────────────────────────────────

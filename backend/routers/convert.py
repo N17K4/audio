@@ -35,7 +35,7 @@ async def convert(
     cfg_rate: float = Form(0.7),
     enable_postprocess: bool = Form(True),
     # RVC 专属
-    f0_method: str = Form("rmvpe"),
+    f0_method: str = Form("harvest"),  # harvest 比 rmvpe 对 macOS ARM MPS 更稳定
     filter_radius: int = Form(3),
     index_rate: float = Form(0.75),
     rms_mix_rate: float = Form(0.25),

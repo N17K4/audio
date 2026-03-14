@@ -272,6 +272,9 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     # 所有引擎都强制离线：额外模型须通过 pnpm run checkpoints 预先下载
     merged["HF_HUB_OFFLINE"] = "1"
     merged["TRANSFORMERS_OFFLINE"] = "1"
+    # macOS ARM CPU 下 fairseq/HuBERT 在不启用 MPS fallback 时会 SIGSEGV；
+    # 对所有引擎统一开启，允许 MPS 不支持的算子自动降级到 CPU
+    merged["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     return merged
 
 
