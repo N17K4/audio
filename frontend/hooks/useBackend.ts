@@ -10,6 +10,7 @@ export function useBackend() {
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [engineVersions, setEngineVersions] = useState<Record<string, { version: string; ready: boolean }>>({});
   const [error, setError] = useState('');
+  const [downloadDir, setDownloadDir] = useState('');
   const [selectedVoiceId, setSelectedVoiceId] = useState('');
   const [vchatVoiceId, setVchatVoiceId] = useState('');
 
@@ -33,11 +34,20 @@ export function useBackend() {
       setBackendReady(ok);
       if (!ok) { setError(`后端无法访问：${backendBaseUrl}`); return; }
       setError('');
-      await Promise.all([fetchCapabilities(backendBaseUrl), fetchVoices(backendBaseUrl), fetchEngineVersions(backendBaseUrl)]);
+      await Promise.all([fetchCapabilities(backendBaseUrl), fetchVoices(backendBaseUrl), fetchEngineVersions(backendBaseUrl), fetchHealth(backendBaseUrl)]);
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendBaseUrl]);
+
+  async function fetchHealth(baseUrl: string) {
+    try {
+      const r = await fetch(`${baseUrl}/health`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d?.download_dir) setDownloadDir(d.download_dir);
+    } catch { /**/ }
+  }
 
   async function fetchEngineVersions(baseUrl: string) {
     try {
@@ -85,6 +95,7 @@ export function useBackend() {
     capabilities,
     voices,
     engineVersions,
+    downloadDir,
     error,
     setError,
     selectedVoiceId,

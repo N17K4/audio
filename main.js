@@ -601,56 +601,56 @@ ipcMain.handle('app:getDiskUsage', () => {
     {
       key: 'python',
       label: `Python 运行时 (${runtimePlatform})`,
-      sub: `runtime/${runtimePlatform}/`,
+      sub: path.join(resRoot, `runtime/${runtimePlatform}`),
       size: measureRes(`runtime/${runtimePlatform}`),
       deletable: false,
     },
     {
       key: 'fish_speech_engine',
       label: 'Fish Speech 引擎源码',
-      sub: 'runtime/fish_speech/engine/',
+      sub: path.join(resRoot, 'runtime/fish_speech/engine'),
       size: measureRes('runtime/fish_speech/engine'),
       deletable: false,
     },
     {
       key: 'fish_speech_ckpt',
       label: 'Fish Speech 模型',
-      sub: 'checkpoints/fish_speech/',
+      sub: path.join(ckptRoot, 'fish_speech'),
       size: measureCkpt('fish_speech'),
       deletable: false,
     },
     {
       key: 'seed_vc_engine',
       label: 'Seed-VC 引擎源码',
-      sub: 'runtime/seed_vc/engine/',
+      sub: path.join(resRoot, 'runtime/seed_vc/engine'),
       size: measureRes('runtime/seed_vc/engine'),
       deletable: false,
     },
     {
       key: 'seed_vc_ckpt',
       label: 'Seed-VC 模型',
-      sub: 'checkpoints/seed_vc/',
+      sub: path.join(ckptRoot, 'seed_vc'),
       size: measureCkpt('seed_vc'),
       deletable: false,
     },
     {
       key: 'whisper_engine',
       label: 'Whisper 引擎',
-      sub: 'runtime/whisper/',
+      sub: path.join(resRoot, 'runtime/whisper'),
       size: measureRes('runtime/whisper'),
       deletable: false,
     },
     {
       key: 'whisper_ckpt',
       label: 'Whisper 模型',
-      sub: 'checkpoints/whisper/',
+      sub: path.join(ckptRoot, 'whisper'),
       size: measureCkpt('whisper'),
       deletable: false,
     },
     {
       key: 'hf_cache',
       label: 'HuggingFace 缓存',
-      sub: 'checkpoints/hf_cache/',
+      sub: path.join(ckptRoot, 'hf_cache'),
       size: (() => {
         // hf_cache 目录：Seed-VC / Fish Speech 等通过 HF hub 下载时产生
         const d = path.join(ckptRoot, 'hf_cache');
@@ -673,12 +673,25 @@ ipcMain.handle('app:getDiskUsage', () => {
     {
       key: 'rvc_ckpt',
       label: 'RVC 基础模型',
-      sub: 'runtime/*/rvc_python/base_model/',
+      sub: (() => {
+        const baseDir = path.join(resRoot, 'runtime', runtimePlatform, 'python');
+        const found = [];
+        const walk = (d, depth) => {
+          if (depth > 6) return;
+          try {
+            for (const f of fs.readdirSync(d)) {
+              const fp = path.join(d, f);
+              if (f === 'base_model' && path.basename(path.dirname(fp)) === 'rvc_python') { found.push(fp); return; }
+              if (fs.statSync(fp).isDirectory()) walk(fp, depth + 1);
+            }
+          } catch { /**/ }
+        };
+        if (dirExists(baseDir)) walk(baseDir, 0);
+        return found[0] || path.join(resRoot, 'runtime', runtimePlatform, 'python', '…/rvc_python/base_model');
+      })(),
       size: (() => {
-        // rvc-python 把 hubert_base.pt / rmvpe.pt 存在嵌入式 Python 的 site-packages 里
         const baseDir = path.join(resRoot, 'runtime', runtimePlatform, 'python');
         if (!dirExists(baseDir)) return 0;
-        // 递归找 rvc_python/base_model 目录
         const found = [];
         const walk = (d, depth) => {
           if (depth > 6) return;
@@ -698,14 +711,24 @@ ipcMain.handle('app:getDiskUsage', () => {
     {
       key: 'models',
       label: '音色包',
-      sub: 'models/',
+      sub: path.join(__dirname, 'models'),
       size: measureApp('models'),
+      deletable: false,
+    },
+    {
+      key: 'audio_cache',
+      label: '音频缓存（TTS / 语音对话）',
+      sub: path.join(require('os').tmpdir(), 'ai-tool-temp', 'download'),
+      size: (() => {
+        const d = path.join(require('os').tmpdir(), 'ai-tool-temp', 'download');
+        return dirExists(d) ? getDirSize(d) : 0;
+      })(),
       deletable: false,
     },
     {
       key: 'logs',
       label: '日志',
-      sub: 'logs/',
+      sub: getLogDir(),
       size: (() => {
         const d = getLogDir();
         return dirExists(d) ? getDirSize(d) : 0;
@@ -729,6 +752,32 @@ ipcMain.handle('app:clearUserData', () => {
     }
   }
   return errors.length > 0 ? { ok: false, error: errors.join('\n') } : { ok: true };
+});
+
+// ─── IPC：清除数据并重新打开下载引导 ─────────────────────────────────────────
+ipcMain.handle('app:clearAndOpenSetup', async () => {
+  const dirs = [getCheckpointsDir(), getUserPackagesDir()];
+  const errors = [];
+  for (const dir of dirs) {
+    try {
+      if (dirExists(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      errors.push(`${dir}: ${err.message}`);
+    }
+  }
+  if (errors.length > 0) return { ok: false, error: errors.join('\n') };
+
+  // 重新检测缺失引擎（checkpoints 已清空，全部会报 missing）
+  let missingEngines = [];
+  try {
+    const runtimeInfo = await fetchRuntimeInfo(backendBaseUrl);
+    missingEngines = Object.entries(runtimeInfo.engines || {})
+      .filter(([, v]) => !v.ready)
+      .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
+  } catch {}
+
+  openSetupGuideWindow(missingEngines);
+  return { ok: true };
 });
 
 // ─── IPC：删除模型 ────────────────────────────────────────────────────────────
@@ -762,6 +811,10 @@ ipcMain.handle('app:openLogsDir', () => {
   const logDir = getLogDir();
   fs.mkdirSync(logDir, { recursive: true });
   shell.openPath(logDir);
+});
+
+ipcMain.handle('app:openDir', (_event, dirPath) => {
+  if (dirPath) shell.openPath(dirPath);
 });
 
 app.whenReady().then(createWindow);

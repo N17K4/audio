@@ -484,8 +484,15 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="强制重新下载（覆盖已有文件）")
     parser.add_argument("--json-progress", action="store_true",
                         help="以 JSON Lines 格式输出进度（供 Electron IPC 使用）")
+    parser.add_argument("--hf-endpoint", default="",
+                        help="HuggingFace 镜像端点（如 https://hf-mirror.com）")
     args = parser.parse_args()
     _JSON_MODE = args.json_progress
+
+    # CLI 参数优先于环境变量
+    if args.hf_endpoint:
+        global HF_ENDPOINT
+        HF_ENDPOINT = args.hf_endpoint.rstrip("/")
 
     if not args.check_only:
         _bootstrap_download_deps()

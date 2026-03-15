@@ -1,0 +1,17 @@
+{
+  "voice_id": "332424_668571",
+  "name": "我的音色332424",
+  "engine": "rvc",
+  "sample_rate": 48000,
+  "model_version": "v2",
+  "model_file": "model.pth",
+  "index_file": "index.index",
+  "inference_mode": "command",
+  "inference_command": "",
+  "trained_at": "2026-03-15T01:04:32Z",
+  "train_config": {
+    "f0_method": "rmvpe",
+    "epochs": 100,
+    "source_files": 1
+  }
+}

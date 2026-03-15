@@ -1,6 +1,7 @@
 // ─── 类型 ──────────────────────────────────────────────────────────────────
 export type Status = 'idle' | 'recording' | 'processing';
-export type TaskType = 'tts' | 'vc' | 'asr' | 'llm' | 'voice_chat' | 'media';
+export type TaskType = 'tts' | 'vc' | 'asr' | 'llm' | 'voice_chat' | 'media' | 'doc';
+export type DocSubPage = 'pdf_to_word' | 'doc_convert' | 'pdf_extract';
 export type MediaAction = 'convert' | 'extract_audio' | 'clip';
 export type VcInputMode = 'record' | 'upload';
 export type DesktopSource = { id: string; name: string };
@@ -39,6 +40,7 @@ declare global {
       getDiskUsage: () => Promise<DiskRow[]>;
       readLogFile: (filename: string) => Promise<{ ok: boolean; content: string }>;
       openLogsDir: () => Promise<void>;
+      openDir: (dirPath: string) => Promise<void>;
       clearUserData: () => Promise<{ ok: boolean; error?: string }>;
     };
   }

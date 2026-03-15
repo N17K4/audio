@@ -7,6 +7,7 @@ interface TaskListProps {
   backendBaseUrl: string;
   setJobs: React.Dispatch<React.SetStateAction<Job[]>>;
   onFetchJobs: () => void;
+  outputDir?: string;
 }
 
 // ─── 各引擎阶段定义 ──────────────────────────────────────────────────────────
@@ -58,7 +59,14 @@ function getStagePillCls(state: StageState, isTrain: boolean): string {
 
 // ─── 组件 ────────────────────────────────────────────────────────────────────
 
-export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs }: TaskListProps) {
+function fmtTime(ts: number): string {
+  const d = new Date(ts * 1000);
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
   const now = Date.now() / 1000;
@@ -164,6 +172,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs }:
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
             <span>{PROVIDER_LABELS[job.provider] || job.provider}</span>
+            <span className="tabular-nums font-mono">{fmtTime(job.created_at)}</span>
             {(job.status === 'running' || job.status === 'completed' || job.status === 'failed') && (
               <span className="tabular-nums font-mono">{fmtElapsed(job)}</span>
             )}
@@ -176,8 +185,17 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs }:
           {job.status === 'completed' && job.result_url && (
             <div className="pt-2 space-y-1.5">
               <audio controls src={job.result_url} className="w-full h-8" />
-              <a href={job.result_url} target="_blank" rel="noreferrer"
-                className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
+              <div className="flex items-center gap-2 flex-wrap">
+                <a href={job.result_url} target="_blank" rel="noreferrer"
+                  className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
+                {outputDir && window.electronAPI?.openDir && (
+                  <button
+                    onClick={() => window.electronAPI!.openDir!(outputDir)}
+                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap">
+                    打开目录
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {job.status === 'completed' && job.result_text && (

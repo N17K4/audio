@@ -12,6 +12,7 @@ import { useASR } from '../hooks/useASR';
 import { useLLM } from '../hooks/useLLM';
 import { useVoiceChat } from '../hooks/useVoiceChat';
 import { useMediaConvert } from '../hooks/useMediaConvert';
+import { useDocConvert } from '../hooks/useDocConvert';
 
 // Components
 import Sidebar from '../components/layout/Sidebar';
@@ -26,6 +27,7 @@ import AsrPanel from '../components/panels/AsrPanel';
 import LlmPanel from '../components/panels/LlmPanel';
 import VoiceChatPanel from '../components/panels/VoiceChatPanel';
 import MediaPanel from '../components/panels/MediaPanel';
+import DocPanel from '../components/panels/DocPanel';
 
 export default function Home() {
   // ─── 导航状态 ─────────────────────────────────────────────────────────────
@@ -290,6 +292,15 @@ export default function Home() {
     addInstantJobResult,
   });
 
+  const doc = useDocConvert({
+    backendBaseUrl: backend.backendBaseUrl,
+    outputDir,
+    setStatus,
+    setProcessingStartTime,
+    setError,
+    addInstantJobResult,
+  });
+
   // ─── 新建音色 ─────────────────────────────────────────────────────────────
   async function createVoice() {
     const trimmedName = newVoiceName.trim();
@@ -436,6 +447,7 @@ export default function Home() {
                 backendBaseUrl={backend.backendBaseUrl}
                 setJobs={setJobs}
                 onFetchJobs={fetchJobs}
+                outputDir={outputDir}
               />
             )}
 
@@ -649,6 +661,7 @@ export default function Home() {
                 vchatScrollRef={voiceChat.vchatScrollRef}
                 onStartRecording={voiceChat.startVchatRecording}
                 onStopRecording={voiceChat.stopVchatRecording}
+                downloadDir={backend.downloadDir}
                 fieldCls={fieldCls}
                 labelCls={labelCls}
                 btnSec={btnSec}
@@ -664,14 +677,46 @@ export default function Home() {
                 setMediaAction={media.setMediaAction}
                 mediaOutputFormat={media.mediaOutputFormat}
                 setMediaOutputFormat={media.setMediaOutputFormat}
-                mediaStartTime={media.mediaStartTime}
-                setMediaStartTime={media.setMediaStartTime}
-                mediaDuration={media.mediaDuration}
-                setMediaDuration={media.setMediaDuration}
+                startMin={media.startMin}
+                setStartMin={media.setStartMin}
+                startSec={media.startSec}
+                setStartSec={media.setStartSec}
+                clipEndMode={media.clipEndMode}
+                setClipEndMode={media.setClipEndMode}
+                durationMin={media.durationMin}
+                setDurationMin={media.setDurationMin}
+                durationSec={media.durationSec}
+                setDurationSec={media.setDurationSec}
+                endMin={media.endMin}
+                setEndMin={media.setEndMin}
+                endSec={media.endSec}
+                setEndSec={media.setEndSec}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
-                onRunMediaConvert={media.runMediaConvert}
+                onRunMediaConvert={() => { navigateTasks(); media.runMediaConvert(); }}
+                fieldCls={fieldCls}
+                fileCls={fileCls}
+                labelCls={labelCls}
+                btnSec={btnSec}
+              />
+            )}
+
+            {/* 文档转换面板 */}
+            {!showHome && !showTasks && !showSystem && taskType === 'doc' && (
+              <DocPanel
+                docSubPage={doc.docSubPage}
+                setDocSubPage={doc.setDocSubPage}
+                docFile={doc.docFile}
+                setDocFile={doc.setDocFile}
+                docOutputFormat={doc.docOutputFormat}
+                setDocOutputFormat={doc.setDocOutputFormat}
+                docExtractMode={doc.docExtractMode}
+                setDocExtractMode={doc.setDocExtractMode}
+                outputDir={outputDir}
+                setOutputDir={setOutputDir}
+                status={status}
+                onRunDocConvert={() => { navigateTasks(); doc.runDocConvert(); }}
                 fieldCls={fieldCls}
                 fileCls={fileCls}
                 labelCls={labelCls}

@@ -7,7 +7,7 @@ interface SystemPanelProps {
 }
 
 export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelProps) {
-  const [healthResult, setHealthResult] = useState<string | null>(null);
+  const [healthResult, setHealthResult] = useState<{ status: string; raw: string } | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthCollapsed, setHealthCollapsed] = useState(false);
   const [diskRows, setDiskRows] = useState<DiskRow[] | null>(null);
@@ -19,6 +19,10 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearingData, setClearingData] = useState(false);
   const [clearMsg, setClearMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const [redownloadStep, setRedownloadStep] = useState(0); // 0=hidden 1=first 2=second
+  const [redownloading, setRedownloading] = useState(false);
+  const [redownloadMsg, setRedownloadMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [concurrency, setConcurrency] = useState(1);
   const [concurrencyInput, setConcurrencyInput] = useState('1');
@@ -72,6 +76,69 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
                   }
                 }}>
                 {clearingData ? '清除中…' : '确认清除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重新下载模型 — 第一步确认 */}
+      {redownloadStep === 1 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-80 rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-6 space-y-4">
+            <div className="space-y-1.5">
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">重新下载全部模型？</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                将清除已下载的所有模型文件和运行库，并立即打开下载引导窗口重新安装。
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
+                onClick={() => setRedownloadStep(0)}>
+                取消
+              </button>
+              <button
+                className="rounded-lg bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors"
+                onClick={() => setRedownloadStep(2)}>
+                继续
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重新下载模型 — 第二步确认 */}
+      {redownloadStep === 2 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-80 rounded-2xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-xl p-6 space-y-4">
+            <div className="space-y-1.5">
+              <h3 className="text-base font-semibold text-rose-700 dark:text-rose-400">再次确认</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                此操作将<span className="font-semibold text-rose-600 dark:text-rose-400">删除全部已下载的模型与运行库</span>（checkpoints、python-packages），不可撤销。确认后立即打开下载引导。
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
+                onClick={() => setRedownloadStep(0)}>
+                取消
+              </button>
+              <button
+                className="rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
+                disabled={redownloading}
+                onClick={async () => {
+                  setRedownloading(true);
+                  const res = await window.electronAPI?.clearAndOpenSetup();
+                  setRedownloading(false);
+                  setRedownloadStep(0);
+                  if (res?.ok) {
+                    setRedownloadMsg({ ok: true, text: '已清除，下载引导窗口已打开' });
+                  } else {
+                    setRedownloadMsg({ ok: false, text: `操作失败：${res?.error ?? '未知错误'}` });
+                  }
+                }}>
+                {redownloading ? '处理中…' : '确认执行'}
               </button>
             </div>
           </div>
@@ -153,17 +220,32 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
                 try {
                   const r = await fetch(`${backendBaseUrl}/health`);
                   const j = await r.json().catch(() => null);
-                  setHealthResult(JSON.stringify(j ?? await r.text(), null, 2));
+                  setHealthResult({ status: j?.status ?? (r.ok ? 'ok' : 'error'), raw: JSON.stringify(j, null, 2) });
                 } catch (e: any) {
-                  setHealthResult(`请求失败：${e.message}`);
+                  setHealthResult({ status: 'error', raw: `请求失败：${e.message}` });
                 } finally { setHealthLoading(false); }
               }}>
               {healthLoading ? '请求中…' : '检查'}
             </button>}
           </div>
-          {!healthCollapsed && healthResult && (
-            <pre className="rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-xs text-slate-700 dark:text-slate-300 overflow-x-auto whitespace-pre-wrap">{healthResult}</pre>
-          )}
+          {!healthCollapsed && healthResult && (() => {
+            const s = healthResult.status;
+            const isOk = s === 'ok';
+            const badgeCls = isOk
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+              : s === 'degraded'
+              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+              : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400';
+            return (
+              <div className="space-y-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${badgeCls}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isOk ? 'bg-emerald-500' : s === 'degraded' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                  {s}
+                </span>
+                <pre className="rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-xs text-slate-700 dark:text-slate-300 overflow-x-auto whitespace-pre-wrap">{healthResult.raw}</pre>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 磁盘占用（仅 Electron） */}
@@ -193,10 +275,12 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
               return (
                 <div className="rounded-xl border border-slate-200/80 dark:border-slate-700 overflow-hidden text-xs dark:bg-slate-800">
                   {diskRows.map(r => (
-                    <div key={r.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                    <button key={r.key} className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left cursor-pointer"
+                      title="点击打开目录"
+                      onClick={() => r.sub && window.electronAPI?.openDir?.(r.sub)}>
                       <div className="flex-1 min-w-0">
-                        <div className="text-slate-700 dark:text-slate-300 font-medium truncate">{r.label}</div>
-                        {r.sub && <div className="text-slate-400 mt-0.5">{r.sub}</div>}
+                        <div className="text-slate-700 dark:text-slate-300 font-medium">{r.label}</div>
+                        {r.sub && <div className="text-slate-400 mt-0.5 font-mono break-all leading-relaxed">{r.sub}</div>}
                       </div>
                       <div className="w-24 shrink-0">
                         <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
@@ -204,7 +288,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
                         </div>
                       </div>
                       <div className="w-16 text-right text-slate-600 tabular-nums shrink-0 font-medium">{fmtSize(r.size)}</div>
-                    </div>
+                    </button>
                   ))}
                   <div className="flex justify-between px-4 py-2.5 bg-slate-50/80 dark:bg-slate-800/60 font-semibold text-slate-700 dark:text-slate-300 border-t border-slate-100 dark:border-slate-700">
                     <span>合计</span><span className="tabular-nums">{fmtSize(total)}</span>
@@ -249,9 +333,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
           </div>
         )}
 
-        {/* 清除用户数据（仅 Electron） */}
+        {/* 清除用户数据 / 重新下载模型（仅 Electron） */}
         {isElectron && (
-          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600 dark:text-slate-400">清除用户数据</p>
@@ -266,6 +350,22 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
             {clearMsg && (
               <p className={`text-xs ${clearMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
                 {clearMsg.text}
+              </p>
+            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">重新下载模型</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">清除现有模型数据，立即打开下载引导重新安装</p>
+              </div>
+              <button
+                className="rounded-lg border border-amber-200 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 transition-colors"
+                onClick={() => { setRedownloadMsg(null); setRedownloadStep(1); }}>
+                重新下载
+              </button>
+            </div>
+            {redownloadMsg && (
+              <p className={`text-xs ${redownloadMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                {redownloadMsg.text}
               </p>
             )}
           </div>

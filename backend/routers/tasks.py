@@ -28,7 +28,7 @@ from services.tts.elevenlabs_tts import run_elevenlabs_tts
 from services.tts.fish_speech_tts import run_fish_speech_tts
 from services.tts.gemini_tts import run_gemini_tts
 from services.tts.openai_tts import run_openai_tts
-from utils.engine import get_ffmpeg_binary
+from utils.engine import get_ffmpeg_binary, get_pandoc_binary
 from utils.voices import copy_to_output_dir, get_voice_or_404
 
 router = APIRouter()
@@ -318,7 +318,7 @@ async def task_media_convert(
 
     act = action.strip().lower()
     fmt = output_format.strip().lower() or "mp3"
-    if fmt not in ("mp3", "wav", "m4a"):
+    if fmt not in ("mp3", "wav", "m4a", "flac", "ogg", "aac", "opus", "mp4", "webm", "mkv", "mov"):
         raise HTTPException(status_code=400, detail=f"不支持的输出格式: {fmt}")
 
     task_id = str(uuid.uuid4())
@@ -370,6 +370,120 @@ async def task_media_convert(
     except Exception as exc:
         logger.error("[media-convert] 异常:\n%s", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"媒体转换失败: {exc}")
+    finally:
+        if input_path.exists():
+            try:
+                input_path.unlink()
+            except Exception:
+                pass
+
+
+@router.post("/tasks/doc-convert")
+async def task_doc_convert(
+    file: UploadFile = File(...),
+    action: str = Form("pdf_to_word"),    # pdf_to_word | doc_convert | pdf_extract
+    output_format: str = Form("docx"),    # doc_convert 时用
+    extract_mode: str = Form("text"),     # pdf_extract 时用：text | images
+    output_dir: str = Form(""),
+):
+    """文档转换：PDF 转 Word（pdf2docx）、文档互转（pandoc）、PDF 提取（PyMuPDF）。"""
+    import os, zipfile
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+
+    act = action.strip().lower()
+    task_id = str(uuid.uuid4())
+    in_ext = os.path.splitext(file.filename or "")[1] or ".bin"
+    input_path = DOWNLOAD_DIR / f"{task_id}_doc_input{in_ext}"
+    input_path.write_bytes(content)
+
+    output_path = None
+    try:
+        if act == "pdf_to_word":
+            try:
+                from pdf2docx import Converter  # type: ignore
+            except ImportError:
+                raise HTTPException(
+                    status_code=500,
+                    detail="pdf2docx 未安装。请运行 pnpm run setup 安装依赖，或执行 poetry add pdf2docx。",
+                )
+            output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.docx"
+            def _convert():
+                cv = Converter(str(input_path))
+                cv.convert(str(output_path))
+                cv.close()
+            await asyncio.to_thread(_convert)
+
+        elif act == "doc_convert":
+            pandoc = get_pandoc_binary()
+            if not pandoc:
+                raise HTTPException(
+                    status_code=500,
+                    detail="pandoc 未找到。请在系统中安装 pandoc（https://pandoc.org/installing.html）或将二进制放置于 runtime/{platform}/bin/pandoc。",
+                )
+            fmt = output_format.strip().lower() or "docx"
+            output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.{fmt}"
+            cmd = [pandoc, "-o", str(output_path), str(input_path)]
+            logger.info("[doc-convert] pandoc cmd: %s", " ".join(cmd))
+            completed = await asyncio.to_thread(
+                subprocess.run, cmd, capture_output=True, text=True, timeout=120
+            )
+            if completed.returncode != 0:
+                stderr = (completed.stderr or "").strip()[:1000]
+                raise HTTPException(status_code=500, detail=f"pandoc 失败: {stderr}")
+
+        elif act == "pdf_extract":
+            try:
+                import fitz  # type: ignore  # PyMuPDF
+            except ImportError:
+                raise HTTPException(
+                    status_code=500,
+                    detail="PyMuPDF 未安装。请运行 pnpm run setup 安装依赖，或执行 poetry add pymupdf。",
+                )
+            mode = extract_mode.strip().lower()
+            if mode == "images":
+                output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.zip"
+                def _extract_images():
+                    doc = fitz.open(str(input_path))
+                    with zipfile.ZipFile(str(output_path), "w") as zf:
+                        for page_num in range(len(doc)):
+                            page = doc[page_num]
+                            for img_idx, img in enumerate(page.get_images()):
+                                xref = img[0]
+                                base_image = doc.extract_image(xref)
+                                ext = base_image.get("ext", "png")
+                                zf.writestr(f"page{page_num + 1}_img{img_idx + 1}.{ext}", base_image["image"])
+                    doc.close()
+                await asyncio.to_thread(_extract_images)
+            else:
+                output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.txt"
+                def _extract_text():
+                    doc = fitz.open(str(input_path))
+                    text = "".join(page.get_text() for page in doc)
+                    doc.close()
+                    output_path.write_text(text, encoding="utf-8")
+                await asyncio.to_thread(_extract_text)
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的 action: {action}")
+
+        if not output_path or not output_path.exists() or output_path.stat().st_size == 0:
+            raise HTTPException(status_code=500, detail="转换完成但输出文件缺失或为空")
+
+        copy_to_output_dir(output_path, output_dir)
+        result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{output_path.name}"
+        return {
+            "status": "success",
+            "task": "doc_convert",
+            "action": act,
+            "result_url": result_url,
+            "size_bytes": output_path.stat().st_size,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[doc-convert] 异常:\n%s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"文档转换失败: {exc}")
     finally:
         if input_path.exists():
             try:

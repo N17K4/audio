@@ -65,6 +65,27 @@ def get_ffmpeg_binary() -> str:
     return ""
 
 
+def get_pandoc_binary() -> str:
+    """返回 pandoc 可执行路径。优先打包的静态二进制，开发模式回退到系统 pandoc。"""
+    import sys as _sys
+    import shutil as _shutil
+    if _sys.platform == "win32":
+        bundled = RUNTIME_ROOT / "win" / "bin" / "pandoc.exe"
+    elif _sys.platform == "linux":
+        bundled = RUNTIME_ROOT / "linux" / "bin" / "pandoc"
+    else:
+        bundled = RUNTIME_ROOT / "mac" / "bin" / "pandoc"
+    if bundled.exists():
+        logger.debug("[pandoc] 使用打包二进制: %s", bundled)
+        return str(bundled.resolve())
+    system_pandoc = _shutil.which("pandoc")
+    if system_pandoc:
+        logger.debug("[pandoc] 使用系统 pandoc: %s", system_pandoc)
+        return system_pandoc
+    logger.warning("[pandoc] 未找到 pandoc，文档互转功能不可用")
+    return ""
+
+
 def detect_rvc_infer_script() -> str:
     candidates = [
         RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # download_checkpoints.py 自动生成

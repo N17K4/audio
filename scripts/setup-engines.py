@@ -763,6 +763,88 @@ def download_ffmpeg(project_root: Path) -> bool:
                 pass
 
 
+def download_pandoc(project_root: Path) -> bool:
+    """下载 pandoc 静态二进制到 runtime/{mac|win}/bin/。"""
+    system = platform.system()
+    machine = platform.machine().lower()
+    version = "3.6.4"
+
+    if system == "Darwin":
+        bin_dir = project_root / "runtime" / "mac" / "bin"
+        dest = bin_dir / "pandoc"
+        arch = "arm64" if "arm" in machine or "aarch" in machine else "x86_64"
+        url = f"https://github.com/jgm/pandoc/releases/download/{version}/pandoc-{version}-{arch}-macOS.zip"
+        binary_in_zip = f"pandoc-{version}/bin/pandoc"
+    elif system == "Windows":
+        bin_dir = project_root / "runtime" / "win" / "bin"
+        dest = bin_dir / "pandoc.exe"
+        url = f"https://github.com/jgm/pandoc/releases/download/{version}/pandoc-{version}-windows-x86_64.zip"
+        binary_in_zip = f"pandoc-{version}/pandoc.exe"
+    else:
+        print(f"  [pandoc] 不支持的平台: {system}，跳过")
+        return True
+
+    if dest.exists() and dest.stat().st_size > 1024 * 1024:
+        print(f"  ✓ pandoc 已存在（{dest.stat().st_size / 1024 / 1024:.1f} MB）: {dest}")
+        if system != "Windows":
+            dest.chmod(0o755)
+        return True
+
+    print(f"  ✗ pandoc 未找到，下载中（~100-130 MB）: {url}")
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    tmp_archive = bin_dir / "_pandoc_tmp.zip"
+
+    _is_tty = sys.stdout.isatty()
+    _last_pct: list[int] = [-1]
+
+    def _reporthook(count: int, block_size: int, total_size: int) -> None:
+        if total_size > 0:
+            mb = count * block_size / 1024 / 1024
+            pct = min(100, int(count * block_size * 100 / total_size))
+            if _is_tty:
+                print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
+            elif pct // 10 != _last_pct[0]:
+                _last_pct[0] = pct // 10
+                print(f"  {pct}% ({mb:.1f} MB)", flush=True)
+
+    try:
+        urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
+        print()
+        with zipfile.ZipFile(tmp_archive, "r") as zf:
+            if binary_in_zip not in zf.namelist():
+                # 回退：按名称搜索
+                target_name = "pandoc.exe" if system == "Windows" else "pandoc"
+                binary_in_zip = next(
+                    (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
+                    None,
+                )
+                if not binary_in_zip:
+                    print("    ✗ 压缩包内未找到 pandoc 可执行文件")
+                    return False
+            with zf.open(binary_in_zip) as src, open(dest, "wb") as dst:
+                dst.write(src.read())
+
+        if not dest.exists() or dest.stat().st_size == 0:
+            print("    ✗ 提取后文件缺失或为空")
+            return False
+
+        if system != "Windows":
+            dest.chmod(0o755)
+
+        print(f"    ✓ pandoc 下载完成（{dest.stat().st_size / 1024 / 1024:.1f} MB）")
+        return True
+
+    except Exception as e:
+        print(f"    ✗ pandoc 下载失败: {e}")
+        return False
+    finally:
+        if tmp_archive.exists():
+            try:
+                tmp_archive.unlink()
+            except Exception:
+                pass
+
+
 # ─── 主流程：构建期 ───────────────────────────────────────────────────────────
 
 def main_build() -> int:
@@ -809,6 +891,11 @@ def main_build() -> int:
 
     print("▶ ffmpeg")
     if not download_ffmpeg(project_root):
+        all_ok = False
+    print()
+
+    print("▶ pandoc")
+    if not download_pandoc(project_root):
         all_ok = False
     print()
 

@@ -1,0 +1,8 @@
+{
+  "voice_id": "1211211_1773504235",
+  "name": "1211211",
+  "engine": "rvc",
+  "sample_rate": 44100,
+  "model_file": "model.pth",
+  "inference_mode": "command"
+}

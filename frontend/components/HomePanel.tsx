@@ -7,8 +7,9 @@ const HOME_CARDS: { task: TaskType; title: string; desc: string }[] = [
   { task: 'vc',         title: 'VC 音色转换',   desc: '将音频转换为目标音色，支持本地和云端' },
   { task: 'asr',        title: 'STT 语音转文字', desc: '上传音频，识别为文字，支持多语言' },
   { task: 'llm',        title: 'LLM 聊天',      desc: '与大语言模型对话，支持多种服务商' },
-  { task: 'media',      title: '格式转换',       desc: '音频互转、视频提取音频、按时间截取片段' },
-  { task: 'voice_chat', title: 'LLM 语音聊天',  desc: '语音输入 → AI 回复 → 语音播报' },
+  { task: 'media',      title: '音视频转换（FFmpeg）', desc: '音频互转、视频提取音频、按时间截取片段' },
+  { task: 'doc',        title: '文档转换',              desc: 'PDF 转 Word、文档互转、PDF 提取文字/图片' },
+  { task: 'voice_chat', title: 'LLM 语音聊天',         desc: '语音输入 → AI 回复 → 语音播报' },
 ];
 
 interface HomePanelProps {
