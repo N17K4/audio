@@ -867,12 +867,18 @@ except Exception as e1:
 
 
 def _bootstrap_download_deps() -> None:
-    """确保 huggingface_hub 和 requests 已安装（下载阶段必要工具）。"""
+    """确保 huggingface_hub 和 requests 已安装且版本满足要求。"""
+    # huggingface_hub >= 0.38 才有 is_offline_mode（transformers / diffusers 依赖）
+    HF_HUB_MIN = (0, 38, 0)
     needed = []
     try:
         import huggingface_hub  # noqa: F401
+        ver_str = getattr(huggingface_hub, "__version__", "0")
+        ver = tuple(int(x) for x in ver_str.split(".")[:3] if x.isdigit())
+        if ver < HF_HUB_MIN:
+            needed.append(f"huggingface_hub>={'.'.join(str(x) for x in HF_HUB_MIN)}")
     except ImportError:
-        needed.append("huggingface_hub")
+        needed.append(f"huggingface_hub>={'.'.join(str(x) for x in HF_HUB_MIN)}")
     try:
         import requests  # noqa: F401
     except ImportError:
@@ -881,7 +887,7 @@ def _bootstrap_download_deps() -> None:
     if not needed:
         return
 
-    print(f"[bootstrap] 安装下载依赖: {', '.join(needed)}")
+    print(f"[bootstrap] 安装/升级下载依赖: {', '.join(needed)}")
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", *needed, "--quiet"],
         capture_output=True, text=True, timeout=120,

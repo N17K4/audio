@@ -468,7 +468,7 @@ async def task_media_convert(
                 cmd = BASE + ["-ss", start_time.strip()]
                 if duration.strip():
                     cmd += ["-t", duration.strip()]
-                cmd += ["-i", str(input_path), "-c", "copy", str(output_path)]
+                cmd += ["-i", str(input_path), "-vn", str(output_path)]
         else:
             raise HTTPException(status_code=400, detail=f"不支持的 action: {action}")
 

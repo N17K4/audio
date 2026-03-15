@@ -25,6 +25,12 @@ def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_onl
                             weights_only=weights_only, mmap=mmap, **kwargs)
 _torch.load = _patched_torch_load
 
+# macOS ARM：rvc-python 内部通过 configs.config 检测设备，传入 device="cpu" 无效，
+# 会强制使用 MPS，而 HuBERT conv1d 的输出通道数超过 MPS 上限（65536），导致推理失败。
+# 在 rvc_python 加载 configs 之前 patch 掉 MPS 可用性，强制使用 CPU。
+if _torch.backends.mps.is_available():
+    _torch.backends.mps.is_available = lambda: False
+
 
 def detect_version(model_path: str) -> str:
     """从 checkpoint 自动检测 v1/v2，避免 emb_phone 尺寸不匹配。"""

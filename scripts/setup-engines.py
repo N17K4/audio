@@ -390,6 +390,12 @@ def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_onl
                             weights_only=weights_only, mmap=mmap, **kwargs)
 _torch.load = _patched_torch_load
 
+# macOS ARM：rvc-python 内部检测设备时忽略 device="cpu" 参数，强制使用 MPS；
+# 而 HuBERT conv1d 的输出通道数超过 MPS 上限（>65536），导致 NotImplementedError。
+# 在 rvc_python 加载 configs 之前 patch 掉 MPS 可用性，强制走 CPU 推理。
+if _torch.backends.mps.is_available():
+    _torch.backends.mps.is_available = lambda: False
+
 
 def detect_version(model_path: str) -> str:
     try:
@@ -761,9 +767,36 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
             p.unlink(missing_ok=True)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+    _patch_seed_vc_inference(engine_dir)
     n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
     print(f"  ✓ seed_vc engine 就绪（{n} 个文件）")
     return True
+
+
+def _patch_seed_vc_inference(engine_dir: Path) -> None:
+    """在 engine/inference.py 开头插入兼容性补丁：
+    - is_offline_mode shim：部分 transformers 版本从 huggingface_hub 顶层导入
+      is_offline_mode，新版 huggingface_hub (>=0.26) 已移除该导出。
+    """
+    inf = engine_dir / "inference.py"
+    if not inf.exists():
+        return
+    src = inf.read_text(encoding="utf-8")
+    shim = (
+        "\n# 兼容性修复：部分版本的 transformers 从 huggingface_hub 顶层导入 is_offline_mode，\n"
+        "# 新版本 huggingface_hub (>=0.26) 已将其移除，在此补充以避免 ImportError。\n"
+        "try:\n"
+        "    import huggingface_hub as _hf_hub\n"
+        "    if not hasattr(_hf_hub, 'is_offline_mode'):\n"
+        "        _hf_hub.is_offline_mode = lambda: bool(int(os.environ.get('HF_HUB_OFFLINE', '0')))\n"
+        "except Exception:\n"
+        "    pass\n"
+    )
+    marker = "os.environ['HF_HUB_CACHE'] = './checkpoints/hf_cache'"
+    if marker in src and shim.strip() not in src:
+        src = src.replace(marker, marker + shim, 1)
+        inf.write_text(src, encoding="utf-8")
+        print("  ✓ seed_vc engine/inference.py 已补丁（is_offline_mode shim）")
 
 
 # ─── FFmpeg ───────────────────────────────────────────────────────────────────
