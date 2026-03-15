@@ -22,16 +22,46 @@ from services.llm.openai_audio import run_openai_audio_understanding, run_openai
 from services.llm.openai_llm import run_openai_llm
 from services.llm.gemini_llm import run_gemini_llm
 from services.stt.gemini_stt import run_gemini_stt
+from services.stt.deepgram_stt import run_deepgram_stt
+from services.stt.groq_stt import run_groq_stt
 from services.stt.openai_stt import run_openai_stt
 from services.stt.whisper_stt import run_whisper_stt
+from services.llm.claude_llm import run_claude_llm
+from services.llm.openai_compat_llm import run_openai_compat_llm
+from services.tts.cartesia_tts import run_cartesia_tts
+from services.tts.dashscope_tts import run_dashscope_tts
 from services.tts.elevenlabs_tts import run_elevenlabs_tts
 from services.tts.fish_speech_tts import run_fish_speech_tts
 from services.tts.gemini_tts import run_gemini_tts
 from services.tts.openai_tts import run_openai_tts
 from utils.engine import get_ffmpeg_binary, get_pandoc_binary, build_ffmpeg_video_encode_flags
 from utils.voices import copy_to_output_dir, get_voice_or_404
+from services.image_gen.openai_image_gen import run_openai_image_gen
+from services.image_gen.gemini_image_gen import run_gemini_image_gen
+from services.image_gen.stability_image_gen import run_stability_image_gen
+from services.image_gen.dashscope_image_gen import run_dashscope_image_gen
+from services.image_understand.openai_image_understand import run_openai_image_understand
+from services.image_understand.gemini_image_understand import run_gemini_image_understand
+from services.image_understand.claude_image_understand import run_claude_image_understand
+from services.image_understand.ollama_image_understand import run_ollama_image_understand
 
 router = APIRouter()
+
+# OpenAI 兼容 LLM provider → base URL
+OPENAI_COMPAT_LLM: dict = {
+    "groq":    "https://api.groq.com/openai/v1",
+    "deepseek": "https://api.deepseek.com/v1",
+    "mistral": "https://api.mistral.ai/v1",
+    "xai":     "https://api.x.ai/v1",
+}
+
+# OpenAI 兼容 LLM 默认模型
+OPENAI_COMPAT_DEFAULT_MODEL: dict = {
+    "groq":     "llama-3.3-70b-versatile",
+    "deepseek": "deepseek-chat",
+    "mistral":  "mistral-small-latest",
+    "xai":      "grok-3-mini",
+}
 
 
 @router.post("/tasks/tts")
@@ -95,6 +125,10 @@ async def task_tts(
             return await run_gemini_tts(text=text, api_key=api_key, model=model or "gemini-2.5-flash-preview-tts", voice=voice or "Kore")
         elif p == "elevenlabs":
             return await run_elevenlabs_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
+        elif p == "cartesia":
+            return await run_cartesia_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
+        elif p == "dashscope":
+            return await run_dashscope_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported TTS provider: {provider}")
 
@@ -147,6 +181,20 @@ async def task_stt(
                 filename=file.filename or "audio.webm",
                 model=model or "base",
             )
+    elif p == "deepgram":
+        result = await run_deepgram_stt(
+            content=content,
+            filename=file.filename or "audio.webm",
+            api_key=api_key,
+            model=model or "nova-3",
+        )
+    elif p == "groq":
+        result = await run_groq_stt(
+            content=content,
+            filename=file.filename or "audio.webm",
+            api_key=api_key,
+            model=model or "whisper-large-v3-turbo",
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported STT provider: {provider}")
     if output_dir.strip() and result.get("text"):
@@ -233,6 +281,16 @@ async def task_llm(
         return await run_ollama_llm(prompt=prompt, model=model or "qwen2.5-coder:14b", base_url=cloud_endpoint or "http://localhost:11434", messages=parsed_messages)
     if p == "github":
         return await run_github_llm(prompt=prompt, api_key=api_key, model=model or "gpt-4o-mini", messages=parsed_messages)
+    if p == "claude":
+        return await run_claude_llm(prompt=prompt, api_key=api_key, model=model or "claude-opus-4-5", messages=parsed_messages)
+    if p in OPENAI_COMPAT_LLM:
+        return await run_openai_compat_llm(
+            prompt=prompt, api_key=api_key,
+            model=model or OPENAI_COMPAT_DEFAULT_MODEL[p],
+            messages=parsed_messages,
+            base_url=OPENAI_COMPAT_LLM[p],
+            provider_name=p,
+        )
     raise HTTPException(status_code=400, detail=f"Unsupported LLM provider: {provider}")
 
 
@@ -752,3 +810,125 @@ async def task_toolbox(
             if p and p.exists():
                 try: p.unlink()
                 except Exception: pass
+
+
+# ─── 图像生成 ─────────────────────────────────────────────────────────────────
+
+@router.post("/tasks/image-gen")
+async def task_image_gen(
+    prompt: str = Form(...),
+    provider: str = Form("openai"),
+    api_key: str = Form(""),
+    cloud_endpoint: str = Form(""),
+    model: str = Form(""),
+    size: str = Form("1024x1024"),
+    aspect_ratio: str = Form("1:1"),
+):
+    if not prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt is required")
+    p = provider.strip().lower()
+    label = (prompt[:30] + "…") if len(prompt) > 30 else prompt
+    job = _make_job("image_gen", f"图像生成 · {label}", p, is_local=False)
+    job_id = job["id"]
+
+    async def _do():
+        if p == "openai":
+            return await run_openai_image_gen(prompt=prompt, api_key=api_key, model=model, size=size)
+        if p == "gemini":
+            return await run_gemini_image_gen(prompt=prompt, api_key=api_key, model=model, aspect_ratio=aspect_ratio)
+        if p == "stability":
+            return await run_stability_image_gen(prompt=prompt, api_key=api_key, model=model, aspect_ratio=aspect_ratio)
+        if p == "dashscope":
+            return await run_dashscope_image_gen(prompt=prompt, api_key=api_key, model=model, size=size.replace("x", "*"))
+        raise HTTPException(status_code=400, detail=f"Unsupported image gen provider: {provider}")
+
+    task = asyncio.create_task(_run_tts_job(job_id, _do))
+    job["_task"] = task
+    logger.info("image_gen job %s queued (provider=%s)", job_id, p)
+    return {"status": "queued", "job_id": job_id}
+
+
+# ─── 图像理解 ─────────────────────────────────────────────────────────────────
+
+@router.post("/tasks/image-understand")
+async def task_image_understand(
+    file: UploadFile = File(...),
+    provider: str = Form("openai"),
+    prompt: str = Form("请详细描述这张图片"),
+    api_key: str = Form(""),
+    cloud_endpoint: str = Form(""),
+    model: str = Form(""),
+):
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    p = provider.strip().lower()
+    mime = file.content_type or "image/png"
+
+    if p == "openai":
+        return await run_openai_image_understand(
+            image_content=content, image_mime=mime, prompt=prompt, api_key=api_key,
+            model=model or "gpt-4o-mini",
+        )
+    if p == "gemini":
+        return await run_gemini_image_understand(
+            image_content=content, image_mime=mime, prompt=prompt, api_key=api_key,
+            model=model or "gemini-2.5-flash",
+        )
+    if p == "claude":
+        return await run_claude_image_understand(
+            image_content=content, image_mime=mime, prompt=prompt, api_key=api_key,
+            model=model or "claude-opus-4-5",
+        )
+    if p == "ollama":
+        return await run_ollama_image_understand(
+            image_content=content, prompt=prompt,
+            model=model or "llava",
+            base_url=cloud_endpoint or "http://localhost:11434",
+        )
+    raise HTTPException(status_code=400, detail=f"Unsupported image understand provider: {provider}")
+
+
+# ─── 文字翻译 ─────────────────────────────────────────────────────────────────
+
+@router.post("/tasks/translate")
+async def task_translate(
+    text: str = Form(...),
+    target_lang: str = Form("中文"),
+    source_lang: str = Form("自动检测"),
+    provider: str = Form("gemini"),
+    api_key: str = Form(""),
+    cloud_endpoint: str = Form(""),
+    model: str = Form(""),
+):
+    import json as _json
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="text is required")
+    p = provider.strip().lower()
+
+    system_prompt = f"你是专业翻译。{'如果源语言是' + source_lang + '，' if source_lang and source_lang != '自动检测' else ''}请将以下文本翻译成{target_lang}，只返回译文，不要解释。"
+    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": text}]
+
+    if p == "gemini":
+        result = await run_gemini_llm(prompt=text, api_key=api_key, model=model or "gemini-2.5-flash", messages=messages)
+    elif p == "openai":
+        result = await run_openai_llm(prompt=text, api_key=api_key, model=model or "gpt-4o-mini", messages=messages)
+    elif p == "ollama":
+        result = await run_ollama_llm(prompt=text, model=model or "qwen2.5:14b", base_url=cloud_endpoint or "http://localhost:11434", messages=messages)
+    elif p == "github":
+        result = await run_github_llm(prompt=text, api_key=api_key, model=model or "gpt-4o-mini", messages=messages)
+    elif p == "claude":
+        result = await run_claude_llm(prompt=text, api_key=api_key, model=model or "claude-opus-4-5", messages=messages)
+    elif p in OPENAI_COMPAT_LLM:
+        result = await run_openai_compat_llm(
+            prompt=text, api_key=api_key,
+            model=model or OPENAI_COMPAT_DEFAULT_MODEL[p],
+            messages=messages,
+            base_url=OPENAI_COMPAT_LLM[p],
+            provider_name=p,
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported translate provider: {provider}")
+
+    result["task"] = "translate"
+    return result

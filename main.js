@@ -541,37 +541,47 @@ async function createWindow() {
       ...(app.isPackaged ? {
         RESOURCES_ROOT: process.resourcesPath,
         CHECKPOINTS_DIR: getCheckpointsDir(),
-        PYTHONPATH: getUserPackagesDir(),
+        PYTHONPATH: [path.join(__dirname, 'backend'), getUserPackagesDir()].join(path.delimiter),
       } : {}),
     },
   });
 
-  // Python 子进程输出只打到终端，不写 electron.log
-  // backend 日志由 Python 自身通过 logging 写入 backend.log
-  pyProcess.stdout.on('data', (data) => { process.stdout.write(`[Backend] ${data}`); });
-  pyProcess.stderr.on('data', (data) => { process.stderr.write(`[Backend] ${data}`); });
+  // Python stdout/stderr 同时写 electron.log，方便排查启动失败
+  pyProcess.stdout.on('data', (data) => {
+    process.stdout.write(`[Backend] ${data}`);
+    electronLog('INFO', '[Backend]', data.toString().trim());
+  });
+  pyProcess.stderr.on('data', (data) => {
+    process.stderr.write(`[Backend] ${data}`);
+    electronLog('ERROR', '[Backend stderr]', data.toString().trim());
+  });
   pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err));
+  pyProcess.on('exit', (code, signal) => {
+    if (code !== 0) console.error(`[Backend] exited code=${code} signal=${signal}`);
+  });
 
-  // 生产模式：等 backend 就绪 → 检测模型 → 若缺失则弹引导窗口
-  if (!isDev) {
-    try {
-      await waitBackendReady(backendBaseUrl, 90000);
-      const runtimeInfo = await fetchRuntimeInfo(backendBaseUrl);
-      const missingEngines = Object.entries(runtimeInfo.engines || {})
-        .filter(([, v]) => !v.ready)
-        .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
-      if (missingEngines.length > 0) {
-        await openSetupGuideWindow(missingEngines);
-      }
-    } catch (err) {
-      console.error('[Setup] 检测模型状态失败:', err.message);
-    }
-  }
-
+  // 立即加载前端页面，不等 backend，前端自己处理连接等待状态
   if (isDev) {
     await win.loadURL('http://localhost:3000');
   } else {
     await win.loadFile(path.join(__dirname, 'frontend', 'out', 'index.html'));
+  }
+
+  // 生产模式：后台等 backend 就绪 → 检测模型 → 若缺失则弹引导窗口
+  if (!isDev) {
+    waitBackendReady(backendBaseUrl, 90000)
+      .then(() => fetchRuntimeInfo(backendBaseUrl))
+      .then((runtimeInfo) => {
+        const missingEngines = Object.entries(runtimeInfo.engines || {})
+          .filter(([, v]) => !v.ready)
+          .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
+        if (missingEngines.length > 0) {
+          openSetupGuideWindow(missingEngines);
+        }
+      })
+      .catch((err) => {
+        console.error('[Setup] 检测模型状态失败:', err.message);
+      });
   }
 }
 

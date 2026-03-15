@@ -372,6 +372,156 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
         )}
 
       </div>
+
+      {/* ── 项目功能背景说明 ── */}
+      <div className="border-t border-slate-100 dark:border-slate-800 p-5 space-y-6">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">项目功能背景说明</h2>
+
+        {/* 已有功能 */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">已有功能（原版）</h3>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">功能</th>
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">本地引擎</th>
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">云端服务商</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">TTS 文本转语音</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Fish Speech</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI · Gemini · ElevenLabs · Cartesia · DashScope</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">VC 音色转换</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">RVC · Seed-VC</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">ElevenLabs</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">STT 语音转文字</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Whisper</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI · Gemini · Groq · Deepgram</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">LLM 聊天</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Ollama</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">语音聊天</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Whisper + Ollama + Fish Speech</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI Realtime · Gemini Live</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">音视频格式转换</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">FFmpeg（内置）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">—</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">文档转换 / PDF 提取</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">pdf2docx · pandoc · PyMuPDF（内置）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 本次新增 */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">本次新增（扩展功能模块）</h3>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">功能</th>
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">本地引擎</th>
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">云端服务商</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">图像生成</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">—（纯云端）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI DALL-E 3 · Gemini Imagen 3 · Stability AI · DashScope 通义万象</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">图像理解</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Ollama（LLaVA · moondream 等）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI GPT-4o · Gemini Vision · Claude Vision</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">文字翻译</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Ollama（任意文本模型）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">代码助手</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Ollama（Qwen-Coder · DeepSeek-Coder 等）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 暂未实现 */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">暂未实现（有开发成本）</h3>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">领域</th>
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">推荐模型 / 服务商</th>
+                  <th className="text-left px-3 py-2 font-medium whitespace-nowrap">未做原因</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">视频生成（云端）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Kling 2.1 · Hailuo · Veo 3 · Sora · Runway</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">各家 API 异步格式差异大，视频大文件下载存储，工程量较高</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">视频生成（本地）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Wan 2.1 · HunyuanVideo</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">MBP 生成 5 秒视频需 20–40 分钟，4050 跑不了 14B，实用价值低</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">数字人 / 口型同步</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">HeyGen · D-ID（云）；MuseTalk（本地）</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">云端需上传视频→异步→下载，流程复杂；本地需自建 worker</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">换脸（本地）</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">FaceFusion 3.x · LivePortrait · Deep-Live-Cam</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">依赖复杂（onnxruntime · insightface），无合规云端 API，需自建 worker</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">本地图像生成</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Flux.1-schnell · SDXL · SD 3.5</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">需自建 diffusers worker，Mac MPS 有已知 bug 需 patch，工程量 2–3 天</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">字幕配音一体化</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">ElevenLabs Dubbing · HeyGen（云）；STT+LLM+TTS 自拼</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">STT→翻译→TTS 跨任务 pipeline，涉及视频流处理，需专门设计任务编排</td>
+                </tr>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">OCR / 文档理解</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">Azure Doc Intelligence（云）；PaddleOCR · GOT-OCR2（本地）</td>
+                  <td className="px-3 py-2 text-slate-400 dark:text-slate-500">云端可用图像理解代替；本地 OCR 需自建 worker，与文档工具定位重叠</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

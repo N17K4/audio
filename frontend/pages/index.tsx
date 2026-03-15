@@ -14,6 +14,7 @@ import { useVoiceChat } from '../hooks/useVoiceChat';
 import { useMediaConvert } from '../hooks/useMediaConvert';
 import { useDocConvert } from '../hooks/useDocConvert';
 import { useToolbox } from '../hooks/useToolbox';
+import { useMisc } from '../hooks/useMisc';
 
 // Components
 import Sidebar from '../components/layout/Sidebar';
@@ -29,6 +30,7 @@ import LlmPanel from '../components/panels/LlmPanel';
 import VoiceChatPanel from '../components/panels/VoiceChatPanel';
 import MediaPanel from '../components/panels/MediaPanel';
 import DocPanel from '../components/panels/DocPanel';
+import MiscPanel from '../components/panels/MiscPanel';
 
 export default function Home() {
   // ─── 导航状态 ─────────────────────────────────────────────────────────────
@@ -312,6 +314,18 @@ export default function Home() {
     setError,
     addPendingJob,
     resolveJob,
+    onNavigateTasks: navigateTasks,
+  });
+
+  const misc = useMisc({
+    backendBaseUrl: backend.backendBaseUrl,
+    apiKey,
+    cloudEndpoint,
+    setStatus,
+    setProcessingStartTime,
+    setError,
+    addInstantJobResult,
+    fetchJobs,
     onNavigateTasks: navigateTasks,
   });
 
@@ -747,6 +761,64 @@ export default function Home() {
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
+                fieldCls={fieldCls}
+                fileCls={fileCls}
+                labelCls={labelCls}
+                btnSec={btnSec}
+              />
+            )}
+
+            {/* 扩展功能面板 */}
+            {!showHome && !showTasks && !showSystem && taskType === 'misc' && (
+              <MiscPanel
+                miscSubPage={misc.miscSubPage}
+                setMiscSubPage={misc.setMiscSubPage}
+                apiKey={apiKey}
+                setApiKey={setApiKey}
+                cloudEndpoint={cloudEndpoint}
+                setCloudEndpoint={setCloudEndpoint}
+                status={status}
+                imageGenProvider={misc.imageGenProvider}
+                onImageGenProviderChange={misc.handleImageGenProviderChange}
+                imageGenPrompt={misc.imageGenPrompt}
+                setImageGenPrompt={misc.setImageGenPrompt}
+                imageGenModel={misc.imageGenModel}
+                setImageGenModel={misc.setImageGenModel}
+                imageGenSize={misc.imageGenSize}
+                setImageGenSize={misc.setImageGenSize}
+                onRunImageGen={misc.runImageGen}
+                imageUnderstandProvider={misc.imageUnderstandProvider}
+                onImageUnderstandProviderChange={misc.handleImageUnderstandProviderChange}
+                imageUnderstandFile={misc.imageUnderstandFile}
+                setImageUnderstandFile={misc.setImageUnderstandFile}
+                imageUnderstandPrompt={misc.imageUnderstandPrompt}
+                setImageUnderstandPrompt={misc.setImageUnderstandPrompt}
+                imageUnderstandModel={misc.imageUnderstandModel}
+                setImageUnderstandModel={misc.setImageUnderstandModel}
+                onRunImageUnderstand={misc.runImageUnderstand}
+                translateProvider={misc.translateProvider}
+                setTranslateProvider={misc.setTranslateProvider}
+                translateText={misc.translateText}
+                setTranslateText={misc.setTranslateText}
+                translateTarget={misc.translateTarget}
+                setTranslateTarget={misc.setTranslateTarget}
+                translateSource={misc.translateSource}
+                setTranslateSource={misc.setTranslateSource}
+                translateModel={misc.translateModel}
+                setTranslateModel={misc.setTranslateModel}
+                onRunTranslate={misc.runTranslate}
+                codeProvider={misc.codeProvider}
+                setCodeProvider={misc.setCodeProvider}
+                codeModel={misc.codeModel}
+                setCodeModel={misc.setCodeModel}
+                codeMessages={misc.codeMessages}
+                setCodeMessages={misc.setCodeMessages}
+                codeInput={misc.codeInput}
+                setCodeInput={misc.setCodeInput}
+                codeLoading={misc.codeLoading}
+                codeLang={misc.codeLang}
+                setCodeLang={misc.setCodeLang}
+                onSendCodeMessage={misc.sendCodeMessage}
                 fieldCls={fieldCls}
                 fileCls={fileCls}
                 labelCls={labelCls}

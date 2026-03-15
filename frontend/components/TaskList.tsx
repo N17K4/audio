@@ -91,21 +91,27 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
   function TypeBadge({ job }: { job: Job }) {
     const color =
-      job.type === 'tts'   ? 'bg-indigo-600' :
-      job.type === 'vc'    ? 'bg-violet-600' :
-      job.type === 'asr'   ? 'bg-sky-600'    :
-      job.type === 'media' ? 'bg-teal-600'   :
-      job.type === 'doc'     ? 'bg-amber-700'  :
-      job.type === 'toolbox' ? 'bg-amber-700'  :
-      job.type === 'train'   ? 'bg-amber-600'  : 'bg-slate-600';
+      job.type === 'tts'              ? 'bg-indigo-600' :
+      job.type === 'vc'               ? 'bg-violet-600' :
+      job.type === 'asr'              ? 'bg-sky-600'    :
+      job.type === 'media'            ? 'bg-teal-600'   :
+      job.type === 'doc'              ? 'bg-amber-700'  :
+      job.type === 'toolbox'          ? 'bg-amber-700'  :
+      job.type === 'train'            ? 'bg-amber-600'  :
+      job.type === 'image_gen'        ? 'bg-purple-600' :
+      job.type === 'image_understand' ? 'bg-fuchsia-600' :
+      job.type === 'translate'        ? 'bg-emerald-600' : 'bg-slate-600';
     const abbr =
-      job.type === 'tts'   ? 'TTS' :
-      job.type === 'vc'    ? 'VC'  :
-      job.type === 'asr'   ? 'STT' :
-      job.type === 'media' ? 'FMT' :
-      job.type === 'doc'     ? 'DOC' :
-      job.type === 'toolbox' ? 'DOC' :
-      job.type === 'train'   ? 'TRN' : job.type.toUpperCase().slice(0, 3);
+      job.type === 'tts'              ? 'TTS' :
+      job.type === 'vc'               ? 'VC'  :
+      job.type === 'asr'              ? 'STT' :
+      job.type === 'media'            ? 'FMT' :
+      job.type === 'doc'              ? 'DOC' :
+      job.type === 'toolbox'          ? 'DOC' :
+      job.type === 'train'            ? 'TRN' :
+      job.type === 'image_gen'        ? 'IMG' :
+      job.type === 'image_understand' ? 'VIS' :
+      job.type === 'translate'        ? 'TRL' : job.type.toUpperCase().slice(0, 3);
     return <span className={`rounded-lg ${color} px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide`}>{abbr}</span>;
   }
 

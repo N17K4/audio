@@ -28,6 +28,7 @@
   "build": {
     "appId": "com.ai.voice",
     "productName": "AI Tool",
+    "afterPack": "scripts/afterPack.js",
     "icon": "assets/icon",
     "asar": false,
     "files": [

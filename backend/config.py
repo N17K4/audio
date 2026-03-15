@@ -62,10 +62,10 @@ _SETTINGS: Dict = load_settings()
 LOCAL_CONCURRENCY: int = max(1, min(4, int(_SETTINGS.get("local_concurrency", 1))))
 
 TASK_CAPABILITIES = {
-    "asr": ["whisper", "openai", "gemini"],
-    "llm": ["gemini", "openai", "ollama", "github"],
-    "tts": ["fish_speech", "openai", "gemini", "elevenlabs"],
-    "vc": ["seed_vc", "local_rvc", "elevenlabs"],
+    "tts": ["fish_speech", "openai", "gemini", "elevenlabs", "cartesia", "dashscope"],
+    "asr": ["whisper", "openai", "gemini", "groq", "deepgram"],
+    "llm": ["gemini", "openai", "claude", "groq", "deepseek", "mistral", "xai", "ollama", "github"],
+    "vc":  ["seed_vc", "local_rvc", "elevenlabs"],
 }
 
 # Cloud provider references:
@@ -73,6 +73,7 @@ TASK_CAPABILITIES = {
 # - API pricing page: https://elevenlabs.io/pricing/api
 # - Voice changer pricing FAQ: https://help.elevenlabs.io/hc/en-us/articles/24938328105873-How-much-does-Voice-Changer-cost
 ELEVENLABS_BASE_URL = "https://api.elevenlabs.io"
+CARTESIA_BASE_URL = "https://api.cartesia.ai"
 ELEVENLABS_STS_PATH_TEMPLATE = "/v1/speech-to-speech/{voice_id}"
 
 # ─── Manifest（产物固化清单）────────────────────────────────────────────────────
