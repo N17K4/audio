@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { VoiceChatMsg, VoiceChatStatus, CapabilityMap } from '../../types';
 import { PROVIDER_LABELS, LOCAL_PROVIDERS, PROVIDER_TO_ENGINE, DEFAULT_CAPS } from '../../constants';
 import ModelInput from '../shared/ModelInput';
@@ -68,13 +69,18 @@ export default function VoiceChatPanel({
   labelCls,
   btnSec,
 }: VoiceChatPanelProps) {
+  const [configOpen, setConfigOpen] = useState(true);
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: '660px' }}>
-      {/* 顶部配置区（常显） */}
-      <div className="p-5 border-b border-slate-100 dark:border-slate-800 space-y-4">
-        <p className="text-xs text-slate-400 leading-relaxed">
-          语音对话流程：你说话 → <span className="font-semibold text-slate-600">STT</span> 转文字 → <span className="font-semibold text-slate-600">LLM</span> 生成回复 → <span className="font-semibold text-slate-600">TTS</span> 合成播放
-        </p>
+      {/* 顶部配置区（可折叠） */}
+      <div className="border-b border-slate-100 dark:border-slate-800">
+        <button
+          className="w-full flex items-center justify-between px-5 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+          onClick={() => setConfigOpen(v => !v)}>
+          <span>配置（服务商 / API Key / 模型）</span>
+          <span className="text-slate-400">{configOpen ? '▲ 收起' : '▼ 展开'}</span>
+        </button>
+        {configOpen && <div className="px-5 pb-4 space-y-4">
         {/* API 密钥（共用） */}
         <div className="flex gap-3 flex-wrap">
           <label className="flex-1 min-w-[160px]">
@@ -150,6 +156,7 @@ export default function VoiceChatPanel({
             )}
           </label>
         )}
+        </div>}
       </div>
 
       {/* 对话记录 */}

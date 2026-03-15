@@ -443,28 +443,29 @@ async def task_media_convert(
     is_video_output = fmt in _VIDEO_FMTS
 
     try:
+        BASE = [ffmpeg, "-hide_banner", "-y"]
         if act == "convert":
             if is_video_output:
                 # 视频→视频：使用硬件加速编码，音频流直接复制
                 hw_flags = build_ffmpeg_video_encode_flags(hw_accel)
-                cmd = [ffmpeg, "-y", "-i", str(input_path)] + hw_flags + ["-c:a", "copy", str(output_path)]
+                cmd = BASE + ["-i", str(input_path)] + hw_flags + ["-c:a", "copy", str(output_path)]
             else:
                 # 任意→音频：直接流复制或音频转码，不涉及视频编码
-                cmd = [ffmpeg, "-y", "-i", str(input_path), "-vn", str(output_path)]
+                cmd = BASE + ["-i", str(input_path), "-vn", str(output_path)]
         elif act == "extract_audio":
-            cmd = [ffmpeg, "-y", "-i", str(input_path), "-vn", str(output_path)]
+            cmd = BASE + ["-i", str(input_path), "-vn", str(output_path)]
         elif act == "clip":
             if not start_time.strip():
                 raise HTTPException(status_code=400, detail="clip 操作需要 start_time")
             # clip 优先流复制（无损且极快），仅视频输出时才用硬件重编码
             if is_video_output:
                 hw_flags = build_ffmpeg_video_encode_flags(hw_accel)
-                cmd = [ffmpeg, "-y", "-ss", start_time.strip()]
+                cmd = BASE + ["-ss", start_time.strip()]
                 if duration.strip():
                     cmd += ["-t", duration.strip()]
                 cmd += ["-i", str(input_path)] + hw_flags + ["-c:a", "copy", str(output_path)]
             else:
-                cmd = [ffmpeg, "-y", "-ss", start_time.strip()]
+                cmd = BASE + ["-ss", start_time.strip()]
                 if duration.strip():
                     cmd += ["-t", duration.strip()]
                 cmd += ["-i", str(input_path), "-c", "copy", str(output_path)]
@@ -476,7 +477,7 @@ async def task_media_convert(
             subprocess.run, cmd, capture_output=True, text=True, timeout=300
         )
         if completed.returncode != 0:
-            stderr = (completed.stderr or "").strip()[:1000]
+            stderr = (completed.stderr or "").strip()[-2000:]
             logger.error("[media-convert] FFmpeg 失败: %s", stderr)
             raise HTTPException(status_code=500, detail=f"FFmpeg 处理失败: {stderr}")
 
@@ -700,7 +701,7 @@ async def task_subtitle(
             ffmpeg = get_ffmpeg_binary()
             if not ffmpeg:
                 raise HTTPException(status_code=500, detail="FFmpeg 未找到，无法提取字幕")
-            cmd = [ffmpeg, "-y", "-i", str(input_path), "-map", "0:s:0", str(output_path)]
+            cmd = [ffmpeg, "-hide_banner", "-y", "-i", str(input_path), "-map", "0:s:0", str(output_path)]
             logger.info("[subtitle] extract cmd: %s", " ".join(cmd))
             completed = await asyncio.to_thread(
                 subprocess.run, cmd, capture_output=True, text=True, timeout=120

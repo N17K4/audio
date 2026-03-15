@@ -28,7 +28,7 @@ SEED_VC_ENGINE_JSON = RUNTIME_ROOT / "seed_vc" / "engine.json"
 WHISPER_ENGINE_JSON = RUNTIME_ROOT / "whisper" / "engine.json"
 FASTER_WHISPER_ENGINE_JSON = RUNTIME_ROOT / "faster_whisper" / "engine.json"
 
-RUNTIME_TEMP_DIR = Path(tempfile.gettempdir()) / "ai-tool-temp"
+RUNTIME_TEMP_DIR = Path(tempfile.gettempdir()) / "ai-workshop-temp"
 DOWNLOAD_DIR = RUNTIME_TEMP_DIR / "download"
 TRAIN_DATA_DIR = RUNTIME_TEMP_DIR / "train-data"
 # dev + prod 统一：Electron 传入 LOGS_DIR 环境变量；未传则回退到 APP_ROOT/logs/

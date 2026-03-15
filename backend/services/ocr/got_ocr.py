@@ -65,10 +65,11 @@ async def run_got_ocr(
             raise HTTPException(status_code=500, detail=f"GOT-OCR 执行失败: {exc}") from exc
 
         if completed.returncode != 0:
-            stderr = (completed.stderr or "").strip()[:5000]
-            stdout = (completed.stdout or "").strip()[:5000]
+            stderr = (completed.stderr or "").strip()
+            stdout = (completed.stdout or "").strip()
             logger.error("[got_ocr] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
-            raise HTTPException(status_code=500, detail=f"GOT-OCR 失败 (code={completed.returncode}): {stderr or stdout}")
+            tail = (stderr or stdout)[-3000:]
+            raise HTTPException(status_code=500, detail=f"GOT-OCR 失败 (code={completed.returncode}): {tail}")
 
         text = ""
         if Path(tmp_out_path).exists():

@@ -814,7 +814,7 @@ export default function Home() {
                       return (
                         <button key={opt.value}
                           className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-                          onClick={() => { setFormatGroup('media'); media.setMediaAction(opt.value); media.setMediaFile(null); }}>
+                          onClick={() => { setFormatGroup('media'); media.setMediaAction(opt.value); }}>
                           <span className="text-sm font-medium leading-tight">{opt.label}</span>
                           <span className={`text-[10px] font-mono leading-tight ${active ? 'text-teal-500 dark:text-teal-400' : 'text-slate-400 dark:text-slate-600'}`}>{opt.pkg}</span>
                         </button>

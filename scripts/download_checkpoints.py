@@ -553,6 +553,14 @@ def download_hf_cache(
             print(done_msg)
             emit("log", message=done_msg)
             emit("file_done", engine=engine_name, file=label, ok=True)
+            # 创建 refs/main（若不存在），使 hf_hub_download 离线模式可在不指定
+            # revision 参数时找到已缓存的文件（refs/main 是 HF 缓存格式的入口指针）。
+            if revision and revision != "main":
+                refs_dir = marker_dir / "refs"
+                refs_main = refs_dir / "main"
+                if not refs_main.exists():
+                    refs_dir.mkdir(parents=True, exist_ok=True)
+                    refs_main.write_text(revision, encoding="utf-8")
         except Exception as e:
             err_str = str(e)
             err_msg = f"    ✗ 下载失败: {err_str[:300]}"

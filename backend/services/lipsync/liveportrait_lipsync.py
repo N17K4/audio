@@ -66,10 +66,11 @@ async def run_liveportrait_lipsync(
         raise HTTPException(status_code=500, detail=f"LivePortrait 执行失败: {exc}") from exc
 
     if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip()[:5000]
-        stdout = (completed.stdout or "").strip()[:5000]
+        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()
         logger.error("[liveportrait] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
-        raise HTTPException(status_code=500, detail=f"LivePortrait 失败 (code={completed.returncode}): {stderr or stdout}")
+        tail = (stderr or stdout)[-3000:]
+        raise HTTPException(status_code=500, detail=f"LivePortrait 失败 (code={completed.returncode}): {tail}")
 
     if not Path(output_path).exists():
         raise HTTPException(status_code=500, detail="LivePortrait 执行完成但输出文件不存在")

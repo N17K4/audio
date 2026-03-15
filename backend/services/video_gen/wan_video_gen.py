@@ -70,10 +70,11 @@ async def run_wan_video_gen(
         raise HTTPException(status_code=500, detail=f"Wan 执行失败: {exc}") from exc
 
     if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip()[:5000]
-        stdout = (completed.stdout or "").strip()[:5000]
+        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()
         logger.error("[wan] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
-        raise HTTPException(status_code=500, detail=f"Wan 视频生成失败 (code={completed.returncode}): {stderr or stdout}")
+        tail = (stderr or stdout)[-3000:]
+        raise HTTPException(status_code=500, detail=f"Wan 视频生成失败 (code={completed.returncode}): {tail}")
 
     if not Path(output_path).exists():
         raise HTTPException(status_code=500, detail="Wan 执行完成但输出文件不存在")

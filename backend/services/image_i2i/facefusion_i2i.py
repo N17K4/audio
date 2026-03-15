@@ -62,10 +62,11 @@ async def run_facefusion_i2i(
         raise HTTPException(status_code=500, detail=f"FaceFusion 执行失败: {exc}") from exc
 
     if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip()[:5000]
-        stdout = (completed.stdout or "").strip()[:5000]
+        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()
         logger.error("[facefusion] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
-        raise HTTPException(status_code=500, detail=f"FaceFusion 失败 (code={completed.returncode}): {stderr or stdout}")
+        tail = (stderr or stdout)[-3000:]
+        raise HTTPException(status_code=500, detail=f"FaceFusion 失败 (code={completed.returncode}): {tail}")
 
     if not Path(output_path).exists():
         raise HTTPException(status_code=500, detail="FaceFusion 执行完成但输出文件不存在")

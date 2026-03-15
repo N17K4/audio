@@ -339,6 +339,10 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     # macOS ARM CPU 下 fairseq/HuBERT 在不启用 MPS fallback 时会 SIGSEGV；
     # 对所有引擎统一开启，允许 MPS 不支持的算子自动降级到 CPU
     merged["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    # fairseq（RVC 依赖）会导入 tensorboardX，而 tensorboardX 使用 protobuf C 扩展
+    # 新版 protobuf (>=4.x) 的 C 扩展禁用了 Descriptor 直接创建，导致 ImportError。
+    # 强制使用纯 Python 实现以规避此问题（对所有引擎无副作用）。
+    merged["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     return merged
 
 
