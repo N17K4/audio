@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDiskUsage: () => ipcRenderer.invoke('app:getDiskUsage'),
   readLogFile: (filename) => ipcRenderer.invoke('app:readLogFile', filename),
   openLogsDir: () => ipcRenderer.invoke('app:openLogsDir'),
+  clearUserData: () => ipcRenderer.invoke('app:clearUserData'),
 });

@@ -24,6 +24,9 @@ export type Job = {
   result_url: string | null;
   result_text: string | null;
   error: string | null;
+  progress?: number;      // 0-100，训练任务进度
+  step?: string;          // 当前阶段名称
+  step_msg?: string;      // 当前阶段描述
 };
 
 declare global {
@@ -36,6 +39,7 @@ declare global {
       getDiskUsage: () => Promise<DiskRow[]>;
       readLogFile: (filename: string) => Promise<{ ok: boolean; content: string }>;
       openLogsDir: () => Promise<void>;
+      clearUserData: () => Promise<{ ok: boolean; error?: string }>;
     };
   }
 }

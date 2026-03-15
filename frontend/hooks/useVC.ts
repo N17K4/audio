@@ -29,11 +29,14 @@ interface UseVCParams {
   seedVcPitchShift: number;
   seedVcF0Condition: boolean;
   seedVcEnablePostprocess: boolean;
+  seedVcCfgRate: number;
   // RVC settings
   rvcF0Method: string;
   rvcFilterRadius: number;
   rvcIndexRate: number;
   rvcPitchShift: number;
+  rvcRmsMixRate: number;
+  rvcProtect: number;
 }
 
 export function useVC({
@@ -58,10 +61,13 @@ export function useVC({
   seedVcPitchShift,
   seedVcF0Condition,
   seedVcEnablePostprocess,
+  seedVcCfgRate,
   rvcF0Method,
   rvcFilterRadius,
   rvcIndexRate,
   rvcPitchShift,
+  rvcRmsMixRate,
+  rvcProtect,
 }: UseVCParams) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -80,7 +86,7 @@ export function useVC({
     const ctrl = new AbortController();
     abortCtrlRef.current = ctrl;
     const fd = new FormData();
-    fd.append('file', audio, 'audio.webm');
+    fd.append('file', audio, audio instanceof File ? audio.name : 'audio.webm');
     fd.append('voice_id', isSeedVc ? '_seed_vc_direct_' : selectedVoiceId);
     fd.append('mode', isLocal ? 'local' : 'cloud');
     fd.append('provider', selectedProvider);
@@ -92,13 +98,15 @@ export function useVC({
       fd.append('diffusion_steps', String(seedVcDiffusionSteps));
       fd.append('pitch_shift', String(seedVcPitchShift));
       fd.append('f0_condition', String(seedVcF0Condition));
-      fd.append('cfg_rate', String(0.7));
+      fd.append('cfg_rate', String(seedVcCfgRate));
       fd.append('enable_postprocess', String(seedVcEnablePostprocess));
     } else if (selectedProvider === 'local_rvc') {
       fd.append('pitch_shift', String(rvcPitchShift));
       fd.append('f0_method', rvcF0Method);
       fd.append('filter_radius', String(rvcFilterRadius));
       fd.append('index_rate', String(rvcIndexRate));
+      fd.append('rms_mix_rate', String(rvcRmsMixRate));
+      fd.append('protect', String(rvcProtect));
     }
     try {
       const res = await fetch(`${backendBaseUrl}/convert`, { method: 'POST', body: fd, signal: ctrl.signal });

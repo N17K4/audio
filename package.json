@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
+    "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Tool' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
     "setup": "pnpm install && cd frontend && pnpm install && cd .. && node scripts/setup-runtime.js",
     "setup:runtime": "node scripts/setup-runtime.js",
@@ -12,7 +13,7 @@
     "checkpoints:force": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py --force",
     "build:frontend": "cd frontend && pnpm build",
     "dist:both": "pnpm run build:frontend && electron-builder --mac --win",
-    "predist": "pkill -f 'AI Tool' 2>/dev/null || true",
+    "predist": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Tool' 2>/dev/null; pkill -f 'Electron.*test001' 2>/dev/null; true",
     "dist": "pnpm run build:frontend && electron-builder --mac",
     "dist:win": "pnpm run build:frontend && electron-builder --win",
     "docker": "docker compose up --build"
@@ -27,6 +28,7 @@
   "build": {
     "appId": "com.ai.voice",
     "productName": "AI Tool",
+    "icon": "assets/icon",
     "asar": false,
     "files": [
       "main.js",
@@ -39,7 +41,8 @@
       "scripts/setup-engines.py",
       "frontend/out/**/*",
       "backend/**/*",
-      "models/**/*"
+      "models/**/*",
+      "assets/**/*"
     ],
     "extraResources": [
       {

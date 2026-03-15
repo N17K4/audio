@@ -154,8 +154,8 @@ def download_via_requests(url: str, dest_path: Path) -> None:
                 mb = done / 1024 / 1024
                 if _IS_TTY and not _JSON_MODE:
                     print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
-                elif pct // 10 != last_reported:
-                    last_reported = pct // 10
+                elif pct // 2 != last_reported:
+                    last_reported = pct // 2
                     if not _JSON_MODE:
                         print(f"  {pct}% ({mb:.1f} MB)", flush=True)
                     emit("progress", file=dest_path.name, pct=pct,
@@ -238,34 +238,47 @@ def check_and_download(
             hf_info = parse_hf_url(url)
             if hf_info:
                 repo_id, filename, revision = hf_info
-                try:
-                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
-                    if downloaded.resolve() != dest.resolve():
-                        downloaded.rename(dest)
-                except Exception as hf_err:
-                    is_auth_err = ("401" in str(hf_err) or "403" in str(hf_err)
-                                   or "authentication" in str(hf_err).lower()
-                                   or "Unauthorized" in str(hf_err))
-                    is_import_err = isinstance(hf_err, ImportError)
-                    if is_import_err:
-                        print(f"    [提示] huggingface_hub 未安装，回退到 HTTP 直连下载")
+                if _JSON_MODE:
+                    # JSON 模式优先走 HTTP 直连，进度条实时更新；鉴权失败再回退 hf_hub
+                    try:
                         download_via_requests(url, dest)
-                    elif is_auth_err:
-                        try:
+                    except Exception as http_err:
+                        if "401" in str(http_err) or "403" in str(http_err):
+                            emit("log", message=f"    需要认证，尝试 hf_hub_download…")
+                            downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
+                            if downloaded.resolve() != dest.resolve():
+                                downloaded.rename(dest)
+                        else:
+                            raise
+                else:
+                    try:
+                        downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
+                        if downloaded.resolve() != dest.resolve():
+                            downloaded.rename(dest)
+                    except Exception as hf_err:
+                        is_auth_err = ("401" in str(hf_err) or "403" in str(hf_err)
+                                       or "authentication" in str(hf_err).lower()
+                                       or "Unauthorized" in str(hf_err))
+                        is_import_err = isinstance(hf_err, ImportError)
+                        if is_import_err:
+                            print(f"    [提示] huggingface_hub 未安装，回退到 HTTP 直连下载")
                             download_via_requests(url, dest)
-                        except Exception as http_err:
-                            if "401" in str(http_err) or "403" in str(http_err):
-                                if ensure_hf_login():
-                                    print(f"  [HF] 重试下载 {filename}")
-                                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
-                                    if downloaded.resolve() != dest.resolve():
-                                        downloaded.rename(dest)
+                        elif is_auth_err:
+                            try:
+                                download_via_requests(url, dest)
+                            except Exception as http_err:
+                                if "401" in str(http_err) or "403" in str(http_err):
+                                    if ensure_hf_login():
+                                        print(f"  [HF] 重试下载 {filename}")
+                                        downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
+                                        if downloaded.resolve() != dest.resolve():
+                                            downloaded.rename(dest)
+                                    else:
+                                        raise http_err
                                 else:
                                     raise http_err
-                            else:
-                                raise http_err
-                    else:
-                        raise
+                        else:
+                            raise
             else:
                 download_via_requests(url, dest)
 

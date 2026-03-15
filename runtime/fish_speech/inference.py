@@ -112,6 +112,7 @@ def _worker_alive(socket_path: str, pid_path: str) -> bool:
 
 def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
     """启动 fish_speech_worker.py 后台进程，等待其输出 'ready'。"""
+    import tempfile
     import threading
 
     py = get_embedded_python()
@@ -119,16 +120,20 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
 
     env = os.environ.copy()
 
+    # stderr 写入临时文件而非 DEVNULL：
+    # - 避免死锁：当上层 backend 用 capture_output=True 运行本脚本时，
+    #   sys.stderr 是一个 PIPE 写端；若 worker 持有该 FD，backend 的 communicate()
+    #   会永远等待 EOF 而死锁。用独立文件 FD 可完全规避。
+    # - 保留错误信息：worker 崩溃时将 stderr 内容打印出来，便于排查问题。
+    stderr_fd, stderr_log = tempfile.mkstemp(prefix="fish_worker_err_", suffix=".log")
+    os.close(stderr_fd)
+
     proc = subprocess.Popen(
         [py, worker_script,
          "--checkpoint_dir", checkpoint_dir,
          "--socket_path", socket_path],
         stdout=subprocess.PIPE,
-        # stderr=subprocess.DEVNULL 而非 sys.stderr：
-        # 当上层（backend）用 capture_output=True 运行本脚本时，
-        # sys.stderr 是一个 PIPE 的写端。若直接传给 worker，worker 持有该管道，
-        # 导致上层 subprocess.run 的 communicate() 永远等不到 EOF 而死锁。
-        stderr=subprocess.DEVNULL,
+        stderr=open(stderr_log, "w", encoding="utf-8", errors="replace"),
         env=env,
         text=True,
     )
@@ -162,8 +167,22 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
     t.join(timeout=600)
 
     if _ready.is_set():
+        # 成功：删除临时日志
+        try:
+            os.unlink(stderr_log)
+        except OSError:
+            pass
         print(f"[fish_speech] worker 就绪，模型加载耗时 {_time.monotonic()-_start_t:.1f}s", file=sys.stderr, flush=True)
         return
+
+    # 失败：打印 worker stderr 帮助排查
+    try:
+        err_content = Path(stderr_log).read_text(encoding="utf-8", errors="replace").strip()
+        if err_content:
+            print(f"[fish_speech] worker stderr:\n{err_content}", file=sys.stderr, flush=True)
+        os.unlink(stderr_log)
+    except OSError:
+        pass
 
     if _exit_early.is_set() or proc.poll() is not None:
         rc = proc.poll()

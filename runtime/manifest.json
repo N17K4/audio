@@ -159,14 +159,16 @@
           "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt",
           "size_mb": 360,
           "required": false,
-          "_note": "ContentVec 特征提取器，RVC 音色训练时需要"
+          "_note": "ContentVec 特征提取器，RVC 音色训练时需要",
+          "sha256": "f54b40fd2802423a5643779c4861af1e9ee9c1564dc9d32f54f20b5ffba7db96"
         },
         {
           "path": "pretrained_v2/f0G40k.pth",
           "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/pretrained_v2/f0G40k.pth",
           "size_mb": 400,
           "required": false,
-          "_note": "RVC v2 预训练生成器，音色训练后用作基础模型"
+          "_note": "RVC v2 预训练生成器，音色训练后用作基础模型",
+          "sha256": "3b2c44035e782c4b14ddc0bede9e2f4a724d025cd073f736d4f43708453adfcb"
         }
       ],
       "pip_packages": [

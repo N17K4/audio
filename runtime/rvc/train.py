@@ -21,7 +21,6 @@ import json
 import os
 import sys
 import zipfile
-import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -191,6 +190,16 @@ def load_contentvec(hubert_path: Path, device: str):
         print("[rvc-train] 缺少 fairseq 包，请运行 pnpm run checkpoints", file=sys.stderr)
         sys.exit(1)
 
+    # PyTorch 2.6 将 torch.load 的 weights_only 默认值改为 True，
+    # 但 fairseq checkpoint 包含 fairseq.data.dictionary.Dictionary，
+    # 需要显式注册为安全全局类才能正常加载。
+    try:
+        import torch
+        from fairseq.data.dictionary import Dictionary
+        torch.serialization.add_safe_globals([Dictionary])
+    except Exception:
+        pass
+
     try:
         models, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
             [str(hubert_path)],
@@ -302,6 +311,8 @@ def extract_features(model, audio_files: list[Path]) -> list:
 
 def build_index(all_features: list, voice_dir: Path) -> Path:
     """从特征数组列表构建 FAISS 检索索引，写入 voice_dir/index.index。"""
+    import platform as _platform
+
     try:
         import faiss
         import numpy as np
@@ -315,14 +326,20 @@ def build_index(all_features: list, voice_dir: Path) -> Path:
     n, dim = features.shape
     _emit("index", 65, f"特征矩阵: {n} 帧 × {dim} 维")
 
-    # 根据数据量选择 IVF 中心数
-    n_ivf = min(int(n ** 0.5), 512)
-    n_ivf = max(n_ivf, 2)  # 至少 2
+    # macOS ARM：faiss-cpu 的 IVF index.train() 会触发 SIGSEGV（faiss-cpu 无 ARM 原生构建）
+    # 使用 IndexFlatL2，不需要 train() 步骤，完全规避崩溃。
+    # 注意：macOS ARM 的 RVC 推理侧也会跳过 index 文件（同样原因），
+    # 但在其他平台（Linux/Windows）生成的 index 会正常使用。
+    is_mac_arm = (sys.platform == "darwin" and _platform.machine() == "arm64")
 
-    if n < 100:
-        # 数据太少，用 Flat 索引
+    if n < 100 or is_mac_arm:
+        if is_mac_arm and n >= 100:
+            print("[rvc-train] macOS ARM：使用 IndexFlatL2 规避 faiss-cpu IVF SIGSEGV", file=sys.stderr)
         index = faiss.IndexFlatL2(dim)
     else:
+        # 根据数据量选择 IVF 中心数
+        n_ivf = min(int(n ** 0.5), 512)
+        n_ivf = max(n_ivf, 2)
         index = faiss.index_factory(dim, f"IVF{n_ivf},Flat")
         _emit("index", 68, f"训练 IVF{n_ivf},Flat 索引...")
         index.train(features)
@@ -350,6 +367,85 @@ def find_base_model(checkpoint_dir: Path) -> Path | None:
         if p.stat().st_size > 1_000_000:
             return p
     return None
+
+
+def convert_to_inference_model(g_model_path: Path, voice_dir: Path, sample_rate: int) -> Path:
+    """将训练格式的生成器 checkpoint（f0G*.pth）转换为 rvc_python 可加载的推理格式。
+
+    训练格式：{"model": state_dict, "optimizer": ..., "iteration": ...}
+    推理格式：{"weight": state_dict, "config": [...], "f0": 1, "version": "v2", "sr": sr}
+
+    注意：config 中的架构参数（upsample_rates/kernel_sizes/sr）由权重形状自动检测，
+    不依赖 sample_rate 参数，因为预训练基础模型的架构是固定的。
+    """
+    import torch
+
+    cpt = torch.load(str(g_model_path), map_location="cpu", weights_only=False)
+
+    # 如果已经是推理格式，直接返回原路径
+    if "config" in cpt and "weight" in cpt:
+        return g_model_path
+
+    # 提取 state_dict（训练格式下存放在 "model" key）
+    state_dict = cpt.get("model") or cpt.get("weight") or cpt
+    if not isinstance(state_dict, dict):
+        raise ValueError(f"无法识别的 checkpoint 格式: keys={list(cpt.keys()) if isinstance(cpt, dict) else type(cpt)}")
+
+    # 从权重推断 spk_embed_dim（emb_g.weight 的行数）
+    spk_embed_dim = 109  # RVC v2 默认值
+    if "emb_g.weight" in state_dict:
+        spk_embed_dim = state_dict["emb_g.weight"].shape[0]
+
+    # 从 dec.ups.* 权重形状自动检测实际的 upsample_kernel_sizes
+    # ConvTranspose1d weight shape: [in_ch, out_ch, kernel_size]
+    ups_kernels = []
+    i = 0
+    while f"dec.ups.{i}.weight_v" in state_dict:
+        k = state_dict[f"dec.ups.{i}.weight_v"].shape[2]
+        ups_kernels.append(k)
+        i += 1
+
+    # 根据检测到的 kernel_sizes 映射到对应的 rates 和 sr
+    # 已知配置（来自 rvc_python configs/ 目录 + 实测）：
+    #   [16, 16, 4, 4] → rates [10, 10, 2, 2], sr 40000  (f0G40k.pth 实际架构)
+    #   [24, 20, 4, 4] → rates [12, 10, 2, 2], sr 48000  (v2/48k.json)
+    #   [20, 16, 4, 4] → rates [10,  8, 2, 2], sr 32000  (v2/32k.json)
+    ARCH_MAP = {
+        (16, 16, 4, 4): ([10, 10, 2, 2], 40000),
+        (24, 20, 4, 4): ([12, 10, 2, 2], 48000),
+        (20, 16, 4, 4): ([10,  8, 2, 2], 32000),
+    }
+    key = tuple(ups_kernels) if ups_kernels else None
+    if key and key in ARCH_MAP:
+        upsample_rates, detected_sr = ARCH_MAP[key]
+    else:
+        # 无法识别时的回退：kernel_size ≈ 2 × rate，sr 使用调用方传入的值
+        upsample_rates = [k // 2 for k in ups_kernels] if ups_kernels else [10, 10, 2, 2]
+        detected_sr = sample_rate
+        print(f"[rvc-train] 警告: 未识别的 upsample_kernel_sizes {ups_kernels}，"
+              f"使用推断 rates={upsample_rates} sr={detected_sr}", file=sys.stderr)
+
+    config = [
+        1025, 32, 192, 192, 768, 2, 6, 3, 0, "1",
+        [3, 7, 11], [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        upsample_rates, 512, list(ups_kernels) if ups_kernels else [16, 16, 4, 4],
+        spk_embed_dim, 256, detected_sr,
+    ]
+
+    inference_cpt = {
+        "weight": {k: v.half() for k, v in state_dict.items()},
+        "config": config,
+        "info": "converted_pretrained",
+        "sr": detected_sr,
+        "f0": 1,
+        "version": "v2",
+    }
+
+    out_path = voice_dir / "model.pth"
+    torch.save(inference_cpt, str(out_path))
+    print(f"[rvc-train] 模型架构检测: upsample_kernel_sizes={list(ups_kernels)}, "
+          f"upsample_rates={upsample_rates}, sr={detected_sr}", file=sys.stderr)
+    return out_path
 
 
 def main() -> int:
@@ -412,11 +508,11 @@ def main() -> int:
     model_path = voice_dir / "model.pth"
 
     if base_model:
-        _emit("model", 85, f"复制基础模型: {base_model.name}")
+        _emit("model", 85, f"转换基础模型为推理格式: {base_model.name}")
         try:
-            shutil.copy2(str(base_model), str(model_path))
+            convert_to_inference_model(base_model, voice_dir, args.sample_rate)
         except Exception as e:
-            print(f"[rvc-train] 复制模型失败: {e}", file=sys.stderr)
+            print(f"[rvc-train] 模型格式转换失败: {e}", file=sys.stderr)
             sys.exit(1)
     else:
         print("[rvc-train] 未找到预训练基础模型（checkpoints/rvc/pretrained_v2/f0G40k.pth）", file=sys.stderr)

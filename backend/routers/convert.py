@@ -39,6 +39,7 @@ async def convert(
     filter_radius: int = Form(3),
     index_rate: float = Form(0.75),
     rms_mix_rate: float = Form(0.25),
+    protect: float = Form(0.33),
 ):
     content = await file.read()
     if not content:
@@ -163,6 +164,7 @@ async def convert(
                     "RVC_FILTER_RADIUS": str(filter_radius),
                     "RVC_INDEX_RATE": str(index_rate),
                     "RVC_RMS_MIX_RATE": str(rms_mix_rate),
+                    "RVC_PROTECT": str(protect),
                 }
                 run_local_inference_or_raise(voice, input_path, output_path, rvc_extra_env)
         result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{task_id}_output{file_ext}"

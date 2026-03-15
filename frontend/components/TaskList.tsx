@@ -9,6 +9,55 @@ interface TaskListProps {
   onFetchJobs: () => void;
 }
 
+// ─── 各引擎阶段定义 ──────────────────────────────────────────────────────────
+
+const PROVIDER_STAGES: Record<string, string[]> = {
+  fish_speech: ['Worker 连接', '语言建模', '声码合成', '保存文件'],
+  local_rvc:   ['加载模型', 'F0 提取', '特征转换', '声音合成', '保存文件'],
+  seed_vc:     ['加载音频', '扩散推理', '后处理', '保存文件'],
+  whisper:     ['加载模型', '音频预处理', '转写识别', '输出文本'],
+};
+
+const TRAIN_STAGES = ['预处理', '提取特征', '构建索引', '转换模型', '写出配置'];
+
+const TRAIN_STEP_IDX: Record<string, number> = {
+  start: 0, preprocessing: 0, features: 1, index: 2, model: 3, meta: 4, done: 5,
+};
+
+/** 返回阶段列表和当前阶段索引（-1=全部待定，stages.length=全部完成） */
+function getJobStages(job: Job): { stages: string[]; currentIdx: number; isTrain: boolean } | null {
+  if (job.type === 'train') {
+    let currentIdx = -1;
+    if (job.status === 'completed') currentIdx = TRAIN_STAGES.length;
+    else if (job.status === 'running') currentIdx = (job.step ? TRAIN_STEP_IDX[job.step] ?? 0 : 0);
+    else if (job.status === 'failed') currentIdx = (job.step ? TRAIN_STEP_IDX[job.step] ?? 0 : 0);
+    return { stages: TRAIN_STAGES, currentIdx, isTrain: true };
+  }
+  const stages = PROVIDER_STAGES[job.provider];
+  if (!stages) return null;
+  let currentIdx = -1;
+  if (job.status === 'running') currentIdx = 0;
+  else if (job.status === 'completed') currentIdx = stages.length;
+  else if (job.status === 'failed') currentIdx = 0;
+  return { stages, currentIdx, isTrain: false };
+}
+
+type StageState = 'done' | 'active' | 'failed' | 'pending';
+
+function getStagePillCls(state: StageState, isTrain: boolean): string {
+  if (state === 'done')
+    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400';
+  if (state === 'active')
+    return isTrain
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 animate-pulse'
+      : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400 animate-pulse';
+  if (state === 'failed')
+    return 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400';
+  return 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500';
+}
+
+// ─── 组件 ────────────────────────────────────────────────────────────────────
+
 export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
@@ -19,48 +68,123 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs }:
       ? (j.completed_at || now) - (j.started_at || j.created_at)
       : now - (j.started_at || j.created_at);
     const s = Math.max(0, Math.round(base));
-    return s < 60 ? `${s}s` : `${Math.floor(s/60)}m${s%60}s`;
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`;
   }
 
   function StatusBadge({ job }: { job: Job }) {
-    if (job.status === 'queued') return <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">排队中</span>;
-    if (job.status === 'running') return <span className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 animate-pulse">处理中</span>;
-    if (job.status === 'completed') return <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">完成</span>;
+    if (job.status === 'queued')
+      return <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">排队中</span>;
+    if (job.status === 'running')
+      return <span className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 animate-pulse">处理中</span>;
+    if (job.status === 'completed')
+      return <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">完成</span>;
     return <span className="rounded-full bg-rose-100 dark:bg-rose-900/50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">失败</span>;
   }
 
   function TypeBadge({ job }: { job: Job }) {
-    const color = job.type === 'tts' ? 'bg-indigo-600' : job.type === 'vc' ? 'bg-violet-600' : job.type === 'asr' ? 'bg-sky-600' : job.type === 'media' ? 'bg-teal-600' : 'bg-slate-600';
-    const abbr = job.type === 'tts' ? 'TTS' : job.type === 'vc' ? 'VC' : job.type === 'asr' ? 'STT' : job.type === 'media' ? 'FMT' : job.type.toUpperCase().slice(0, 3);
+    const color =
+      job.type === 'tts'   ? 'bg-indigo-600' :
+      job.type === 'vc'    ? 'bg-violet-600' :
+      job.type === 'asr'   ? 'bg-sky-600'    :
+      job.type === 'media' ? 'bg-teal-600'   :
+      job.type === 'train' ? 'bg-amber-600'  : 'bg-slate-600';
+    const abbr =
+      job.type === 'tts'   ? 'TTS' :
+      job.type === 'vc'    ? 'VC'  :
+      job.type === 'asr'   ? 'STT' :
+      job.type === 'media' ? 'FMT' :
+      job.type === 'train' ? 'TRN' : job.type.toUpperCase().slice(0, 3);
     return <span className={`rounded-lg ${color} px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide`}>{abbr}</span>;
+  }
+
+  function StageRail({ job }: { job: Job }) {
+    const info = getJobStages(job);
+    if (!info) return null;
+    const { stages, currentIdx, isTrain } = info;
+
+    return (
+      <div className="pt-1.5 space-y-1.5">
+        {/* 进度条 */}
+        {(job.status === 'running' || job.status === 'queued') && (
+          isTrain && typeof job.progress === 'number' ? (
+            <div className="space-y-1">
+              {job.step_msg && (
+                <p className="text-[11px] text-slate-400 truncate">{job.step_msg}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${job.progress}%` }} />
+                </div>
+                <span className="text-[11px] tabular-nums font-mono text-slate-400 shrink-0">{job.progress}%</span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-100 dark:bg-slate-700 rounded-full h-1 overflow-hidden">
+              <div className="h-full w-2/5 bg-indigo-400 dark:bg-indigo-500 rounded-full"
+                style={{ animation: 'progress-indeterminate 1.5s ease-in-out infinite' }} />
+            </div>
+          )
+        )}
+
+        {/* 阶段 pills */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {stages.map((stage, i) => {
+            let state: StageState;
+            if (i < currentIdx) state = 'done';
+            else if (i === currentIdx) state = job.status === 'failed' ? 'failed' : 'active';
+            else state = 'pending';
+
+            return (
+              <div key={stage} className="flex items-center gap-1">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-colors ${getStagePillCls(state, isTrain)}`}>
+                  {stage}
+                </span>
+                {i < stages.length - 1 && (
+                  <svg className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   function JobRow({ job }: { job: Job }) {
     return (
       <div className="flex items-start gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
         <div className="mt-0.5"><TypeBadge job={job} /></div>
-        <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate max-w-[280px]">{job.label}</span>
             <StatusBadge job={job} />
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
             <span>{PROVIDER_LABELS[job.provider] || job.provider}</span>
             {(job.status === 'running' || job.status === 'completed' || job.status === 'failed') && (
               <span className="tabular-nums font-mono">{fmtElapsed(job)}</span>
             )}
           </div>
+
+          {/* 进度条 + 阶段 */}
+          <StageRail job={job} />
+
+          {/* 结果 / 错误 */}
           {job.status === 'completed' && job.result_url && (
-            <div className="pt-1 space-y-1.5">
+            <div className="pt-2 space-y-1.5">
               <audio controls src={job.result_url} className="w-full h-8" />
-              <a href={job.result_url} target="_blank" rel="noreferrer" className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
+              <a href={job.result_url} target="_blank" rel="noreferrer"
+                className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
             </div>
           )}
           {job.status === 'completed' && job.result_text && (
-            <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2 leading-relaxed mt-1">{job.result_text}</pre>
+            <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2 leading-relaxed mt-1.5">{job.result_text}</pre>
           )}
           {job.status === 'failed' && job.error && (
-            <p className="text-xs text-rose-500 break-all pt-0.5">{job.error}</p>
+            <p className="text-xs text-rose-500 break-all pt-1">{job.error}</p>
           )}
         </div>
         {(job.status === 'queued' || job.status === 'running') ? (

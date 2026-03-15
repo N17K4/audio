@@ -1,4 +1,5 @@
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -68,3 +69,14 @@ async def create_voice(
     logger.info("创建音色: voice_id=%s engine=%s inference_mode=%s", voice_id, engine, meta.get("inference_mode", "copy"))
 
     return {"status": "ok", "voice_id": voice_id, "voice_name": voice_name.strip()}
+
+
+@router.delete("/voices/{voice_id}")
+async def delete_voice(voice_id: str):
+    """删除音色目录及其所有文件。"""
+    voice_dir = VOICES_DIR / voice_id
+    if not voice_dir.exists() or not voice_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"音色不存在: {voice_id}")
+    shutil.rmtree(voice_dir)
+    logger.info("删除音色: voice_id=%s", voice_id)
+    return {"status": "ok", "voice_id": voice_id}

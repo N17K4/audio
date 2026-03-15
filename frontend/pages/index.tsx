@@ -164,10 +164,13 @@ export default function Home() {
   const [seedVcPitchShift, setSeedVcPitchShift] = useState(0);
   const [seedVcF0Condition, setSeedVcF0Condition] = useState(false);
   const [seedVcEnablePostprocess, setSeedVcEnablePostprocess] = useState(true);
+  const [seedVcCfgRate, setSeedVcCfgRate] = useState(0.7);
   const [rvcF0Method, setRvcF0Method] = useState('rmvpe');
   const [rvcFilterRadius, setRvcFilterRadius] = useState(3);
   const [rvcIndexRate, setRvcIndexRate] = useState(0.75);
   const [rvcPitchShift, setRvcPitchShift] = useState(0);
+  const [rvcRmsMixRate, setRvcRmsMixRate] = useState(0.25);
+  const [rvcProtect, setRvcProtect] = useState(0.33);
 
   // ─── 新建音色扩展状态 ─────────────────────────────────────────────────────
   const [showCreateVoice, setShowCreateVoice] = useState(false);
@@ -181,10 +184,6 @@ export default function Home() {
   // ─── 训练状态 ─────────────────────────────────────────────────────────────
   const [trainVoiceName, setTrainVoiceName] = useState('我的音色');
   const [trainFile, setTrainFile] = useState<File | null>(null);
-  const [trainJobId, setTrainJobId] = useState('');
-  const [trainJobStatus, setTrainJobStatus] = useState('');
-  const [trainProgress, setTrainProgress] = useState(0);
-  const [trainMessage, setTrainMessage] = useState('');
   // 训练高级参数
   const [trainEpochs, setTrainEpochs] = useState(0);
   const [trainF0Method, setTrainF0Method] = useState('harvest');
@@ -244,10 +243,13 @@ export default function Home() {
     seedVcPitchShift,
     seedVcF0Condition,
     seedVcEnablePostprocess,
+    seedVcCfgRate,
     rvcF0Method,
     rvcFilterRadius,
     rvcIndexRate,
     rvcPitchShift,
+    rvcRmsMixRate,
+    rvcProtect,
   });
 
   const asr = useASR({
@@ -290,7 +292,10 @@ export default function Home() {
 
   // ─── 新建音色 ─────────────────────────────────────────────────────────────
   async function createVoice() {
-    if (!newVoiceName.trim()) { setError('请填写音色名称'); return; }
+    const trimmedName = newVoiceName.trim();
+    if (!trimmedName) { setError('请填写音色名称'); return; }
+    const duplicate = backend.voices.some(v => v.name.toLowerCase() === trimmedName.toLowerCase());
+    if (duplicate) { setError(`音色名称「${trimmedName}」已存在，请使用其他名称`); return; }
     setCreatingVoice(true); setError(''); setSuccessMsg('');
     try {
       const fd = new FormData();
@@ -315,46 +320,38 @@ export default function Home() {
     }
   }
 
-  // ─── 训练 ─────────────────────────────────────────────────────────────────
-  async function pollTrainJob(jobId: string) {
-    if (!jobId) return;
-    // 训练可能需要数分钟；每 2s 轮询，最多轮询 30 分钟
-    const maxAttempts = 900;
-    for (let i = 0; i < maxAttempts; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      try {
-        const res = await fetch(`${backend.backendBaseUrl}/train/${jobId}`);
-        if (!res.ok) continue;
-        const d = await res.json();
-        const s = d?.status || '未知';
-        setTrainJobStatus(s);
-        if (d?.progress != null) setTrainProgress(Number(d.progress));
-        if (d?.message) setTrainMessage(d.message);
-        if (s === 'completed') {
-          setTrainProgress(100);
-          setTrainMessage('训练完成');
-          setSuccessMsg(`训练完成：${d.voice_id}`);
-          return;
-        }
-        if (s === 'failed') {
-          setError(d?.error || '训练失败');
-          return;
-        }
-      } catch { /**/ }
+  // ─── 删除音色 ─────────────────────────────────────────────────────────────
+  async function deleteVoice(voiceId: string) {
+    const voice = backend.voices.find(v => v.voice_id === voiceId);
+    const name = voice?.name || voiceId;
+    if (!window.confirm(`确定要删除音色「${name}」吗？此操作不可撤销。`)) return;
+    try {
+      const res = await fetch(`${backend.backendBaseUrl}/voices/${voiceId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        let data: any = null;
+        try { data = await res.json(); } catch { /**/ }
+        throw new Error(`删除失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
+      }
+      await backend.fetchVoices();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除音色失败');
     }
   }
 
+  // ─── 训练 ─────────────────────────────────────────────────────────────────
   async function startTraining() {
+    const trimmedName = trainVoiceName.trim();
     if (!trainFile) { setError('请先选择训练数据集'); return; }
-    if (!trainVoiceName.trim()) { setError('请输入音色名称'); return; }
-    setError(''); setSuccessMsg(''); setTrainJobStatus('提交中');
-    setTrainProgress(0); setTrainMessage('');
-    const normalized = trainVoiceName.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!trimmedName) { setError('请输入音色名称'); return; }
+    const duplicate = backend.voices.some(v => v.name.toLowerCase() === trimmedName.toLowerCase());
+    if (duplicate) { setError(`音色名称「${trimmedName}」已存在，请使用其他名称`); return; }
+    setError(''); setSuccessMsg('');
+    const normalized = trimmedName.toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
     const autoVoiceId = `${normalized || 'voice'}_${Date.now().toString().slice(-6)}`;
     const fd = new FormData();
     fd.append('dataset', trainFile);
     fd.append('voice_id', autoVoiceId);
-    fd.append('voice_name', trainVoiceName.trim());
+    fd.append('voice_name', trimmedName);
     fd.append('epochs', String(trainEpochs));
     fd.append('f0_method', trainF0Method);
     fd.append('sample_rate', String(trainSampleRate));
@@ -363,13 +360,23 @@ export default function Home() {
       let data: any = null;
       try { data = await res.json(); } catch { /**/ }
       if (!res.ok) throw new Error(`训练失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
-      setTrainJobId(data.job_id || '');
-      setTrainJobStatus('排队中');
-      setSuccessMsg(`训练已提交：${data.job_id}`);
-      await pollTrainJob(data.job_id);
-      await backend.fetchVoices();
+      const pending: import('../types').Job = {
+        id: data.job_id,
+        type: 'train',
+        label: `训练 · ${trimmedName}`,
+        provider: 'local_rvc',
+        is_local: true,
+        status: 'queued',
+        created_at: Date.now() / 1000,
+        started_at: null,
+        completed_at: null,
+        result_url: null,
+        result_text: null,
+        error: null,
+      };
+      setJobs(prev => [pending, ...prev]);
+      navigateTasks();
     } catch (e) {
-      setTrainJobStatus('失败');
       setError(e instanceof Error ? e.message : '训练失败');
     }
   }
@@ -512,6 +519,7 @@ export default function Home() {
                 setNewVoiceIndex={setNewVoiceIndex}
                 setNewVoiceRef={setNewVoiceRef}
                 onCreateVoice={createVoice}
+                onDeleteVoice={deleteVoice}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
@@ -526,6 +534,8 @@ export default function Home() {
                 setSeedVcF0Condition={setSeedVcF0Condition}
                 seedVcEnablePostprocess={seedVcEnablePostprocess}
                 setSeedVcEnablePostprocess={setSeedVcEnablePostprocess}
+                seedVcCfgRate={seedVcCfgRate}
+                setSeedVcCfgRate={setSeedVcCfgRate}
                 rvcF0Method={rvcF0Method}
                 setRvcF0Method={setRvcF0Method}
                 rvcFilterRadius={rvcFilterRadius}
@@ -534,14 +544,14 @@ export default function Home() {
                 setRvcIndexRate={setRvcIndexRate}
                 rvcPitchShift={rvcPitchShift}
                 setRvcPitchShift={setRvcPitchShift}
+                rvcRmsMixRate={rvcRmsMixRate}
+                setRvcRmsMixRate={setRvcRmsMixRate}
+                rvcProtect={rvcProtect}
+                setRvcProtect={setRvcProtect}
                 trainVoiceName={trainVoiceName}
                 setTrainVoiceName={setTrainVoiceName}
                 trainFile={trainFile}
                 setTrainFile={setTrainFile}
-                trainJobId={trainJobId}
-                trainJobStatus={trainJobStatus}
-                trainProgress={trainProgress}
-                trainMessage={trainMessage}
                 trainEpochs={trainEpochs}
                 setTrainEpochs={setTrainEpochs}
                 trainF0Method={trainF0Method}

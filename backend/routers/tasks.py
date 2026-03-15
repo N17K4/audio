@@ -307,7 +307,7 @@ async def task_media_convert(
         raise HTTPException(
             status_code=500,
             detail=(
-                "FFmpeg 未找到。请运行 pnpm run checkpoints 下载 FFmpeg 静态二进制，"
+                "FFmpeg 未找到。请运行 pnpm run setup 下载 FFmpeg 静态二进制，"
                 "或在系统中安装 FFmpeg 并确保其在 PATH 中。"
             ),
         )

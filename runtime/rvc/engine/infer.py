@@ -15,6 +15,16 @@ from pathlib import Path
 if not os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK"):
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
+# PyTorch 2.6 将 torch.load 的 weights_only 默认值从 False 改为 True，
+# 导致 fairseq 内部调用 torch.load 时无法加载含自定义类（如 Dictionary）的 checkpoint。
+# 此处 monkey-patch 恢复旧行为，仅影响本进程内所有 torch.load 调用。
+import torch as _torch
+_orig_torch_load = _torch.load
+def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_only=False, mmap=None, **kwargs):
+    return _orig_torch_load(f, map_location=map_location, pickle_module=pickle_module,
+                            weights_only=weights_only, mmap=mmap, **kwargs)
+_torch.load = _patched_torch_load
+
 
 def detect_version(model_path: str) -> str:
     """从 checkpoint 自动检测 v1/v2，避免 emb_phone 尺寸不匹配。"""

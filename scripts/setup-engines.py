@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
 import subprocess
@@ -106,9 +107,15 @@ def install_to_target(
     """将包安装到指定目录（--target），逐包输出进度。"""
     Path(target).mkdir(parents=True, exist_ok=True)
     all_ok = True
+    env = {**__import__('os').environ, "PYTHONPATH": target}
     for pkg in packages:
+        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
+        if check.returncode == 0:
+            _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+            continue
         _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
-        cmd = [py, "-m", "pip", "install", "--target", target, pkg, "--quiet"]
+        cmd = [py, "-m", "pip", "install", "--target", target, "--upgrade", pkg, "--quiet"]
         if mirror:
             cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
@@ -322,8 +329,21 @@ def setup_rvc_engine(project_root: Path) -> bool:
 由 setup-engines.py 自动生成，请勿手动修改。
 """
 import argparse
+import os
 import sys
 from pathlib import Path
+
+if not os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK"):
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+# PyTorch 2.6 将 torch.load 的 weights_only 默认值从 False 改为 True，
+# 导致 fairseq 内部调用 torch.load 时无法加载含自定义类（如 Dictionary）的 checkpoint。
+import torch as _torch
+_orig_torch_load = _torch.load
+def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_only=False, mmap=None, **kwargs):
+    return _orig_torch_load(f, map_location=map_location, pickle_module=pickle_module,
+                            weights_only=weights_only, mmap=mmap, **kwargs)
+_torch.load = _patched_torch_load
 
 
 def detect_version(model_path: str) -> str:
@@ -355,11 +375,16 @@ def main() -> int:
         print("[rvc] 缺少 rvc-python 包，请重新运行 pnpm run setup。", file=sys.stderr)
         return 1
 
+    index_path = str(Path(args.index).resolve()) if args.index else ""
+    import platform
+    if index_path and sys.platform == "darwin" and platform.machine() == "arm64":
+        print(f"[rvc] macOS ARM 跳过 index 文件（faiss-cpu SIGSEGV 规避）: {index_path}", file=sys.stderr)
+        index_path = ""
+
     version = detect_version(args.model)
     try:
         rvc = RVCInference(device="cpu")
-        rvc.load_model(args.model, version=version,
-                       index_path=str(Path(args.index).resolve()) if args.index else "")
+        rvc.load_model(args.model, version=version, index_path=index_path)
         rvc.infer_file(str(Path(args.input).resolve()),
                        str(Path(args.output).resolve()))
     except Exception as e:
@@ -645,10 +670,15 @@ def download_ffmpeg(project_root: Path) -> bool:
 
     if dest.exists():
         size_mb = dest.stat().st_size / 1024 / 1024
-        print(f"  ✓ FFmpeg 已存在（{size_mb:.1f} MB）: {dest}")
-        if system != "Windows":
-            dest.chmod(0o755)
-        return True
+        # 小于 10 MB 说明之前只保存了 zip 壳而非真实二进制，需要重新下载
+        if size_mb < 10:
+            print(f"  ✗ FFmpeg 文件异常（{size_mb:.1f} MB），重新下载")
+            dest.unlink()
+        else:
+            print(f"  ✓ FFmpeg 已存在（{size_mb:.1f} MB）: {dest}")
+            if system != "Windows":
+                dest.chmod(0o755)
+            return True
 
     print(f"  ✗ FFmpeg 未找到，下载中（~50-80 MB）: {url}")
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -673,16 +703,31 @@ def download_ffmpeg(project_root: Path) -> bool:
 
         target_name = "ffmpeg.exe" if system == "Windows" else "ffmpeg"
         if url.endswith(".zip") or url.endswith("/zip"):
-            with zipfile.ZipFile(tmp_archive, "r") as zf:
-                found = next(
-                    (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
-                    None,
-                )
-                if not found:
-                    print(f"    ✗ 压缩包内未找到 {target_name}")
-                    return False
-                with zf.open(found) as src, open(dest, "wb") as dst:
-                    dst.write(src.read())
+            def _extract_from_zip(zip_path: Path, out_path: Path) -> bool:
+                """从 zip 中提取 target_name，若提取结果仍是 zip 则再解一层（evermeet.cx 双层 zip）。"""
+                with zipfile.ZipFile(zip_path, "r") as zf:
+                    found = next(
+                        (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
+                        None,
+                    )
+                    if not found:
+                        print(f"    ✗ 压缩包内未找到 {target_name}")
+                        return False
+                    with zf.open(found) as src, open(out_path, "wb") as dst:
+                        dst.write(src.read())
+                # 若提取结果仍是 zip（evermeet.cx 套娃），再解一层
+                if zipfile.is_zipfile(out_path):
+                    inner_zip = out_path.with_suffix("._inner.zip")
+                    out_path.rename(inner_zip)
+                    try:
+                        if not _extract_from_zip(inner_zip, out_path):
+                            return False
+                    finally:
+                        inner_zip.unlink(missing_ok=True)
+                return True
+
+            if not _extract_from_zip(tmp_archive, dest):
+                return False
         else:
             with tarfile.open(tmp_archive) as tf:
                 found_member = next(
@@ -787,7 +832,12 @@ def main_runtime(args: argparse.Namespace) -> int:
         return 1
 
     project_root = Path(__file__).resolve().parent.parent
-    manifest_path = project_root / "runtime" / "manifest.json"
+    resources_root_env = os.getenv("RESOURCES_ROOT", "")
+    resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
+
+    manifest_path = resources_root / "runtime" / "manifest.json"
+    if not manifest_path.exists():
+        manifest_path = project_root / "runtime" / "manifest.json"
     if not manifest_path.exists():
         _emit({"type": "log", "message": f"✗ 找不到 manifest.json: {manifest_path}"}, json_progress)
         return 1
@@ -795,7 +845,7 @@ def main_runtime(args: argparse.Namespace) -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     engines: dict = manifest.get("engines", {})
 
-    py = get_embedded_python(project_root)
+    py = get_embedded_python(resources_root)
     if not py:
         _emit({"type": "log", "message": "✗ 嵌入式 Python 未找到"}, json_progress)
         return 1

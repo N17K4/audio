@@ -16,6 +16,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
   const [logContent, setLogContent] = useState<{ name: string; content: string } | null>(null);
   const [logLoading, setLogLoading] = useState(false);
   const [logCollapsed, setLogCollapsed] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingData, setClearingData] = useState(false);
+  const [clearMsg, setClearMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [concurrency, setConcurrency] = useState(1);
   const [concurrencyInput, setConcurrencyInput] = useState('1');
@@ -37,6 +40,44 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-card overflow-hidden dark:bg-slate-900 dark:border-slate-700/80">
+
+      {/* 二次确认弹窗 */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-80 rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-6 space-y-4">
+            <div className="space-y-1.5">
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">确认清除用户数据？</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                将删除已下载的全部模型文件和运行库（checkpoints、python-packages），下次启动时需要重新下载。此操作不可撤销。
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
+                onClick={() => setShowClearConfirm(false)}>
+                取消
+              </button>
+              <button
+                className="rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
+                disabled={clearingData}
+                onClick={async () => {
+                  setClearingData(true);
+                  const res = await window.electronAPI?.clearUserData();
+                  setClearingData(false);
+                  setShowClearConfirm(false);
+                  if (res?.ok) {
+                    setClearMsg({ ok: true, text: '已清除，重新启动应用后将引导重新下载' });
+                  } else {
+                    setClearMsg({ ok: false, text: `清除失败：${res?.error ?? '未知错误'}` });
+                  }
+                }}>
+                {clearingData ? '清除中…' : '确认清除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-5 pb-6 space-y-6 pt-5">
 
         {/* 本地推理并发数 */}
@@ -204,6 +245,28 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
             </div>
             {!logCollapsed && logContent && (
               <pre className="rounded-xl border border-slate-800 bg-slate-950 text-slate-300 p-4 text-xs overflow-x-auto whitespace-pre-wrap max-h-64 font-mono leading-relaxed">{logContent.content || '（空）'}</pre>
+            )}
+          </div>
+        )}
+
+        {/* 清除用户数据（仅 Electron） */}
+        {isElectron && (
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">清除用户数据</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">删除已下载的模型和运行库，下次启动重新引导下载</p>
+              </div>
+              <button
+                className="rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 transition-colors"
+                onClick={() => { setClearMsg(null); setShowClearConfirm(true); }}>
+                清除数据
+              </button>
+            </div>
+            {clearMsg && (
+              <p className={`text-xs ${clearMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                {clearMsg.text}
+              </p>
             )}
           </div>
         )}

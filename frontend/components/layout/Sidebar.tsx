@@ -67,15 +67,16 @@ export default function Sidebar({
         <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
           <NavItem page="home" label="首页" icon={<HomeIcon />} />
           <div className="my-2 border-t border-sky-100 dark:border-slate-800" />
-          {(Object.keys(TASK_LABELS) as TaskType[]).map(t => (
+          {(Object.keys(TASK_LABELS) as TaskType[]).filter(t => t !== 'media').map(t => (
             <NavItem key={t} page={t} label={TASK_LABELS[t]} icon={<TaskIcon task={t} />} />
           ))}
         </nav>
 
-        {/* 底部导航 - 任务列表 & 系统工具 */}
+        {/* 底部导航 - 格式转换 & 任务列表 & 系统工具 */}
         <div className="border-t border-sky-100 dark:border-slate-800 px-2 py-2 space-y-0.5">
+          <NavItem page="media" label="格式转换" icon={<TaskIcon task="media" />} />
           <NavItem page="tasks" label="任务列表" icon={<TasksIcon badge={activeBadge} />} />
-          <NavItem page="system" label="系统工具" icon={<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>} />
+          <NavItem page="system" label="系统工具" icon={<svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}><rect width="28" height="28" rx="7" fill="#f1f5f9"/><path d="M10.325 8.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
         </div>
 
         {/* 折叠按钮 */}

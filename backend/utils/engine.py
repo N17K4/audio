@@ -50,6 +50,8 @@ def get_ffmpeg_binary() -> str:
     import shutil as _shutil
     if _sys.platform == "win32":
         bundled = RUNTIME_ROOT / "win" / "bin" / "ffmpeg.exe"
+    elif _sys.platform == "linux":
+        bundled = RUNTIME_ROOT / "linux" / "bin" / "ffmpeg"
     else:
         bundled = RUNTIME_ROOT / "mac" / "bin" / "ffmpeg"
     if bundled.exists():

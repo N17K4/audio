@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, shell, dialog, session, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -22,6 +22,48 @@ if (!app.isPackaged) {
 
 // 强制 Chromium UI 语言为中文（文件选择按钮等原生控件显示中文）
 app.commandLine.appendSwitch('lang', 'zh-CN');
+
+// ─── 单实例互斥：杀掉旧实例（dev ↔ dist 双向） ──────────────────────────────
+// 策略：用 os.tmpdir()/ai-tool-main.pid 记录主进程 PID，
+//       每次启动先读取旧 PID → 杀掉 → 顺带清理孤儿后端进程 → 写入新 PID。
+(function killPreviousInstance() {
+  const os = require('os');
+  const { execSync } = require('child_process');
+  const pidFile = path.join(os.tmpdir(), 'ai-tool-main.pid');
+
+  // 1. 通过 PID 文件杀掉上一个 Electron 主进程
+  try {
+    const oldPid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+    if (oldPid && oldPid !== process.pid) {
+      try {
+        process.kill(oldPid, 0); // 检查进程是否仍存在（抛 ESRCH 则已死）
+        if (process.platform === 'win32') {
+          execSync(`taskkill /F /T /PID ${oldPid}`, { stdio: 'ignore' });
+        } else {
+          execSync(`kill -9 ${oldPid} 2>/dev/null; true`, { shell: true, stdio: 'ignore' });
+        }
+      } catch { /* ESRCH: 进程已退出，忽略 */ }
+    }
+  } catch { /* PID 文件不存在或格式错误，忽略 */ }
+
+  // 2. 清理孤儿后端进程（父进程死后 uvicorn/python 可能继续运行）
+  try {
+    if (process.platform === 'win32') {
+      execSync('taskkill /F /FI "IMAGENAME eq uvicorn.exe" 2>nul', { stdio: 'ignore' });
+    } else {
+      execSync(
+        "pkill -f 'uvicorn main:app' 2>/dev/null; pkill -f 'backend/main\\.py' 2>/dev/null; true",
+        { shell: true, stdio: 'ignore' }
+      );
+    }
+  } catch { /**/ }
+
+  // 3. 写入当前 PID
+  try { fs.writeFileSync(pidFile, String(process.pid), 'utf-8'); } catch { /**/ }
+
+  // 4. 退出时清理 PID 文件，避免下次误杀不存在的 PID
+  app.on('before-quit', () => { try { fs.unlinkSync(pidFile); } catch { /**/ } });
+}());
 
 // ─── 文件日志 ─────────────────────────────────────────────────────────────────
 // dev:  <项目根>/logs/
@@ -381,9 +423,39 @@ ipcMain.handle('setup:closeWindow', () => {
 });
 
 async function createWindow() {
+  // ─── macOS 麦克风权限 ──────────────────────────────────────────────────────
+  // Electron 默认拒绝所有 media 权限请求；需显式放行，否则 getUserMedia 返回
+  // NotAllowedError（"permission denied by system"）。
+  // setPermissionCheckHandler：同步判断权限是否已授予（Chromium 内部检查）
+  // setPermissionRequestHandler：异步响应 JS 发起的权限申请弹窗
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
+      return true;
+    }
+    return null; // 其余权限走默认逻辑
+  });
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+  // macOS：向系统请求麦克风授权（首次运行会弹出系统权限对话框）
+  if (process.platform === 'darwin') {
+    systemPreferences.askForMediaAccess('microphone').catch(() => {});
+  }
+
+  const iconPath = process.platform === 'win32'
+    ? path.join(__dirname, 'assets', 'icon.png')
+    : path.join(__dirname, 'assets', 'icon.icns');
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
+  }
   const win = new BrowserWindow({
     width: 1100,
     height: 800,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -643,6 +715,20 @@ ipcMain.handle('app:getDiskUsage', () => {
   ];
 
   return rows;
+});
+
+// ─── IPC：清除用户数据 ────────────────────────────────────────────────────────
+ipcMain.handle('app:clearUserData', () => {
+  const dirs = [getCheckpointsDir(), getUserPackagesDir()];
+  const errors = [];
+  for (const dir of dirs) {
+    try {
+      if (dirExists(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      errors.push(`${dir}: ${err.message}`);
+    }
+  }
+  return errors.length > 0 ? { ok: false, error: errors.join('\n') } : { ok: true };
 });
 
 // ─── IPC：删除模型 ────────────────────────────────────────────────────────────

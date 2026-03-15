@@ -181,21 +181,25 @@
     <ul class="engine-list" id="engine-list"></ul>
     <div class="mirror-row">
       <label>PyPI 软件源（安装 torch 等 Python 包）</label>
-      <select id="pypi-mirror">
-        <option value="">官方源（https://pypi.org）</option>
+      <input type="text" id="pypi-mirror" list="pypi-options"
+        placeholder="https://pypi.tuna.tsinghua.edu.cn/simple（清华大学，推荐）">
+      <datalist id="pypi-options">
         <option value="https://pypi.tuna.tsinghua.edu.cn/simple">清华大学（推荐）</option>
+        <option value="https://pypi.org/simple">官方源（pypi.org）</option>
         <option value="https://mirrors.aliyun.com/pypi/simple">阿里云</option>
         <option value="https://pypi.mirrors.ustc.edu.cn/simple">中科大</option>
         <option value="https://mirrors.huaweicloud.com/repository/pypi/simple">华为云</option>
-      </select>
+      </datalist>
     </div>
     <div class="mirror-row">
       <label>HuggingFace 下载地址（下载 AI 模型文件）</label>
-      <select id="hf-endpoint">
-        <option value="">官方地址（huggingface.co）</option>
+      <input type="text" id="hf-endpoint" list="hf-options"
+        placeholder="https://hf-mirror.com（推荐）">
+      <datalist id="hf-options">
         <option value="https://hf-mirror.com">hf-mirror.com（推荐）</option>
+        <option value="https://huggingface.co">官方地址（huggingface.co）</option>
         <option value="https://modelscope.cn">ModelScope（阿里）</option>
-      </select>
+      </datalist>
       <div class="mirror-hint" id="mirror-hint">正在检测 huggingface.co 连通性…</div>
     </div>
   </div>
@@ -263,6 +267,7 @@ function fmtSize(mb) {
 }
 
 function appendLog(text, cls) {
+  _logLines.push(text);
   const area = document.getElementById('log-area');
   const line = document.createElement('div');
   line.className = 'log-line' + (cls ? ' ' + cls : '');
@@ -336,14 +341,15 @@ window.setupAPI.onInfo(({ missingEngines, manifest }) => {
   });
 });
 
+// ─── 默认源（留空时使用） ──────────────────────────────────────────────────
+const PYPI_DEFAULT = 'https://pypi.tuna.tsinghua.edu.cn/simple';
+const HF_DEFAULT   = 'https://hf-mirror.com';
+
 // ─── 开始下载 ──────────────────────────────────────────────────────────────
 async function startDownload() {
-  const endpoint   = document.getElementById('hf-endpoint').value.trim();
-  const pypiMirror = document.getElementById('pypi-mirror').value.trim();
-  const cfg = {};
-  if (endpoint)   cfg.hfEndpoint  = endpoint;
-  if (pypiMirror) cfg.pypiMirror  = pypiMirror;
-  if (Object.keys(cfg).length) await window.setupAPI.saveConfig(cfg);
+  const endpoint   = document.getElementById('hf-endpoint').value.trim()  || HF_DEFAULT;
+  const pypiMirror = document.getElementById('pypi-mirror').value.trim()  || PYPI_DEFAULT;
+  await window.setupAPI.saveConfig({ hfEndpoint: endpoint, pypiMirror });
   showPhase('phase-progress');
   await window.setupAPI.startDownload({ hfEndpoint: endpoint, pypiMirror });
 }
@@ -354,6 +360,7 @@ function skipDownload() {
 
 // ─── 进度处理 ──────────────────────────────────────────────────────────────
 let _currentFile = '';
+let _logLines = [];  // 收集所有日志，失败时展示
 
 window.setupAPI.onProgress((msg) => {
   switch (msg.type) {
@@ -402,8 +409,14 @@ window.setupAPI.onDone(({ exitCode }) => {
     ? '所有模型已就绪，关闭此窗口即可开始使用。'
     : '部分模型下载失败，可关闭后在设置中重新下载，或忽略继续使用。';
 
-  const footer = document.getElementById('done-footer');
   if (!ok) {
+    // 展示最后 30 行日志，方便定位失败原因
+    const errLines = _logLines.slice(-30).join('\n');
+    const detail = document.getElementById('error-detail');
+    detail.textContent = errLines || '（无日志输出）';
+    detail.style.display = 'block';
+
+    const footer = document.getElementById('done-footer');
     footer.innerHTML = `
       <button class="btn-secondary" onclick="retryDownload()">重试下载</button>
       <button class="btn-primary" onclick="closeWindow()">忽略，继续使用</button>
@@ -418,12 +431,13 @@ function cancelDownload() {
 }
 
 function retryDownload() {
+  _logLines = [];
   document.getElementById('log-area').innerHTML = '';
   showPhase('phase-progress');
   window.setupAPI.loadConfig().then(cfg => {
     window.setupAPI.startDownload({
-      hfEndpoint:  cfg.hfEndpoint  || '',
-      pypiMirror:  cfg.pypiMirror  || '',
+      hfEndpoint:  cfg.hfEndpoint  || HF_DEFAULT,
+      pypiMirror:  cfg.pypiMirror  || PYPI_DEFAULT,
     });
   });
 }
