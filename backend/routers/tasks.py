@@ -26,6 +26,7 @@ from services.stt.deepgram_stt import run_deepgram_stt
 from services.stt.groq_stt import run_groq_stt
 from services.stt.openai_stt import run_openai_stt
 from services.stt.whisper_stt import run_whisper_stt
+from services.stt.faster_whisper_stt import run_faster_whisper_stt
 from services.llm.claude_llm import run_claude_llm
 from services.llm.openai_compat_llm import run_openai_compat_llm
 from services.tts.cartesia_tts import run_cartesia_tts
@@ -174,6 +175,13 @@ async def task_stt(
             api_key=api_key,
             model=model or "gemini-2.5-flash",
         )
+    elif p == "faster_whisper":
+        async with LOCAL_SEM:
+            result = await run_faster_whisper_stt(
+                content=content,
+                filename=file.filename or "audio.webm",
+                model=model or "base",
+            )
     elif p == "whisper":
         async with LOCAL_SEM:
             result = await run_whisper_stt(

@@ -1,7 +1,7 @@
 // ─── 类型 ──────────────────────────────────────────────────────────────────
 export type Status = 'idle' | 'recording' | 'processing';
 export type TaskType = 'tts' | 'vc' | 'asr' | 'llm' | 'voice_chat' | 'media' | 'doc' | 'misc';
-export type MiscSubPage = 'image_gen' | 'image_understand' | 'translate' | 'code_assist';
+export type MiscSubPage = 'image_gen' | 'image_understand' | 'translate' | 'code_assist' | 'img_gen' | 'img_i2i' | 'video_gen';
 export type DocSubPage = 'pdf_to_word' | 'doc_convert' | 'pdf_extract' | 'image' | 'qr' | 'text_encoding';
 export type ToolboxSubPage = 'image' | 'qr' | 'text_encoding'; // 保留兼容 useToolbox hook
 export type MediaAction = 'convert' | 'extract_audio' | 'clip' | 'subtitle_convert' | 'subtitle_extract';

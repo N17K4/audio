@@ -105,6 +105,10 @@
           "!engine/tests/**",
           "!engine/docs/**"
         ]
+      },
+      {
+        "from": "runtime/faster_whisper/",
+        "to": "runtime/faster_whisper/"
       }
     ],
     "directories": {

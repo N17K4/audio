@@ -450,6 +450,74 @@ def prefetch_rvc_base_models(project_root: Path) -> None:
         print(f"    ✗ 预下载失败（可能需要联网）: {r.stderr.strip()[:200]}")
 
 
+def prefetch_faster_whisper_model(
+    project_root: Path,
+    cfg: dict,
+    resources_root: Path,
+    checkpoints_base: "Path | None",
+    check_only: bool = False,
+    model: str = "base",
+) -> bool:
+    """预下载 faster-whisper 模型到 checkpoint_dir/{model}/。
+
+    与 prefetch_rvc_base_models 模式一致：使用嵌入式 Python 触发下载，
+    要求 pnpm run setup 已安装 faster-whisper。
+    """
+    checkpoint_dir_rel = cfg.get("checkpoint_dir", "checkpoints/faster_whisper")
+    if checkpoints_base is not None and checkpoint_dir_rel.startswith("checkpoints/"):
+        checkpoint_dir = checkpoints_base / checkpoint_dir_rel[len("checkpoints/"):]
+    else:
+        checkpoint_dir = resources_root / checkpoint_dir_rel
+
+    model_dir = checkpoint_dir / model
+    model_bin = model_dir / "model.bin"
+
+    if model_bin.exists() and model_bin.stat().st_size > 0:
+        size_mb = model_bin.stat().st_size // 1024 // 1024
+        print(f"  ✓ faster-whisper/{model}  ({size_mb} MB)")
+        return True
+
+    size_hint = {"tiny": 40, "base": 150, "small": 490, "medium": 1500,
+                 "large-v2": 3100, "large-v3": 3100, "large-v3-turbo": 1600}.get(model, 0)
+    size_str = f"~{size_hint} MB" if size_hint else "未知大小"
+    print(f"  ✗ faster-whisper/{model}  [{size_str}]")
+    emit("file_start", engine="faster_whisper", file=f"{model}/model.bin", size_mb=size_hint)
+
+    if check_only:
+        return False
+
+    py = get_embedded_python(project_root)
+    if not py:
+        print("  [faster-whisper] 嵌入式 Python 未找到，跳过模型预下载（请先运行 pnpm run setup）")
+        return False
+
+    check = subprocess.run([py, "-c", "import faster_whisper"], capture_output=True)
+    if check.returncode != 0:
+        print("  [faster-whisper] faster-whisper 未安装，跳过模型预下载（请先运行 pnpm run setup）")
+        return False
+
+    print(f"  [faster-whisper] 下载 {model} 模型到 {model_dir} ...")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    r = subprocess.run(
+        [py, "-c",
+         f"from faster_whisper import WhisperModel; "
+         f"WhisperModel({model!r}, device='cpu', compute_type='int8', download_root={str(checkpoint_dir)!r}); "
+         f"print('done')"],
+        capture_output=True, text=True, timeout=600,
+    )
+    if r.returncode == 0 and model_bin.exists() and model_bin.stat().st_size > 0:
+        size_mb = model_bin.stat().st_size // 1024 // 1024
+        print(f"    ✓ faster-whisper/{model} 下载完成 ({size_mb} MB)")
+        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=True)
+        return True
+    else:
+        stderr = (r.stderr or "").strip()[:300]
+        print(f"    ✗ 下载失败: {stderr}")
+        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=False, error=stderr)
+        return False
+
+
 def _bootstrap_download_deps() -> None:
     """确保 huggingface_hub 和 requests 已安装（下载阶段必要工具）。"""
     needed = []
@@ -479,7 +547,7 @@ def _bootstrap_download_deps() -> None:
 def main() -> int:
     global _JSON_MODE
     parser = argparse.ArgumentParser(description="检查并下载 AI 引擎 checkpoint 文件")
-    parser.add_argument("--engine", help="只处理指定引擎（fish_speech / seed_vc / whisper / rvc）")
+    parser.add_argument("--engine", help="只处理指定引擎（fish_speech / seed_vc / faster_whisper / whisper / rvc）")
     parser.add_argument("--check-only", action="store_true", help="只检查，不下载")
     parser.add_argument("--force", action="store_true", help="强制重新下载（覆盖已有文件）")
     parser.add_argument("--json-progress", action="store_true",
@@ -546,6 +614,15 @@ def main() -> int:
             ok2 = download_hf_cache(engine_name, cfg, resources_root, args.check_only, args.force,
                                     checkpoints_base=checkpoints_base)
             if not ok2:
+                all_ready = False
+
+        # faster-whisper 模型预下载（需 setup 阶段已装好 faster-whisper）
+        if engine_name == "faster_whisper":
+            ok3 = prefetch_faster_whisper_model(
+                project_root, cfg, resources_root, checkpoints_base,
+                check_only=args.check_only,
+            )
+            if not ok3:
                 all_ready = False
 
         # RVC base model 预下载（rvc-python 触发内置下载，需 setup 阶段已装好 rvc-python）

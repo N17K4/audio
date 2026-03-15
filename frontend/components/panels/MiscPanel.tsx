@@ -5,6 +5,9 @@ import {
   IMAGE_UNDERSTAND_PROVIDERS, IMAGE_UNDERSTAND_PROVIDER_LABELS, IMAGE_UNDERSTAND_MODELS,
   TRANSLATE_PROVIDERS, TRANSLATE_LANGUAGES, PROVIDER_LABELS,
   DEFAULT_MODELS,
+  IMG_GEN_PROVIDERS, IMG_GEN_PROVIDER_LABELS, IMG_GEN_MODELS, IMG_GEN_SIZES,
+  IMG_I2I_PROVIDERS, IMG_I2I_PROVIDER_LABELS, IMG_I2I_MODELS,
+  VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS,
 } from '../../constants';
 
 interface MiscPanelProps {
@@ -15,7 +18,8 @@ interface MiscPanelProps {
   cloudEndpoint: string;
   setCloudEndpoint: (e: string) => void;
   status: Status;
-  // image gen
+  // ── 第一行：原有功能 ──
+  // image gen (cloud)
   imageGenProvider: string;
   onImageGenProviderChange: (p: string) => void;
   imageGenPrompt: string;
@@ -60,6 +64,49 @@ interface MiscPanelProps {
   codeLang: string;
   setCodeLang: (l: string) => void;
   onSendCodeMessage: () => void;
+  // ── 第二行：新扩展功能 ──
+  // img gen (本地+云)
+  imgGenProvider: string;
+  onImgGenProviderChange: (p: string) => void;
+  imgGenPrompt: string;
+  setImgGenPrompt: (t: string) => void;
+  imgGenModel: string;
+  setImgGenModel: (m: string) => void;
+  imgGenSize: string;
+  setImgGenSize: (s: string) => void;
+  imgGenComfyUrl: string;
+  setImgGenComfyUrl: (u: string) => void;
+  onRunImgGen: () => void;
+  // img i2i
+  imgI2iProvider: string;
+  onImgI2iProviderChange: (p: string) => void;
+  imgI2iSourceFile: File | null;
+  setImgI2iSourceFile: (f: File | null) => void;
+  imgI2iRefFile: File | null;
+  setImgI2iRefFile: (f: File | null) => void;
+  imgI2iPrompt: string;
+  setImgI2iPrompt: (t: string) => void;
+  imgI2iModel: string;
+  setImgI2iModel: (m: string) => void;
+  imgI2iStrength: number;
+  setImgI2iStrength: (v: number) => void;
+  imgI2iComfyUrl: string;
+  setImgI2iComfyUrl: (u: string) => void;
+  onRunImgI2i: () => void;
+  // video gen
+  videoGenProvider: string;
+  onVideoGenProviderChange: (p: string) => void;
+  videoGenPrompt: string;
+  setVideoGenPrompt: (t: string) => void;
+  videoGenModel: string;
+  setVideoGenModel: (m: string) => void;
+  videoGenDuration: number;
+  setVideoGenDuration: (d: number) => void;
+  videoGenMode: 't2v' | 'i2v';
+  setVideoGenMode: (m: 't2v' | 'i2v') => void;
+  videoGenImageFile: File | null;
+  setVideoGenImageFile: (f: File | null) => void;
+  onRunVideoGen: () => void;
   // style
   fieldCls: string;
   fileCls: string;
@@ -67,11 +114,17 @@ interface MiscPanelProps {
   btnSec: string;
 }
 
-const SUB_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
+const ROW1_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
   { key: 'image_gen',        label: '图像生成',  icon: '🖼️' },
   { key: 'image_understand', label: '图像理解',  icon: '🔍' },
   { key: 'translate',        label: '文字翻译',  icon: '🌐' },
   { key: 'code_assist',      label: '代码助手',  icon: '💻' },
+];
+
+const ROW2_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
+  { key: 'img_gen',   label: '图像生成',  icon: '✨' },
+  { key: 'img_i2i',  label: '换脸换图',  icon: '🔄' },
+  { key: 'video_gen', label: '视频生成',  icon: '🎬' },
 ];
 
 const CODE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'groq', 'mistral', 'xai', 'ollama', 'github'];
@@ -105,6 +158,27 @@ export default function MiscPanel({
   codeLoading,
   codeLang, setCodeLang,
   onSendCodeMessage,
+  imgGenProvider, onImgGenProviderChange,
+  imgGenPrompt, setImgGenPrompt,
+  imgGenModel, setImgGenModel,
+  imgGenSize, setImgGenSize,
+  imgGenComfyUrl, setImgGenComfyUrl,
+  onRunImgGen,
+  imgI2iProvider, onImgI2iProviderChange,
+  imgI2iSourceFile, setImgI2iSourceFile,
+  imgI2iRefFile, setImgI2iRefFile,
+  imgI2iPrompt, setImgI2iPrompt,
+  imgI2iModel, setImgI2iModel,
+  imgI2iStrength, setImgI2iStrength,
+  imgI2iComfyUrl, setImgI2iComfyUrl,
+  onRunImgI2i,
+  videoGenProvider, onVideoGenProviderChange,
+  videoGenPrompt, setVideoGenPrompt,
+  videoGenModel, setVideoGenModel,
+  videoGenDuration, setVideoGenDuration,
+  videoGenMode, setVideoGenMode,
+  videoGenImageFile, setVideoGenImageFile,
+  onRunVideoGen,
   fieldCls, fileCls, labelCls, btnSec,
 }: MiscPanelProps) {
   const busy = status === 'processing';
@@ -141,21 +215,39 @@ export default function MiscPanel({
 
   return (
     <div className="space-y-5">
-      {/* 子页签 */}
-      <div className="flex gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-        {SUB_TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setMiscSubPage(tab.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
-              miscSubPage === tab.key
-                ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400 shadow-sm'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-            }`}>
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      {/* 子页签 - 第一行 */}
+      <div className="space-y-1.5">
+        <div className="flex gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+          {ROW1_TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setMiscSubPage(tab.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
+                miscSubPage === tab.key
+                  ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}>
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+        {/* 第二行：本地/云端生成功能 */}
+        <div className="flex gap-1.5 rounded-2xl bg-slate-100/70 dark:bg-slate-800/70 p-1">
+          {ROW2_TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setMiscSubPage(tab.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
+                miscSubPage === tab.key
+                  ? 'bg-white dark:bg-slate-700 text-pink-600 dark:text-pink-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}>
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── 图像生成 ── */}
@@ -427,6 +519,183 @@ export default function MiscPanel({
           </div>
         </div>
       )}
+
+      {/* ── 图像生成（本地+云） ── */}
+      {miscSubPage === 'img_gen' && (() => {
+        const isLocal = imgGenProvider === 'comfyui';
+        const models = IMG_GEN_MODELS[imgGenProvider] || [];
+        const sizes = IMG_GEN_SIZES[imgGenProvider] || [];
+        const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' ? '尺寸' : '比例';
+        return (
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            <div>
+              <label className={labelCls}>服务商</label>
+              <select className={fieldCls} value={imgGenProvider} onChange={e => onImgGenProviderChange(e.target.value)}>
+                {IMG_GEN_PROVIDERS.map(p => <option key={p} value={p}>{IMG_GEN_PROVIDER_LABELS[p] || p}</option>)}
+              </select>
+            </div>
+            {isLocal ? (
+              <div>
+                <label className={labelCls}>ComfyUI 服务地址</label>
+                <input className={fieldCls} value={imgGenComfyUrl} onChange={e => setImgGenComfyUrl(e.target.value)} placeholder="http://127.0.0.1:8188" />
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>API Key</label>
+                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / AIza... / Bearer ..." />
+              </div>
+            )}
+            {models.length > 0 && (
+              <div>
+                <label className={labelCls}>模型</label>
+                <select className={fieldCls} value={imgGenModel} onChange={e => setImgGenModel(e.target.value)}>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            {sizes.length > 0 && (
+              <div>
+                <label className={labelCls}>{sizeLabel}</label>
+                <select className={fieldCls} value={imgGenSize} onChange={e => setImgGenSize(e.target.value)}>
+                  {sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className={labelCls}>图像描述（提示词）</label>
+              <textarea rows={4} className={fieldCls} value={imgGenPrompt} onChange={e => setImgGenPrompt(e.target.value)} placeholder="描述你想生成的图像内容，越详细越好..." />
+            </div>
+            <button className={`${btnPrimary} !bg-pink-600 hover:!bg-pink-700`} disabled={busy || !imgGenPrompt.trim()} onClick={onRunImgGen}>
+              {busy ? '生成中...' : '生成图像'}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── 换脸换图 ── */}
+      {miscSubPage === 'img_i2i' && (() => {
+        const isLocal = imgI2iProvider === 'comfyui';
+        const models = IMG_I2I_MODELS[imgI2iProvider] || [];
+        return (
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            <div>
+              <label className={labelCls}>服务商</label>
+              <select className={fieldCls} value={imgI2iProvider} onChange={e => onImgI2iProviderChange(e.target.value)}>
+                {IMG_I2I_PROVIDERS.map(p => <option key={p} value={p}>{IMG_I2I_PROVIDER_LABELS[p] || p}</option>)}
+              </select>
+              {isLocal && (
+                <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">⚠️ Mac 用户：换脸功能建议使用云端服务商（ComfyUI 换脸节点在 Apple Silicon 上仅支持 CPU 模式，速度较慢）</p>
+              )}
+            </div>
+            {isLocal ? (
+              <div>
+                <label className={labelCls}>ComfyUI 服务地址</label>
+                <input className={fieldCls} value={imgI2iComfyUrl} onChange={e => setImgI2iComfyUrl(e.target.value)} placeholder="http://127.0.0.1:8188" />
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>API Key</label>
+                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
+              </div>
+            )}
+            {models.length > 0 && (
+              <div>
+                <label className={labelCls}>模型</label>
+                <select className={fieldCls} value={imgI2iModel} onChange={e => setImgI2iModel(e.target.value)}>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className={labelCls}>源图片（待处理）</label>
+              <input type="file" accept="image/*" className={fileCls} onChange={e => setImgI2iSourceFile(e.target.files?.[0] ?? null)} />
+            </div>
+            <div>
+              <label className={labelCls}>参考图片（换脸 / 风格参考，可选）</label>
+              <input type="file" accept="image/*" className={fileCls} onChange={e => setImgI2iRefFile(e.target.files?.[0] ?? null)} />
+            </div>
+            <div>
+              <label className={labelCls}>提示词（描述目标效果，可选）</label>
+              <textarea rows={3} className={fieldCls} value={imgI2iPrompt} onChange={e => setImgI2iPrompt(e.target.value)} placeholder="如：保持原来姿势，换成水墨画风格..." />
+            </div>
+            <div>
+              <label className={labelCls}>变化强度 {imgI2iStrength.toFixed(2)}（0 = 几乎不变，1 = 完全重绘）</label>
+              <input type="range" min={0} max={1} step={0.05} value={imgI2iStrength} onChange={e => setImgI2iStrength(Number(e.target.value))} className="w-full accent-rose-500" />
+            </div>
+            <button className={`${btnPrimary} !bg-rose-600 hover:!bg-rose-700`} disabled={busy || !imgI2iSourceFile} onClick={onRunImgI2i}>
+              {busy ? '处理中...' : '开始换脸换图'}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── 视频生成 ── */}
+      {miscSubPage === 'video_gen' && (() => {
+        const models = VIDEO_GEN_MODELS[videoGenProvider] || [];
+        const durations = VIDEO_GEN_DURATIONS[videoGenProvider] || [5];
+        const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
+        return (
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            <div>
+              <label className={labelCls}>服务商</label>
+              <select className={fieldCls} value={videoGenProvider} onChange={e => onVideoGenProviderChange(e.target.value)}>
+                {VIDEO_GEN_PROVIDERS.map(p => <option key={p} value={p}>{VIDEO_GEN_PROVIDER_LABELS[p] || p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>API Key</label>
+              <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
+            </div>
+            {models.length > 0 && (
+              <div>
+                <label className={labelCls}>模型</label>
+                <select className={fieldCls} value={videoGenModel} onChange={e => setVideoGenModel(e.target.value)}>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            {supportsI2v && (
+              <div>
+                <label className={labelCls}>生成模式</label>
+                <div className="flex gap-2">
+                  {(['t2v', 'i2v'] as const).map(mode => (
+                    <button key={mode} onClick={() => setVideoGenMode(mode)}
+                      className={`flex-1 rounded-xl border py-2 text-sm font-medium transition-all ${
+                        videoGenMode === mode
+                          ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}>
+                      {mode === 't2v' ? '文字生视频' : '图片生视频'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {videoGenMode === 'i2v' && (
+              <div>
+                <label className={labelCls}>参考图片</label>
+                <input type="file" accept="image/*" className={fileCls} onChange={e => setVideoGenImageFile(e.target.files?.[0] ?? null)} />
+              </div>
+            )}
+            <div>
+              <label className={labelCls}>时长（秒）</label>
+              <select className={fieldCls} value={videoGenDuration} onChange={e => setVideoGenDuration(Number(e.target.value))}>
+                {durations.map(d => <option key={d} value={d}>{d} 秒</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>视频描述（提示词）</label>
+              <textarea rows={4} className={fieldCls} value={videoGenPrompt} onChange={e => setVideoGenPrompt(e.target.value)} placeholder="描述视频内容和动作，越详细越好..." />
+            </div>
+            <button
+              className={btnPrimary}
+              disabled={busy || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
+              onClick={onRunVideoGen}>
+              {busy ? '生成中...' : '生成视频'}
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }

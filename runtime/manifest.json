@@ -186,17 +186,33 @@
       ],
       "env_key": "RVC_CHECKPOINT_DIR"
     },
+    "faster_whisper": {
+      "version": "1.x",
+      "code_dir": "runtime/faster_whisper",
+      "checkpoint_dir": "checkpoints/faster_whisper",
+      "pip_packages": [
+        "faster-whisper"
+      ],
+      "runtime_pip_packages": [],
+      "readiness_check_file": "base/model.bin",
+      "_note": "模型由 prefetch_faster_whisper_model() 下载到 checkpoint_dir/base/，readiness_check_file 供 health.py 判断就绪状态",
+      "env_key": "FASTER_WHISPER_CHECKPOINT_DIR"
+    },
     "whisper": {
       "version": "large-v3",
       "code_dir": "runtime/whisper/engine",
       "checkpoint_dir": "checkpoints/whisper",
+      "_pip_packages_disabled": [
+        "transformers",
+        "_note: 已由 seed_vc runtime_pip_packages 覆盖，faster_whisper 为默认本地引擎，whisper 暂不主动安装"
+      ],
       "checkpoint_files": [
         {
           "path": "model.pt",
           "sha256": "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb",
           "size_mb": 1550,
           "required": false,
-          "_note": "非必填：transformers pipeline 会自动缓存，或指定 hf model id；不预置 url 避免 CI 白白下载 1.5 GB"
+          "_note": "非必填且无 url：faster_whisper 为默认引擎，whisper 模型暂不预下载"
         }
       ],
       "env_key": "WHISPER_CHECKPOINT_DIR"

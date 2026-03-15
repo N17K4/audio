@@ -26,6 +26,7 @@ RVC_RUNTIME_CONFIG_PATH = MODEL_ROOT / "rvc_runtime.json"
 FISH_SPEECH_ENGINE_JSON = RUNTIME_ROOT / "fish_speech" / "engine.json"
 SEED_VC_ENGINE_JSON = RUNTIME_ROOT / "seed_vc" / "engine.json"
 WHISPER_ENGINE_JSON = RUNTIME_ROOT / "whisper" / "engine.json"
+FASTER_WHISPER_ENGINE_JSON = RUNTIME_ROOT / "faster_whisper" / "engine.json"
 
 RUNTIME_TEMP_DIR = Path(tempfile.gettempdir()) / "ai-tool-temp"
 DOWNLOAD_DIR = RUNTIME_TEMP_DIR / "download"
@@ -63,7 +64,7 @@ LOCAL_CONCURRENCY: int = max(1, min(4, int(_SETTINGS.get("local_concurrency", 1)
 
 TASK_CAPABILITIES = {
     "tts": ["fish_speech", "openai", "gemini", "elevenlabs", "cartesia", "dashscope"],
-    "asr": ["whisper", "openai", "gemini", "groq", "deepgram"],
+    "asr": ["faster_whisper", "whisper", "openai", "gemini", "groq", "deepgram"],
     "llm": ["gemini", "openai", "claude", "groq", "deepseek", "mistral", "xai", "ollama", "github"],
     "vc":  ["seed_vc", "local_rvc", "elevenlabs"],
 }

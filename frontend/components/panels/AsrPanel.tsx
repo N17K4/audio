@@ -1,5 +1,4 @@
 import type { Status, CapabilityMap } from '../../types';
-import { LOCAL_PROVIDERS } from '../../constants';
 import ProviderRow from '../shared/ProviderRow';
 import ModelInput from '../shared/ModelInput';
 
@@ -65,12 +64,10 @@ export default function AsrPanel({
       />
       <div className="border-t border-slate-100 dark:border-slate-800" />
 
-      {!LOCAL_PROVIDERS.has(selectedProvider) && (
-        <label className="block">
-          <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">模型（可选）</span>
-          <ModelInput value={asrModel} onChange={setAsrModel} task="asr" provider={selectedProvider} />
-        </label>
-      )}
+      <label className="block">
+        <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">模型（可选）</span>
+        <ModelInput value={asrModel} onChange={setAsrModel} task="asr" provider={selectedProvider} />
+      </label>
 
       <label className="block">
         <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">输入音频</span>

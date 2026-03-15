@@ -15,6 +15,7 @@ import { useMediaConvert } from '../hooks/useMediaConvert';
 import { useDocConvert } from '../hooks/useDocConvert';
 import { useToolbox } from '../hooks/useToolbox';
 import { useMisc } from '../hooks/useMisc';
+import { useImageExt } from '../hooks/useImageExt';
 
 // Components
 import Sidebar from '../components/layout/Sidebar';
@@ -318,6 +319,18 @@ export default function Home() {
   });
 
   const misc = useMisc({
+    backendBaseUrl: backend.backendBaseUrl,
+    apiKey,
+    cloudEndpoint,
+    setStatus,
+    setProcessingStartTime,
+    setError,
+    addInstantJobResult,
+    fetchJobs,
+    onNavigateTasks: navigateTasks,
+  });
+
+  const imageExt = useImageExt({
     backendBaseUrl: backend.backendBaseUrl,
     apiKey,
     cloudEndpoint,
@@ -819,6 +832,45 @@ export default function Home() {
                 codeLang={misc.codeLang}
                 setCodeLang={misc.setCodeLang}
                 onSendCodeMessage={misc.sendCodeMessage}
+                imgGenProvider={imageExt.imgGenProvider}
+                onImgGenProviderChange={imageExt.handleImgGenProviderChange}
+                imgGenPrompt={imageExt.imgGenPrompt}
+                setImgGenPrompt={imageExt.setImgGenPrompt}
+                imgGenModel={imageExt.imgGenModel}
+                setImgGenModel={imageExt.setImgGenModel}
+                imgGenSize={imageExt.imgGenSize}
+                setImgGenSize={imageExt.setImgGenSize}
+                imgGenComfyUrl={imageExt.imgGenComfyUrl}
+                setImgGenComfyUrl={imageExt.setImgGenComfyUrl}
+                onRunImgGen={imageExt.runImgGen}
+                imgI2iProvider={imageExt.imgI2iProvider}
+                onImgI2iProviderChange={imageExt.handleImgI2iProviderChange}
+                imgI2iSourceFile={imageExt.imgI2iSourceFile}
+                setImgI2iSourceFile={imageExt.setImgI2iSourceFile}
+                imgI2iRefFile={imageExt.imgI2iRefFile}
+                setImgI2iRefFile={imageExt.setImgI2iRefFile}
+                imgI2iPrompt={imageExt.imgI2iPrompt}
+                setImgI2iPrompt={imageExt.setImgI2iPrompt}
+                imgI2iModel={imageExt.imgI2iModel}
+                setImgI2iModel={imageExt.setImgI2iModel}
+                imgI2iStrength={imageExt.imgI2iStrength}
+                setImgI2iStrength={imageExt.setImgI2iStrength}
+                imgI2iComfyUrl={imageExt.imgI2iComfyUrl}
+                setImgI2iComfyUrl={imageExt.setImgI2iComfyUrl}
+                onRunImgI2i={imageExt.runImgI2i}
+                videoGenProvider={imageExt.videoGenProvider}
+                onVideoGenProviderChange={imageExt.handleVideoGenProviderChange}
+                videoGenPrompt={imageExt.videoGenPrompt}
+                setVideoGenPrompt={imageExt.setVideoGenPrompt}
+                videoGenModel={imageExt.videoGenModel}
+                setVideoGenModel={imageExt.setVideoGenModel}
+                videoGenDuration={imageExt.videoGenDuration}
+                setVideoGenDuration={imageExt.setVideoGenDuration}
+                videoGenMode={imageExt.videoGenMode}
+                setVideoGenMode={imageExt.setVideoGenMode}
+                videoGenImageFile={imageExt.videoGenImageFile}
+                setVideoGenImageFile={imageExt.setVideoGenImageFile}
+                onRunVideoGen={imageExt.runVideoGen}
                 fieldCls={fieldCls}
                 fileCls={fileCls}
                 labelCls={labelCls}

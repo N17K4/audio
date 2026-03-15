@@ -12,6 +12,7 @@ from config import (
     FISH_SPEECH_ENGINE_JSON,
     SEED_VC_ENGINE_JSON,
     WHISPER_ENGINE_JSON,
+    FASTER_WHISPER_ENGINE_JSON,
     _MANIFEST,
     CHECKPOINTS_ROOT,
 )
@@ -224,6 +225,46 @@ def get_whisper_command_template() -> str:
             logger.error("[whisper-cmd] 获取嵌入式 Python 失败: %s", e)
             return ""
     logger.warning("[whisper-cmd] 未找到 Whisper 脚本，本地推理不可用")
+    return ""
+
+
+def detect_faster_whisper_script() -> str:
+    candidates = [
+        RUNTIME_ROOT / "faster_whisper" / "inference.py",
+    ]
+    for p in candidates:
+        exists = p.exists()
+        logger.debug("[detect-faster-whisper] 检查 %s → %s", p, "✓" if exists else "✗")
+        if exists:
+            logger.debug("[detect-faster-whisper] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-faster-whisper] 未找到任何 Faster-Whisper 脚本，检查路径: %s", [str(c) for c in candidates])
+    return ""
+
+
+def get_faster_whisper_command_template() -> str:
+    logger.debug("[faster-whisper-cmd] engine.json=%s exists=%s", FASTER_WHISPER_ENGINE_JSON, FASTER_WHISPER_ENGINE_JSON.exists())
+    if FASTER_WHISPER_ENGINE_JSON.exists():
+        try:
+            data = json.loads(FASTER_WHISPER_ENGINE_JSON.read_text(encoding="utf-8"))
+            cmd = (data.get("command") or "").strip()
+            if cmd:
+                logger.debug("[faster-whisper-cmd] engine.json command: %s", cmd)
+                return cmd
+            logger.debug("[faster-whisper-cmd] engine.json command 为空，转入自动探测")
+        except Exception as e:
+            logger.warning("[faster-whisper-cmd] engine.json 读取失败: %s", e)
+    script = detect_faster_whisper_script()
+    if script:
+        try:
+            py = get_embedded_python()
+            tpl = f'"{py}" "{script}" --input {{input}} --output {{output}} --model {{model}}'
+            logger.debug("[faster-whisper-cmd] 自动构建命令模板: %s", tpl)
+            return tpl
+        except RuntimeError as e:
+            logger.error("[faster-whisper-cmd] 获取嵌入式 Python 失败: %s", e)
+            return ""
+    logger.warning("[faster-whisper-cmd] 未找到 Faster-Whisper 脚本，本地推理不可用")
     return ""
 
 

@@ -30,6 +30,10 @@ async def runtime_info():
         checkpoint_dir = get_checkpoint_dir(name)
         checkpoint_path = Path(checkpoint_dir)
         required_files = [f["path"] for f in cfg.get("checkpoint_files", []) if f.get("required")]
+        # 支持自定义就绪检测文件（用于 prefetch 类引擎，如 faster_whisper）
+        readiness_check = cfg.get("readiness_check_file", "")
+        if readiness_check:
+            required_files.append(readiness_check)
         missing = [p for p in required_files if not (checkpoint_path / p).exists()]
         engines_out[name] = {
             "version": cfg.get("version", "unknown"),
