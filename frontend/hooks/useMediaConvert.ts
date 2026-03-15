@@ -2,16 +2,17 @@ import { useState, useRef } from 'react';
 import type { Status, MediaAction } from '../types';
 import { safeJson } from '../utils';
 
+type JobResult = { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string };
+
 interface UseMediaConvertParams {
   backendBaseUrl: string;
   outputDir: string;
   setStatus: (s: Status) => void;
   setProcessingStartTime: (t: number | null) => void;
   setError: (e: string) => void;
-  addInstantJobResult: (
-    type: string, label: string, provider: string, isLocal: boolean,
-    result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
-  ) => void;
+  addPendingJob: (type: string, label: string, provider: string, isLocal: boolean) => string;
+  resolveJob: (id: string, result: JobResult) => void;
+  onNavigateTasks: () => void;
 }
 
 export type ClipEndMode = 'duration' | 'endtime';
@@ -22,7 +23,9 @@ export function useMediaConvert({
   setStatus,
   setProcessingStartTime,
   setError,
-  addInstantJobResult,
+  addPendingJob,
+  resolveJob,
+  onNavigateTasks,
 }: UseMediaConvertParams) {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaAction, setMediaAction] = useState<MediaAction>('convert');
@@ -39,29 +42,34 @@ export function useMediaConvert({
   const [endMin, setEndMin] = useState('');
   const [endSec, setEndSec] = useState('');
 
+  // 字幕工具
+  const [subtitleOutputFmt, setSubtitleOutputFmt] = useState<'srt' | 'vtt'>('srt');
+  const [hwAccel, setHwAccel] = useState('auto');
+
   const abortCtrlRef = useRef<AbortController | null>(null);
 
   async function runMediaConvert() {
     if (!mediaFile) { setError('请选择要转换的文件'); return; }
     if (!outputDir.trim()) { setError('请选择输出目录'); return; }
     setError('');
-    const t0 = Date.now();
-    setProcessingStartTime(t0);
     setStatus('processing');
+    setProcessingStartTime(Date.now());
     const ctrl = new AbortController();
     abortCtrlRef.current = ctrl;
     const label = `格式转换 · ${mediaFile.name}`;
+    const jobId = addPendingJob('media', label, 'ffmpeg', false);
+    onNavigateTasks();
     try {
       const fd = new FormData();
       fd.append('file', mediaFile);
       fd.append('action', mediaAction);
       fd.append('output_format', mediaOutputFormat);
       fd.append('output_dir', outputDir);
+      fd.append('hw_accel', hwAccel);
 
       if (mediaAction === 'clip') {
         const startSecs = (parseInt(startMin || '0') || 0) * 60 + (parseInt(startSec || '0') || 0);
         fd.append('start_time', String(startSecs));
-
         let durSecs = 0;
         if (clipEndMode === 'duration') {
           durSecs = (parseInt(durationMin || '0') || 0) * 60 + (parseInt(durationSec || '0') || 0);
@@ -80,10 +88,42 @@ export function useMediaConvert({
       if (!res.ok) throw new Error(`转换失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
       const url = data?.result_url || '';
       if (!url) throw new Error('响应中无结果链接');
-      addInstantJobResult('media', label, 'ffmpeg', false, { status: 'completed', result_url: url });
+      resolveJob(jobId, { status: 'completed', result_url: url });
     } catch (e: any) {
-      if (e?.name === 'AbortError') { setError('已取消'); }
-      else { addInstantJobResult('media', label, 'ffmpeg', false, { status: 'failed', error: e instanceof Error ? e.message : '转换失败' }); }
+      if (e?.name === 'AbortError') { setError('已取消'); resolveJob(jobId, { status: 'failed', error: '已取消' }); }
+      else { resolveJob(jobId, { status: 'failed', error: e instanceof Error ? e.message : '转换失败' }); }
+    } finally {
+      setStatus('idle');
+      setProcessingStartTime(null);
+      abortCtrlRef.current = null;
+    }
+  }
+
+  async function runSubtitleConvert() {
+    if (!mediaFile) { setError('请选择字幕或视频文件'); return; }
+    if (!outputDir.trim()) { setError('请选择输出目录'); return; }
+    setError('');
+    setStatus('processing');
+    setProcessingStartTime(Date.now());
+    const ctrl = new AbortController();
+    abortCtrlRef.current = ctrl;
+    const actionLabel = mediaAction === 'subtitle_extract' ? '提取字幕' : '字幕互转';
+    const label = `${actionLabel} · ${mediaFile.name}`;
+    const jobId = addPendingJob('media', label, 'ffmpeg', false);
+    onNavigateTasks();
+    try {
+      const fd = new FormData();
+      fd.append('file', mediaFile);
+      fd.append('action', mediaAction === 'subtitle_extract' ? 'extract' : 'convert');
+      fd.append('output_format', subtitleOutputFmt);
+      fd.append('output_dir', outputDir);
+      const res = await fetch(`${backendBaseUrl}/tasks/subtitle`, { method: 'POST', body: fd, signal: ctrl.signal });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(`处理失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
+      resolveJob(jobId, { status: 'completed', result_url: data?.result_url });
+    } catch (e: any) {
+      if (e?.name === 'AbortError') { setError('已取消'); resolveJob(jobId, { status: 'failed', error: '已取消' }); }
+      else { resolveJob(jobId, { status: 'failed', error: e instanceof Error ? e.message : '处理失败' }); }
     } finally {
       setStatus('idle');
       setProcessingStartTime(null);
@@ -104,7 +144,10 @@ export function useMediaConvert({
     durationSec, setDurationSec,
     endMin, setEndMin,
     endSec, setEndSec,
+    subtitleOutputFmt, setSubtitleOutputFmt,
+    hwAccel, setHwAccel,
     runMediaConvert,
+    runSubtitleConvert,
     abortCurrentRequest,
   };
 }

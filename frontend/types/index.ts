@@ -1,8 +1,9 @@
 // ─── 类型 ──────────────────────────────────────────────────────────────────
 export type Status = 'idle' | 'recording' | 'processing';
 export type TaskType = 'tts' | 'vc' | 'asr' | 'llm' | 'voice_chat' | 'media' | 'doc';
-export type DocSubPage = 'pdf_to_word' | 'doc_convert' | 'pdf_extract';
-export type MediaAction = 'convert' | 'extract_audio' | 'clip';
+export type DocSubPage = 'pdf_to_word' | 'doc_convert' | 'pdf_extract' | 'image' | 'qr' | 'text_encoding';
+export type ToolboxSubPage = 'image' | 'qr' | 'text_encoding'; // 保留兼容 useToolbox hook
+export type MediaAction = 'convert' | 'extract_audio' | 'clip' | 'subtitle_convert' | 'subtitle_extract';
 export type VcInputMode = 'record' | 'upload';
 export type DesktopSource = { id: string; name: string };
 export type VoiceInfo = { voice_id: string; name: string; is_ready: boolean; engine: string; sample_rate: number };
@@ -42,6 +43,7 @@ declare global {
       openLogsDir: () => Promise<void>;
       openDir: (dirPath: string) => Promise<void>;
       clearUserData: () => Promise<{ ok: boolean; error?: string }>;
+      clearAndOpenSetup: () => Promise<{ ok: boolean; error?: string }>;
     };
   }
 }

@@ -8,7 +8,7 @@ export const TASK_LABELS: Record<TaskType, string> = {
   llm: '聊天',
   voice_chat: '语音聊天',
   media: '音视频转换',
-  doc:   '文档转换',
+  doc:     '文档工具',
 };
 
 export const TASK_PHASES: Record<string, string[]> = {
@@ -18,7 +18,7 @@ export const TASK_PHASES: Record<string, string[]> = {
   llm:        ['发送消息', '等待模型回复'],
   voice_chat: ['处理中'],
   media:      ['上传文件', 'FFmpeg 转换中', '写入输出文件'],
-  doc:        ['上传文件', '文档转换中', '写入输出文件'],
+  doc:        ['上传文件', '处理中', '写入输出文件'],
 };
 
 export const DEFAULT_CAPS: CapabilityMap = {
@@ -27,7 +27,7 @@ export const DEFAULT_CAPS: CapabilityMap = {
   asr: ['whisper', 'openai', 'gemini'],
   llm: ['gemini', 'openai', 'ollama', 'github'],
   media: [],
-  doc:   [],
+  doc:     [],
 };
 
 export const PROVIDER_LABELS: Record<string, string> = {

@@ -77,21 +77,38 @@ export function useJobs(
     } catch { /**/ }
   }
 
+  function addPendingJob(type: string, label: string, provider: string, isLocal: boolean): string {
+    const id = `instant_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const now = Date.now() / 1000;
+    const job: Job = {
+      id, type, label, provider, is_local: isLocal,
+      status: 'running',
+      created_at: now, started_at: now, completed_at: null,
+      result_url: null, result_text: null, error: null,
+    };
+    setJobs(prev => [job, ...prev]);
+    return id;
+  }
+
+  function resolveJob(
+    id: string,
+    result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
+  ) {
+    const now = Date.now() / 1000;
+    setJobs(prev => prev.map(j => j.id !== id ? j : {
+      ...j, status: result.status, completed_at: now,
+      result_url: result.result_url ?? null,
+      result_text: result.result_text ?? null,
+      error: result.error ?? null,
+    }));
+  }
+
   function addInstantJobResult(
     type: string, label: string, provider: string, isLocal: boolean,
     result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
   ) {
-    const now = Date.now() / 1000;
-    const job: Job = {
-      id: `instant_${Date.now()}`,
-      type, label, provider, is_local: isLocal,
-      status: result.status,
-      created_at: now, started_at: now, completed_at: now,
-      result_url: result.result_url || null,
-      result_text: result.result_text || null,
-      error: result.error || null,
-    };
-    setJobs(prev => [job, ...prev]);
+    const id = addPendingJob(type, label, provider, isLocal);
+    resolveJob(id, result);
     onNavigateTasks();
   }
 
@@ -117,5 +134,5 @@ export function useJobs(
     throw new Error('等待任务超时（3 分钟）');
   }
 
-  return { jobs, setJobs, fetchJobs, addInstantJobResult, pollJobResult };
+  return { jobs, setJobs, fetchJobs, addInstantJobResult, addPendingJob, resolveJob, pollJobResult };
 }

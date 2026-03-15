@@ -95,13 +95,17 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       job.type === 'vc'    ? 'bg-violet-600' :
       job.type === 'asr'   ? 'bg-sky-600'    :
       job.type === 'media' ? 'bg-teal-600'   :
-      job.type === 'train' ? 'bg-amber-600'  : 'bg-slate-600';
+      job.type === 'doc'     ? 'bg-amber-700'  :
+      job.type === 'toolbox' ? 'bg-amber-700'  :
+      job.type === 'train'   ? 'bg-amber-600'  : 'bg-slate-600';
     const abbr =
       job.type === 'tts'   ? 'TTS' :
       job.type === 'vc'    ? 'VC'  :
       job.type === 'asr'   ? 'STT' :
       job.type === 'media' ? 'FMT' :
-      job.type === 'train' ? 'TRN' : job.type.toUpperCase().slice(0, 3);
+      job.type === 'doc'     ? 'DOC' :
+      job.type === 'toolbox' ? 'DOC' :
+      job.type === 'train'   ? 'TRN' : job.type.toUpperCase().slice(0, 3);
     return <span className={`rounded-lg ${color} px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide`}>{abbr}</span>;
   }
 
@@ -182,22 +186,30 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           <StageRail job={job} />
 
           {/* 结果 / 错误 */}
-          {job.status === 'completed' && job.result_url && (
-            <div className="pt-2 space-y-1.5">
-              <audio controls src={job.result_url} className="w-full h-8" />
-              <div className="flex items-center gap-2 flex-wrap">
-                <a href={job.result_url} target="_blank" rel="noreferrer"
-                  className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
-                {outputDir && window.electronAPI?.openDir && (
-                  <button
-                    onClick={() => window.electronAPI!.openDir!(outputDir)}
-                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap">
-                    打开目录
-                  </button>
-                )}
+          {job.status === 'completed' && job.result_url && (() => {
+            const ext = job.result_url.split('.').pop()?.toLowerCase() ?? '';
+            const isAudio = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg', 'opus'].includes(ext);
+            const isVideo = ['mp4', 'webm', 'mov', 'mkv'].includes(ext);
+            const isImage = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(ext);
+            return (
+              <div className="pt-2 space-y-1.5">
+                {isAudio && <audio controls src={job.result_url} className="w-full h-8" />}
+                {isVideo && <video controls src={job.result_url} className="w-full rounded-lg max-h-48" />}
+                {isImage && <img src={job.result_url} alt="result" className="max-w-full rounded-lg max-h-48 object-contain" />}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a href={job.result_url} target="_blank" rel="noreferrer"
+                    className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
+                  {outputDir && window.electronAPI?.openDir && (
+                    <button
+                      onClick={() => window.electronAPI!.openDir!(outputDir)}
+                      className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap">
+                      打开目录
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           {job.status === 'completed' && job.result_text && (
             <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2 leading-relaxed mt-1.5">{job.result_text}</pre>
           )}

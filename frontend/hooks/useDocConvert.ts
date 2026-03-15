@@ -2,16 +2,17 @@ import { useState, useRef } from 'react';
 import type { Status, DocSubPage } from '../types';
 import { safeJson } from '../utils';
 
+type JobResult = { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string };
+
 interface UseDocConvertParams {
   backendBaseUrl: string;
   outputDir: string;
   setStatus: (s: Status) => void;
   setProcessingStartTime: (t: number | null) => void;
   setError: (e: string) => void;
-  addInstantJobResult: (
-    type: string, label: string, provider: string, isLocal: boolean,
-    result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
-  ) => void;
+  addPendingJob: (type: string, label: string, provider: string, isLocal: boolean) => string;
+  resolveJob: (id: string, result: JobResult) => void;
+  onNavigateTasks: () => void;
 }
 
 export function useDocConvert({
@@ -20,7 +21,9 @@ export function useDocConvert({
   setStatus,
   setProcessingStartTime,
   setError,
-  addInstantJobResult,
+  addPendingJob,
+  resolveJob,
+  onNavigateTasks,
 }: UseDocConvertParams) {
   const [docSubPage, setDocSubPage] = useState<DocSubPage>('pdf_to_word');
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -33,18 +36,19 @@ export function useDocConvert({
     if (!docFile) { setError('请选择要转换的文件'); return; }
     if (!outputDir.trim()) { setError('请选择输出目录'); return; }
     setError('');
-    const t0 = Date.now();
-    setProcessingStartTime(t0);
     setStatus('processing');
+    setProcessingStartTime(Date.now());
     const ctrl = new AbortController();
     abortCtrlRef.current = ctrl;
 
-    const actionLabel: Record<DocSubPage, string> = {
+    const actionLabel: Partial<Record<DocSubPage, string>> = {
       pdf_to_word: 'PDF 转 Word',
       doc_convert: '文档互转',
       pdf_extract: 'PDF 提取',
     };
-    const label = `${actionLabel[docSubPage]} · ${docFile.name}`;
+    const label = `${actionLabel[docSubPage] ?? docSubPage} · ${docFile.name}`;
+    const jobId = addPendingJob('doc', label, 'local', true);
+    onNavigateTasks();
 
     try {
       const fd = new FormData();
@@ -60,10 +64,10 @@ export function useDocConvert({
       const url = data?.result_url || '';
       const text = data?.result_text || '';
       if (!url && !text) throw new Error('响应中无结果');
-      addInstantJobResult('doc', label, 'local', true, { status: 'completed', result_url: url || undefined, result_text: text || undefined });
+      resolveJob(jobId, { status: 'completed', result_url: url || undefined, result_text: text || undefined });
     } catch (e: any) {
-      if (e?.name === 'AbortError') { setError('已取消'); }
-      else { addInstantJobResult('doc', label, 'local', true, { status: 'failed', error: e instanceof Error ? e.message : '转换失败' }); }
+      if (e?.name === 'AbortError') { setError('已取消'); resolveJob(jobId, { status: 'failed', error: '已取消' }); }
+      else { resolveJob(jobId, { status: 'failed', error: e instanceof Error ? e.message : '转换失败' }); }
     } finally {
       setStatus('idle');
       setProcessingStartTime(null);

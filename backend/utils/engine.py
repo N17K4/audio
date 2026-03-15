@@ -315,3 +315,102 @@ def get_checkpoint_dir(engine: str) -> str:
     if rel.startswith("checkpoints/"):
         return str((CHECKPOINTS_ROOT / rel[len("checkpoints/"):]).resolve())
     return str((RESOURCES_ROOT / rel).resolve())
+
+
+# ---------------------------------------------------------------------------
+# FFmpeg 硬件加速探测
+# ---------------------------------------------------------------------------
+
+# 探测顺序：按优先级排列，第一个可用的胜出
+# (hwaccel_decode, encoder, 说明)
+_HW_CANDIDATES = [
+    ("videotoolbox", "h264_videotoolbox", "Apple VideoToolbox (Mac)"),
+    ("cuda",         "h264_nvenc",         "NVIDIA NVENC"),
+    ("qsv",          "h264_qsv",           "Intel Quick Sync"),
+    ("d3d11va",      "h264_amf",           "AMD AMF"),
+]
+
+_ffmpeg_hw_cache: "dict | None" = None
+
+
+def detect_ffmpeg_hwaccel() -> dict:
+    """探测当前机器可用的 FFmpeg 硬件加速编码器。
+
+    返回字典：
+      {
+        "hwaccel":  "videotoolbox" | "cuda" | ... | None,
+        "encoder":  "h264_videotoolbox" | "h264_nvenc" | ... | "libx264",
+        "label":    "Apple VideoToolbox (Mac)" | ... | "软件编码 (libx264)",
+      }
+    结果在进程内缓存，多次调用不重复探测。
+    """
+    global _ffmpeg_hw_cache
+    if _ffmpeg_hw_cache is not None:
+        return _ffmpeg_hw_cache
+
+    ffmpeg = get_ffmpeg_binary()
+    if not ffmpeg:
+        _ffmpeg_hw_cache = {"hwaccel": None, "encoder": "libx264", "label": "软件编码 (libx264，ffmpeg 未找到)"}
+        return _ffmpeg_hw_cache
+
+    import tempfile, sys as _sys
+
+    # 生成一个 1 帧黑色测试视频（lavfi），用于编码探测
+    for hwaccel, encoder, label in _HW_CANDIDATES:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            out = tmp.name
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg, "-y",
+                    "-f", "lavfi", "-i", "color=black:s=64x64:r=1:d=0.1",
+                    "-c:v", encoder,
+                    "-frames:v", "1",
+                    "-f", "null", "-",
+                ],
+                capture_output=True, timeout=10,
+            )
+            if result.returncode == 0:
+                logger.info("[ffmpeg-hw] 使用硬件加速: %s (%s)", encoder, label)
+                _ffmpeg_hw_cache = {"hwaccel": hwaccel, "encoder": encoder, "label": label}
+                return _ffmpeg_hw_cache
+        except Exception:
+            pass
+        finally:
+            try:
+                Path(out).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    logger.info("[ffmpeg-hw] 无可用硬件加速，回退软件编码 libx264")
+    _ffmpeg_hw_cache = {"hwaccel": None, "encoder": "libx264", "label": "软件编码 (libx264)"}
+    return _ffmpeg_hw_cache
+
+
+def build_ffmpeg_video_encode_flags(hw_accel: str = "auto") -> list:
+    """返回 FFmpeg 视频编码参数列表。
+
+    hw_accel 取值：
+      "auto"          — 自动探测最优硬件加速
+      "videotoolbox"  — Apple VideoToolbox（Mac）
+      "nvenc"         — NVIDIA NVENC
+      "qsv"           — Intel Quick Sync
+      "amf"           — AMD AMF
+      "software"      — 纯软件 libx264
+    """
+    preset = (hw_accel or "auto").strip().lower()
+    _PRESET_MAP = {
+        "videotoolbox": ["-c:v", "h264_videotoolbox"],
+        "nvenc":        ["-c:v", "h264_nvenc"],
+        "qsv":          ["-c:v", "h264_qsv"],
+        "amf":          ["-c:v", "h264_amf"],
+        "software":     ["-c:v", "libx264", "-preset", "fast", "-crf", "23"],
+    }
+    if preset in _PRESET_MAP:
+        logger.info("[ffmpeg-hw] 用户指定加速方式: %s", preset)
+        return _PRESET_MAP[preset]
+    # auto
+    hw = detect_ffmpeg_hwaccel()
+    if hw["hwaccel"]:
+        return ["-c:v", hw["encoder"]]
+    return ["-c:v", "libx264", "-preset", "fast", "-crf", "23"]

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Status, TaskType, VcInputMode } from '../types';
+import type { Status, TaskType, VcInputMode, ToolboxSubPage } from '../types';
 import { TASK_LABELS, TASK_PHASES, TASK_ICON_CFG, LS, LOCAL_PROVIDERS, URL_ONLY_PROVIDERS } from '../constants';
 import { rlog } from '../utils';
 
@@ -13,6 +13,7 @@ import { useLLM } from '../hooks/useLLM';
 import { useVoiceChat } from '../hooks/useVoiceChat';
 import { useMediaConvert } from '../hooks/useMediaConvert';
 import { useDocConvert } from '../hooks/useDocConvert';
+import { useToolbox } from '../hooks/useToolbox';
 
 // Components
 import Sidebar from '../components/layout/Sidebar';
@@ -202,7 +203,7 @@ export default function Home() {
   // Sync vchatVoiceId from backend hook into voice chat if backend hook manages it separately
   // Actually useBackend manages selectedVoiceId & vchatVoiceId, use them directly
 
-  const { jobs, setJobs, fetchJobs, addInstantJobResult, pollJobResult } = useJobs(
+  const { jobs, setJobs, fetchJobs, addInstantJobResult, addPendingJob, resolveJob, pollJobResult } = useJobs(
     backend.backendBaseUrl,
     backend.backendReady,
     navigateTasks,
@@ -289,6 +290,17 @@ export default function Home() {
     setStatus,
     setProcessingStartTime,
     setError,
+    addPendingJob,
+    resolveJob,
+    onNavigateTasks: navigateTasks,
+  });
+
+  const toolbox = useToolbox({
+    backendBaseUrl: backend.backendBaseUrl,
+    outputDir,
+    setStatus,
+    setProcessingStartTime,
+    setError,
     addInstantJobResult,
   });
 
@@ -298,7 +310,9 @@ export default function Home() {
     setStatus,
     setProcessingStartTime,
     setError,
-    addInstantJobResult,
+    addPendingJob,
+    resolveJob,
+    onNavigateTasks: navigateTasks,
   });
 
   // ─── 新建音色 ─────────────────────────────────────────────────────────────
@@ -427,8 +441,8 @@ export default function Home() {
         title={isDark ? '切换到亮色模式' : '切换到暗色模式'}
         className={`fixed top-4 right-4 z-50 flex items-center w-[52px] h-[28px] rounded-full transition-all duration-300 shadow-md ${isDark ? 'bg-slate-700' : 'bg-sky-200'}`}
       >
-        <span className={`absolute w-[22px] h-[22px] rounded-full shadow-sm flex items-center justify-center text-[13px] transition-all duration-300 ${isDark ? 'translate-x-[26px] bg-slate-200' : 'translate-x-[3px] bg-white'}`}>
-          {isDark ? '🌙' : '☀️'}
+        <span className={`absolute w-[22px] h-[22px] rounded-full shadow-sm flex items-center justify-center text-[11px] font-bold transition-all duration-300 ${isDark ? 'translate-x-[26px] bg-slate-200 text-slate-700' : 'translate-x-[3px] bg-white text-sky-600'}`}>
+          {isDark ? '晚' : '早'}
         </span>
       </button>
 
@@ -691,10 +705,15 @@ export default function Home() {
                 setEndMin={media.setEndMin}
                 endSec={media.endSec}
                 setEndSec={media.setEndSec}
+                subtitleOutputFmt={media.subtitleOutputFmt}
+                setSubtitleOutputFmt={media.setSubtitleOutputFmt}
+                hwAccel={media.hwAccel}
+                setHwAccel={media.setHwAccel}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
                 onRunMediaConvert={() => { navigateTasks(); media.runMediaConvert(); }}
+                onRunSubtitleConvert={() => { navigateTasks(); media.runSubtitleConvert(); }}
                 fieldCls={fieldCls}
                 fileCls={fileCls}
                 labelCls={labelCls}
@@ -702,7 +721,7 @@ export default function Home() {
               />
             )}
 
-            {/* 文档转换面板 */}
+            {/* 文档与工具面板 */}
             {!showHome && !showTasks && !showSystem && taskType === 'doc' && (
               <DocPanel
                 docSubPage={doc.docSubPage}
@@ -713,10 +732,21 @@ export default function Home() {
                 setDocOutputFormat={doc.setDocOutputFormat}
                 docExtractMode={doc.docExtractMode}
                 setDocExtractMode={doc.setDocExtractMode}
+                onRunDocConvert={doc.runDocConvert}
+                imgFile={toolbox.imgFile} setImgFile={toolbox.setImgFile}
+                imgOutputFmt={toolbox.imgOutputFmt} setImgOutputFmt={toolbox.setImgOutputFmt}
+                imgResizeW={toolbox.imgResizeW} setImgResizeW={toolbox.setImgResizeW}
+                imgResizeH={toolbox.imgResizeH} setImgResizeH={toolbox.setImgResizeH}
+                imgQuality={toolbox.imgQuality} setImgQuality={toolbox.setImgQuality}
+                qrMode={toolbox.qrMode} setQrMode={toolbox.setQrMode}
+                qrText={toolbox.qrText} setQrText={toolbox.setQrText}
+                qrFile={toolbox.qrFile} setQrFile={toolbox.setQrFile}
+                encFile={toolbox.encFile} setEncFile={toolbox.setEncFile}
+                encTarget={toolbox.encTarget} setEncTarget={toolbox.setEncTarget}
+                onRunToolbox={() => toolbox.runToolbox(doc.docSubPage as ToolboxSubPage)}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
-                onRunDocConvert={() => { navigateTasks(); doc.runDocConvert(); }}
                 fieldCls={fieldCls}
                 fileCls={fileCls}
                 labelCls={labelCls}
