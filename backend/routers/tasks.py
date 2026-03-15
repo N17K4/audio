@@ -51,7 +51,7 @@ from services.ocr.got_ocr import run_got_ocr
 from services.lipsync.liveportrait_lipsync import run_liveportrait_lipsync
 from services.image_understand.openai_image_understand import run_openai_image_understand
 from services.image_understand.gemini_image_understand import run_gemini_image_understand
-from services.image_understand.claude_image_understand import run_claude_image_understand
+from services.image_understand.anthropic_image_understand import run_claude_image_understand
 from services.image_understand.ollama_image_understand import run_ollama_image_understand
 
 router = APIRouter()
@@ -1071,7 +1071,7 @@ async def task_ocr(
                 api_key=api_key, model=model or "gemini-2.5-flash",
             )
         else:
-            from services.image_understand.claude_image_understand import run_claude_image_understand
+            from services.image_understand.anthropic_image_understand import run_claude_image_understand
             r = await run_claude_image_understand(
                 image_content=content, image_mime=mime,
                 prompt="请识别图片中所有文字，只输出文字内容，保留原始格式",
