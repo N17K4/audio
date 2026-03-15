@@ -25,7 +25,7 @@ export function useMisc({
   fetchJobs,
   onNavigateTasks,
 }: UseMiscProps) {
-  const [miscSubPage, setMiscSubPage] = useState<MiscSubPage>('image_gen');
+  const [miscSubPage, setMiscSubPage] = useState<MiscSubPage>('img_gen');
 
   // ── 图像生成状态 ──
   const [imageGenProvider, setImageGenProvider] = useState('openai');
@@ -34,10 +34,10 @@ export function useMisc({
   const [imageGenSize, setImageGenSize] = useState('1024x1024');
 
   // ── 图像理解状态 ──
-  const [imageUnderstandProvider, setImageUnderstandProvider] = useState('openai');
+  const [imageUnderstandProvider, setImageUnderstandProvider] = useState('gemini');
   const [imageUnderstandFile, setImageUnderstandFile] = useState<File | null>(null);
   const [imageUnderstandPrompt, setImageUnderstandPrompt] = useState('请详细描述这张图片');
-  const [imageUnderstandModel, setImageUnderstandModel] = useState('gpt-4o-mini');
+  const [imageUnderstandModel, setImageUnderstandModel] = useState('gemini-2.5-flash');
 
   // ── 代码助手状态 ──
   const [codeProvider, setCodeProvider] = useState('gemini');

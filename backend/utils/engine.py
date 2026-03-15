@@ -428,6 +428,118 @@ def detect_ffmpeg_hwaccel() -> dict:
     return _ffmpeg_hw_cache
 
 
+# ---------------------------------------------------------------------------
+# 新引擎：GOT-OCR2.0 / LivePortrait / FaceFusion / Wan 2.1
+# ---------------------------------------------------------------------------
+
+def detect_got_ocr_script() -> str:
+    candidates = [RUNTIME_ROOT / "got_ocr" / "inference.py"]
+    for p in candidates:
+        if p.exists():
+            logger.debug("[detect-got_ocr] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-got_ocr] 未找到 got_ocr inference.py")
+    return ""
+
+
+def get_got_ocr_command_template() -> str:
+    script = detect_got_ocr_script()
+    if not script:
+        return ""
+    try:
+        py = get_embedded_python()
+        return f'"{py}" "{script}" --input {{input}} --output {{output}} --model {{model}}'
+    except RuntimeError:
+        return ""
+
+
+def detect_liveportrait_script() -> str:
+    candidates = [RUNTIME_ROOT / "liveportrait" / "inference.py"]
+    for p in candidates:
+        if p.exists():
+            logger.debug("[detect-liveportrait] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-liveportrait] 未找到 liveportrait inference.py")
+    return ""
+
+
+def get_liveportrait_command_template() -> str:
+    script = detect_liveportrait_script()
+    if not script:
+        return ""
+    try:
+        py = get_embedded_python()
+        return f'"{py}" "{script}" --source {{source}} --audio {{audio}} --output {{output}}'
+    except RuntimeError:
+        return ""
+
+
+def detect_facefusion_script() -> str:
+    candidates = [
+        RUNTIME_ROOT / "facefusion" / "inference.py",
+        RUNTIME_ROOT / "facefusion" / "engine" / "facefusion.py",
+    ]
+    for p in candidates:
+        if p.exists():
+            logger.debug("[detect-facefusion] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-facefusion] 未找到 facefusion 脚本")
+    return ""
+
+
+def get_facefusion_command_template() -> str:
+    script = detect_facefusion_script()
+    if not script:
+        return ""
+    try:
+        py = get_embedded_python()
+        return f'"{py}" "{script}" --source {{source}} --target {{target}} --output {{output}}'
+    except RuntimeError:
+        return ""
+
+
+def detect_wan_script() -> str:
+    candidates = [RUNTIME_ROOT / "wan" / "inference.py"]
+    for p in candidates:
+        if p.exists():
+            logger.debug("[detect-wan] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-wan] 未找到 wan inference.py")
+    return ""
+
+
+def get_wan_command_template() -> str:
+    script = detect_wan_script()
+    if not script:
+        return ""
+    try:
+        py = get_embedded_python()
+        return f'"{py}" "{script}" --prompt {{prompt}} --output {{output}} --model {{model}}'
+    except RuntimeError:
+        return ""
+
+
+def detect_flux_script() -> str:
+    candidates = [RUNTIME_ROOT / "flux" / "inference.py"]
+    for p in candidates:
+        if p.exists():
+            logger.debug("[detect-flux] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-flux] 未找到 flux inference.py")
+    return ""
+
+
+def get_flux_command_template() -> str:
+    script = detect_flux_script()
+    if not script:
+        return ""
+    try:
+        py = get_embedded_python()
+        return f'"{py}" "{script}" --prompt {{prompt}} --output {{output}}'
+    except RuntimeError:
+        return ""
+
+
 def build_ffmpeg_video_encode_flags(hw_accel: str = "auto") -> list:
     """返回 FFmpeg 视频编码参数列表。
 

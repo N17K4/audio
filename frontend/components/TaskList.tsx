@@ -66,6 +66,15 @@ function fmtTime(ts: number): string {
   return `${h}:${m}`;
 }
 
+function fmtDateTime(ts: number): string {
+  const d = new Date(ts * 1000);
+  const mo = d.getMonth() + 1;
+  const da = d.getDate();
+  const h = d.getHours().toString().padStart(2, '0');
+  const mi = d.getMinutes().toString().padStart(2, '0');
+  return `${mo}月${da}日 ${h}:${mi}`;
+}
+
 export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
@@ -182,7 +191,6 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
             <span>{PROVIDER_LABELS[job.provider] || job.provider}</span>
-            <span className="tabular-nums font-mono">{fmtTime(job.created_at)}</span>
             {(job.status === 'running' || job.status === 'completed' || job.status === 'failed') && (
               <span className="tabular-nums font-mono">{fmtElapsed(job)}</span>
             )}
@@ -223,25 +231,30 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             <p className="text-xs text-rose-500 break-all pt-1">{job.error}</p>
           )}
         </div>
-        {(job.status === 'queued' || job.status === 'running') ? (
-          <button
-            className="shrink-0 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-800/50 px-2.5 py-1 text-xs text-orange-500 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
-            onClick={async () => {
-              await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
-              setJobs(prev => prev.filter(j => j.id !== job.id));
-            }}>
-            中断
-          </button>
-        ) : (
-          <button
-            className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-rose-500 transition-colors"
-            onClick={async () => {
-              await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
-              setJobs(prev => prev.filter(j => j.id !== job.id));
-            }}>
-            删除
-          </button>
-        )}
+        <div className="shrink-0 flex flex-col items-end gap-1.5">
+          <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500 whitespace-nowrap">
+            {fmtDateTime(job.created_at)}
+          </span>
+          {(job.status === 'queued' || job.status === 'running') ? (
+            <button
+              className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-800/50 px-2.5 py-1 text-xs text-orange-500 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+              onClick={async () => {
+                await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+                setJobs(prev => prev.filter(j => j.id !== job.id));
+              }}>
+              中断
+            </button>
+          ) : (
+            <button
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-rose-500 transition-colors"
+              onClick={async () => {
+                await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+                setJobs(prev => prev.filter(j => j.id !== job.id));
+              }}>
+              删除
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -266,7 +279,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
       {jobs.length === 0 ? (
         <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 p-12 text-center text-sm text-slate-400">
-          暂无任务，提交 TTS 或音色转换后在此查看进度
+          暂无任务
         </div>
       ) : (
         <>

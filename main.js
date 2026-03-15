@@ -24,12 +24,12 @@ if (!app.isPackaged) {
 app.commandLine.appendSwitch('lang', 'zh-CN');
 
 // ─── 单实例互斥：杀掉旧实例（dev ↔ dist 双向） ──────────────────────────────
-// 策略：用 os.tmpdir()/ai-tool-main.pid 记录主进程 PID，
+// 策略：用 os.tmpdir()/ai-workshop-main.pid 记录主进程 PID，
 //       每次启动先读取旧 PID → 杀掉 → 顺带清理孤儿后端进程 → 写入新 PID。
 (function killPreviousInstance() {
   const os = require('os');
   const { execSync } = require('child_process');
-  const pidFile = path.join(os.tmpdir(), 'ai-tool-main.pid');
+  const pidFile = path.join(os.tmpdir(), 'ai-workshop-main.pid');
 
   // 1. 通过 PID 文件杀掉上一个 Electron 主进程
   try {
@@ -99,11 +99,19 @@ let frontendLog = createFileLogger('frontend.log');
 // 主进程 console → electron.log
 const _origLog = console.log.bind(console);
 const _origErr = console.error.bind(console);
-console.log = (...a) => { _origLog(...a); electronLog('INFO', ...a); };
-console.error = (...a) => { _origErr(...a); electronLog('ERROR', ...a); };
+console.log = (...a) => { try { _origLog(...a); } catch { /**/ } electronLog('INFO', ...a); };
+console.error = (...a) => { try { _origErr(...a); } catch { /**/ } electronLog('ERROR', ...a); };
+
+// 防止 EPIPE（前端断开连接时写 stdout/stderr）崩溃主进程
+process.on('uncaughtException', (err) => {
+  if (err.code === 'EPIPE') return; // 管道断开，忽略
+  electronLog('ERROR', '[uncaughtException]', err.stack || err.message);
+  _origErr('[uncaughtException]', err);
+});
 
 let pyProcess = null;
 let backendBaseUrl = 'http://127.0.0.1:8000';
+let mainWindow = null;
 
 // ─── 日志目录入口（始终返回 <appDir>/logs/）──────────────────────────────────
 function getLogDir() {
@@ -127,7 +135,8 @@ function getUserPackagesDir() {
 }
 
 // ─── 磁盘大小计算 ─────────────────────────────────────────────────────────────
-function getDirSize(dirPath) {
+function getDirSize(dirPath, visitedInodes) {
+  if (!visitedInodes) visitedInodes = new Set();
   let total = 0;
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -135,9 +144,13 @@ function getDirSize(dirPath) {
       const full = path.join(dirPath, entry.name);
       try {
         if (entry.isDirectory()) {
-          total += getDirSize(full);
+          total += getDirSize(full, visitedInodes);
         } else {
-          total += fs.statSync(full).size;
+          const stat = fs.statSync(full);
+          if (!visitedInodes.has(stat.ino)) {
+            visitedInodes.add(stat.ino);
+            total += stat.size;
+          }
         }
       } catch {}
     }
@@ -455,6 +468,7 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
     height: 800,
+    title: 'AI Workshop',
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -462,6 +476,8 @@ async function createWindow() {
       contextIsolation: true,
     },
   });
+  mainWindow = win;
+  win.on('page-title-updated', e => e.preventDefault());
 
   function openLogFile(filename) {
     const logPath = path.join(getLogDir(), filename);
@@ -548,11 +564,11 @@ async function createWindow() {
 
   // Python stdout/stderr 同时写 electron.log，方便排查启动失败
   pyProcess.stdout.on('data', (data) => {
-    process.stdout.write(`[Backend] ${data}`);
+    try { process.stdout.write(`[Backend] ${data}`); } catch { /**/ }
     electronLog('INFO', '[Backend]', data.toString().trim());
   });
   pyProcess.stderr.on('data', (data) => {
-    process.stderr.write(`[Backend] ${data}`);
+    try { process.stderr.write(`[Backend] ${data}`); } catch { /**/ }
     electronLog('ERROR', '[Backend stderr]', data.toString().trim());
   });
   pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err));
@@ -606,41 +622,106 @@ ipcMain.handle('app:getDiskUsage', () => {
     const full = path.join(ckptRoot, engine);
     return dirExists(full) ? getDirSize(full) : 0;
   };
+  // 测量 hf_cache/ 中指定 repo 的缓存大小（repoId 格式：owner/name）
+  const measureHfCache = (...repoIds) => {
+    let total = 0;
+    for (const repoId of repoIds) {
+      const d = path.join(ckptRoot, 'hf_cache', `models--${repoId.replace('/', '--')}`);
+      if (dirExists(d)) total += getDirSize(d);
+    }
+    return total;
+  };
 
   const rows = [
+    // ── 运行时环境 ──────────────────────────────────────────────────────────
     {
       key: 'python',
-      label: `Python 运行时 (${runtimePlatform})`,
+      label: `Python 运行时（${runtimePlatform}）`,
       sub: path.join(resRoot, `runtime/${runtimePlatform}`),
       size: measureRes(`runtime/${runtimePlatform}`),
       deletable: false,
     },
     {
+      key: 'python_packages',
+      label: 'ML 依赖包（torch · torchaudio 等）',
+      sub: getUserPackagesDir(),
+      size: (() => { const d = getUserPackagesDir(); return dirExists(d) ? getDirSize(d) : 0; })(),
+      deletable: false,
+    },
+    // ── TTS：Fish Speech ────────────────────────────────────────────────────
+    {
       key: 'fish_speech_engine',
-      label: 'Fish Speech 引擎源码',
+      label: 'Fish Speech 引擎',
       sub: path.join(resRoot, 'runtime/fish_speech/engine'),
       size: measureRes('runtime/fish_speech/engine'),
       deletable: false,
     },
     {
       key: 'fish_speech_ckpt',
-      label: 'Fish Speech 模型',
+      label: 'Fish Speech 模型权重',
       sub: path.join(ckptRoot, 'fish_speech'),
       size: measureCkpt('fish_speech'),
+      engineKey: 'fish_speech',
+      ready: measureCkpt('fish_speech') > 0,
+      estimatedSizeMb: 1004,
       deletable: false,
     },
+    // ── VC：Seed-VC + RVC ───────────────────────────────────────────────────
     {
       key: 'seed_vc_engine',
-      label: 'Seed-VC 引擎源码',
+      label: 'Seed-VC 引擎',
       sub: path.join(resRoot, 'runtime/seed_vc/engine'),
       size: measureRes('runtime/seed_vc/engine'),
       deletable: false,
     },
     {
       key: 'seed_vc_ckpt',
-      label: 'Seed-VC 模型',
+      label: 'Seed-VC 模型权重',
       sub: path.join(ckptRoot, 'seed_vc'),
       size: measureCkpt('seed_vc'),
+      engineKey: 'seed_vc',
+      ready: measureCkpt('seed_vc') > 0,
+      estimatedSizeMb: 2676,
+      deletable: false,
+    },
+    ...(() => {
+      const baseDir = path.join(resRoot, 'runtime', runtimePlatform, 'python');
+      const found = [];
+      const walkRvc = (d, depth) => {
+        if (depth > 6) return;
+        try {
+          for (const f of fs.readdirSync(d)) {
+            const fp = path.join(d, f);
+            if (f === 'base_model' && path.basename(path.dirname(fp)) === 'rvc_python') { found.push(fp); return; }
+            if (fs.statSync(fp).isDirectory()) walkRvc(fp, depth + 1);
+          }
+        } catch { /**/ }
+      };
+      if (dirExists(baseDir)) walkRvc(baseDir, 0);
+      const rvcSize = found.reduce((s, p) => s + getDirSize(p), 0);
+      // rvc checkpoint 目录（hubert_base.pt / pretrained_v2/ 下载到此）
+      const rvcCkptSize = measureCkpt('rvc');
+      const totalRvcSize = rvcSize + rvcCkptSize;
+      return [{
+        key: 'rvc_ckpt',
+        label: 'RVC 预训练模型',
+        sub: found[0] || path.join(ckptRoot, 'rvc'),
+        size: totalRvcSize,
+        engineKey: 'rvc',
+        ready: totalRvcSize > 0,
+        estimatedSizeMb: 1360,
+        deletable: false,
+      }];
+    })(),
+    // ── STT：Faster Whisper + Whisper ───────────────────────────────────────
+    {
+      key: 'faster_whisper_ckpt',
+      label: 'Faster Whisper 模型权重',
+      sub: path.join(ckptRoot, 'faster_whisper'),
+      size: measureCkpt('faster_whisper'),
+      engineKey: 'faster_whisper',
+      ready: measureCkpt('faster_whisper') > 0,
+      estimatedSizeMb: 150,
       deletable: false,
     },
     {
@@ -652,17 +733,96 @@ ipcMain.handle('app:getDiskUsage', () => {
     },
     {
       key: 'whisper_ckpt',
-      label: 'Whisper 模型',
+      label: 'Whisper 模型权重',
       sub: path.join(ckptRoot, 'whisper'),
       size: measureCkpt('whisper'),
       deletable: false,
     },
+    // ── 图像生成：Flux ──────────────────────────────────────────────────────
+    {
+      key: 'flux_ckpt',
+      label: 'Flux.1-Schnell GGUF（图像生成）',
+      sub: path.join(ckptRoot, 'flux'),
+      size: (() => measureCkpt('flux') + measureHfCache('black-forest-labs/FLUX.1-schnell'))(),
+      engineKey: 'flux',
+      ready: (() => {
+        // GGUF 文件存在且 >5 GB（完整文件约 6.5 GB）视为已就绪
+        const gguf = path.join(ckptRoot, 'flux', 'flux1-schnell-Q4_K_S.gguf');
+        try { return fs.statSync(gguf).size > 5 * 1024 * 1024 * 1024; } catch { return false; }
+      })(),
+      estimatedSizeMb: 16667,
+      deletable: false,
+    },
+    // ── 视频生成：Wan ───────────────────────────────────────────────────────
+    {
+      key: 'wan_ckpt',
+      label: 'Wan 2.1（本地视频生成）',
+      sub: path.join(ckptRoot, 'hf_cache', 'models--Wan-AI--Wan2.1-T2V-1.3B-Diffusers'),
+      size: (() => measureHfCache('Wan-AI/Wan2.1-T2V-1.3B-Diffusers'))(),
+      engineKey: 'wan',
+      ready: measureHfCache('Wan-AI/Wan2.1-T2V-1.3B-Diffusers') > 0,
+      estimatedSizeMb: 15600,
+      deletable: false,
+    },
+    // ── OCR：GOT-OCR ────────────────────────────────────────────────────────
+    {
+      key: 'got_ocr_ckpt',
+      label: 'GOT-OCR2.0（本地文字识别）',
+      sub: path.join(ckptRoot, 'hf_cache', 'models--stepfun-ai--GOT-OCR-2.0-hf'),
+      size: (() => measureHfCache('stepfun-ai/GOT-OCR-2.0-hf'))(),
+      engineKey: 'got_ocr',
+      ready: measureHfCache('stepfun-ai/GOT-OCR-2.0-hf') > 0,
+      estimatedSizeMb: 1500,
+      deletable: false,
+    },
+    // ── 口型同步：LivePortrait ──────────────────────────────────────────────
+    {
+      key: 'liveportrait_ckpt',
+      label: 'LivePortrait FP16（口型同步 · 动作驱动）',
+      sub: path.join(ckptRoot, 'hf_cache', 'models--KwaiVGI--LivePortrait'),
+      size: measureHfCache('KwaiVGI/LivePortrait'),
+      engineKey: 'liveportrait',
+      ready: measureHfCache('KwaiVGI/LivePortrait') > 0,
+      estimatedSizeMb: 1800,
+      deletable: false,
+    },
+    // ── 换脸：FaceFusion ────────────────────────────────────────────────────
+    {
+      key: 'facefusion_ckpt',
+      label: 'FaceFusion 3.x（换脸）',
+      sub: path.join(resRoot, 'runtime', 'facefusion', 'engine'),
+      size: measureRes(path.join('runtime', 'facefusion', 'engine')),
+      engineKey: 'facefusion',
+      // 源码 + 所有必要模型均就绪才算安装完成
+      ready: (() => {
+        const sourceOk = dirExists(path.join(resRoot, 'runtime', 'facefusion', 'engine', 'facefusion'));
+        const swapper = path.join(resRoot, 'runtime', 'facefusion', 'engine', '.assets', 'models', 'inswapper_128_fp16.onnx');
+        try { return sourceOk && fs.statSync(swapper).size > 50 * 1024 * 1024; } catch { return false; }
+      })(),
+      estimatedSizeMb: 350,  // 源码 ~20 MB + 模型 ~330 MB（人脸检测/识别/关键点/换脸）
+      deletable: false,
+    },
+    // ── seed_vc 附属 HF cache（checkpoints/ 根目录下，非 hf_cache 子目录）───────
+    {
+      key: 'seed_vc_hf_root',
+      label: 'Seed-VC 附属缓存（rmvpe · campplus）',
+      sub: ckptRoot,
+      size: (() => {
+        let total = 0;
+        for (const name of ['models--lj1995--VoiceConversionWebUI', 'models--funasr--campplus']) {
+          const d = path.join(ckptRoot, name);
+          if (dirExists(d)) total += getDirSize(d);
+        }
+        return total;
+      })(),
+      deletable: false,
+    },
+    // ── 共享缓存 ────────────────────────────────────────────────────────────
     {
       key: 'hf_cache',
-      label: 'HuggingFace 缓存',
+      label: 'HuggingFace 模型缓存',
       sub: path.join(ckptRoot, 'hf_cache'),
       size: (() => {
-        // hf_cache 目录：Seed-VC / Fish Speech 等通过 HF hub 下载时产生
         const d = path.join(ckptRoot, 'hf_cache');
         if (dirExists(d)) return getDirSize(d);
         // 兼容旧版：扫描 checkpoints/ 下所有 models--* 目录
@@ -680,44 +840,7 @@ ipcMain.handle('app:getDiskUsage', () => {
       })(),
       deletable: false,
     },
-    {
-      key: 'rvc_ckpt',
-      label: 'RVC 基础模型',
-      sub: (() => {
-        const baseDir = path.join(resRoot, 'runtime', runtimePlatform, 'python');
-        const found = [];
-        const walk = (d, depth) => {
-          if (depth > 6) return;
-          try {
-            for (const f of fs.readdirSync(d)) {
-              const fp = path.join(d, f);
-              if (f === 'base_model' && path.basename(path.dirname(fp)) === 'rvc_python') { found.push(fp); return; }
-              if (fs.statSync(fp).isDirectory()) walk(fp, depth + 1);
-            }
-          } catch { /**/ }
-        };
-        if (dirExists(baseDir)) walk(baseDir, 0);
-        return found[0] || path.join(resRoot, 'runtime', runtimePlatform, 'python', '…/rvc_python/base_model');
-      })(),
-      size: (() => {
-        const baseDir = path.join(resRoot, 'runtime', runtimePlatform, 'python');
-        if (!dirExists(baseDir)) return 0;
-        const found = [];
-        const walk = (d, depth) => {
-          if (depth > 6) return;
-          try {
-            for (const f of fs.readdirSync(d)) {
-              const fp = path.join(d, f);
-              if (f === 'base_model' && path.basename(path.dirname(fp)) === 'rvc_python') { found.push(fp); return; }
-              if (fs.statSync(fp).isDirectory()) walk(fp, depth + 1);
-            }
-          } catch { /**/ }
-        };
-        walk(baseDir, 0);
-        return found.reduce((s, p) => s + getDirSize(p), 0);
-      })(),
-      deletable: false,
-    },
+    // ── 用户数据 ────────────────────────────────────────────────────────────
     {
       key: 'models',
       label: '音色包',
@@ -725,19 +848,21 @@ ipcMain.handle('app:getDiskUsage', () => {
       size: measureApp('models'),
       deletable: false,
     },
+    // ── 临时文件 ────────────────────────────────────────────────────────────
     {
       key: 'audio_cache',
-      label: '音频缓存（TTS / 语音对话）',
-      sub: path.join(require('os').tmpdir(), 'ai-tool-temp', 'download'),
+      label: '音频缓存',
+      sub: path.join(require('os').tmpdir(), 'ai-workshop-temp', 'download'),
       size: (() => {
-        const d = path.join(require('os').tmpdir(), 'ai-tool-temp', 'download');
+        const d = path.join(require('os').tmpdir(), 'ai-workshop-temp', 'download');
         return dirExists(d) ? getDirSize(d) : 0;
       })(),
+      clearable: true,
       deletable: false,
     },
     {
       key: 'logs',
-      label: '日志',
+      label: '日志文件',
       sub: getLogDir(),
       size: (() => {
         const d = getLogDir();
@@ -791,18 +916,165 @@ ipcMain.handle('app:clearAndOpenSetup', async () => {
 });
 
 // ─── IPC：删除模型 ────────────────────────────────────────────────────────────
+// 每个引擎关联的额外路径（相对于 checkpoints 根目录），卸载时一并删除
+// seed_vc 卸载时额外清理的直接文件（checkpoints/ 根目录下）
+// hf_cache 里的 bigvgan/whisper-small 不在此处删除——其他引擎（flux/wan 等）
+// 可能共用同一个 hf_cache 目录，卸载 seed_vc 不应波及它们
+const ENGINE_EXTRA_PATHS = {
+  seed_vc: [
+    'rmvpe.pt',
+    'models--funasr--campplus',
+    'models--lj1995--VoiceConversionWebUI',
+  ],
+  wan: [
+    path.join('hf_cache', 'models--Wan-AI--Wan2.1-T2V-1.3B-Diffusers'),
+  ],
+  got_ocr: [
+    path.join('hf_cache', 'models--stepfun-ai--GOT-OCR-2.0-hf'),
+  ],
+  flux: [
+    // flux 直接 checkpoint 目录已由主删除逻辑清理（checkpoints/flux/）
+    // 额外清理 hf_cache 里的文本编码器 / VAE
+    path.join('hf_cache', 'models--black-forest-labs--FLUX.1-schnell'),
+    path.join('hf_cache', 'models--city96--FLUX.1-schnell-gguf'),
+  ],
+  liveportrait: [
+    path.join('hf_cache', 'models--KwaiVGI--LivePortrait'),
+  ],
+};
+
 ipcMain.handle('app:deleteModels', (_event, engine) => {
-  const ckptDir = path.join(getCheckpointsDir(), engine);
-  if (!dirExists(ckptDir)) {
-    return { ok: true, note: '目录不存在，无需删除' };
+  const ckptRoot = getCheckpointsDir();
+  const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
+  const errors = [];
+
+  // FaceFusion 特殊处理：删 runtime/facefusion/engine/ 而非 checkpoints/facefusion/
+  if (engine === 'facefusion') {
+    const engineDir = path.join(resRoot, 'runtime', 'facefusion', 'engine');
+    if (dirExists(engineDir)) {
+      try {
+        fs.rmSync(engineDir, { recursive: true, force: true });
+      } catch (err) {
+        errors.push(`${engineDir}: ${err.message}`);
+      }
+    }
+    return errors.length > 0 ? { ok: false, error: errors.join('\n') } : { ok: true };
   }
+
+  // 删除主 checkpoint 目录
+  const ckptDir = path.join(ckptRoot, engine);
+  if (dirExists(ckptDir)) {
+    try {
+      fs.rmSync(ckptDir, { recursive: true, force: true });
+    } catch (err) {
+      errors.push(`${ckptDir}: ${err.message}`);
+    }
+  }
+
+  // 删除引擎关联的额外路径
+  const extras = ENGINE_EXTRA_PATHS[engine] || [];
+  for (const rel of extras) {
+    const fullPath = path.join(ckptRoot, rel);
+    try {
+      if (fs.existsSync(fullPath)) {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+      }
+    } catch (err) {
+      errors.push(`${fullPath}: ${err.message}`);
+    }
+  }
+
+  return errors.length > 0 ? { ok: false, error: errors.join('\n') } : { ok: true };
+});
+
+// ─── IPC：清空可清除目录 ──────────────────────────────────────────────────────
+const CLEARABLE_DIRS = () => {
+  const ckptRoot = getCheckpointsDir();
+  return {
+    hf_cache:    path.join(ckptRoot, 'hf_cache'),
+    models:      path.join(__dirname, 'models'),
+    audio_cache: path.join(require('os').tmpdir(), 'ai-workshop-temp', 'download'),
+  };
+};
+
+ipcMain.handle('app:clearDiskRow', (_event, key) => {
+  const dirs = CLEARABLE_DIRS();
+  const targetDir = dirs[key];
+  if (!targetDir) return { ok: false, error: `未知 key：${key}` };
   try {
-    fs.rmSync(ckptDir, { recursive: true, force: true });
-    fs.mkdirSync(ckptDir, { recursive: true }); // 重建空目录
+    if (dirExists(targetDir)) {
+      // 清空内容但保留目录
+      for (const entry of fs.readdirSync(targetDir)) {
+        fs.rmSync(path.join(targetDir, entry), { recursive: true, force: true });
+      }
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+// ─── IPC：下载单个引擎 checkpoint ────────────────────────────────────────────
+// 需要先克隆源码的引擎（setup-engines.py --engine <name>）
+const ENGINES_NEED_SOURCE_SETUP = new Set(['liveportrait', 'fish_speech', 'seed_vc']);
+
+ipcMain.handle('app:downloadEngine', (_event, engine) => {
+  const isMac = process.platform === 'darwin';
+  const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
+  const pyPath = isMac
+    ? path.join(resRoot, 'runtime', 'mac', 'python', 'bin', 'python3')
+    : path.join(resRoot, 'runtime', 'win', 'python', 'python.exe');
+  const ckptDir = getCheckpointsDir();
+  fs.mkdirSync(ckptDir, { recursive: true });
+
+  const env = { ...process.env, RESOURCES_ROOT: resRoot, CHECKPOINTS_DIR: ckptDir };
+
+  function sendProgress(msg) {
+    if (mainWindow && !mainWindow.isDestroyed())
+      mainWindow.webContents.send('engine:download:progress', msg);
+  }
+
+  function spawnScript(scriptPath, scriptArgs) {
+    return new Promise((resolve) => {
+      const child = spawn(pyPath, [scriptPath, ...scriptArgs], { env, shell: false });
+      child.stdout.on('data', (chunk) => {
+        for (const line of chunk.toString().split('\n')) {
+          if (!line.trim()) continue;
+          try {
+            sendProgress(JSON.parse(line));
+          } catch {
+            // 非 JSON 行（setup-engines.py 的 print 输出）也当日志转发
+            sendProgress({ type: 'log', message: line.trimEnd() });
+          }
+        }
+      });
+      child.stderr.on('data', (data) => {
+        for (const line of data.toString().split('\n')) {
+          if (line.trim()) sendProgress({ type: 'log', message: line.trimEnd() });
+        }
+      });
+      child.on('close', (code) => resolve({ ok: code === 0, exitCode: code }));
+      child.on('error', (err) => resolve({ ok: false, error: err.message }));
+    });
+  }
+
+  return (async () => {
+    // 第一步：如需克隆引擎源码，先跑 setup-engines.py --engine <name>
+    if (ENGINES_NEED_SOURCE_SETUP.has(engine)) {
+      sendProgress({ type: 'log', message: `▶ [${engine}] 克隆引擎源码...` });
+      const setupScript = path.join(__dirname, 'scripts', 'setup-engines.py');
+      const setupResult = await spawnScript(setupScript, ['--engine', engine]);
+      if (!setupResult.ok) {
+        sendProgress({ type: 'all_done', ok: false });
+        return setupResult;
+      }
+    }
+    // 第二步：下载模型权重（脚本自身会 emit all_done，无需再发）
+    sendProgress({ type: 'log', message: `▶ [${engine}] 下载模型权重...` });
+    const dlScript = path.join(__dirname, 'scripts', 'download_checkpoints.py');
+    const dlResult = await spawnScript(dlScript, ['--engine', engine, '--json-progress']);
+    return dlResult;
+  })();
 });
 
 // ─── IPC：读取日志内容 ────────────────────────────────────────────────────────
@@ -825,6 +1097,13 @@ ipcMain.handle('app:openLogsDir', () => {
 
 ipcMain.handle('app:openDir', (_event, dirPath) => {
   if (dirPath) shell.openPath(dirPath);
+});
+
+ipcMain.handle('app:saveRecording', async (_event, filename, buffer) => {
+  const dir = path.join(app.getPath('userData'), 'recordings');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, filename), Buffer.from(buffer));
+  return dir;
 });
 
 app.whenReady().then(createWindow);

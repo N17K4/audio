@@ -63,9 +63,10 @@ _SETTINGS: Dict = load_settings()
 LOCAL_CONCURRENCY: int = max(1, min(4, int(_SETTINGS.get("local_concurrency", 1))))
 
 TASK_CAPABILITIES = {
-    "tts": ["fish_speech", "openai", "gemini", "elevenlabs", "cartesia", "dashscope"],
-    "asr": ["faster_whisper", "whisper", "openai", "gemini", "groq", "deepgram"],
-    "llm": ["gemini", "openai", "claude", "groq", "deepseek", "mistral", "xai", "ollama", "github"],
+    "tts": ["fish_speech", "openai", "gemini", "elevenlabs", "cartesia", "dashscope", "minimax_tts"],
+    "asr": ["faster_whisper", "whisper", "openai", "gemini", "groq", "deepgram", "dashscope"],
+    "llm": ["gemini", "openai", "claude", "groq", "deepseek", "mistral", "xai", "ollama", "github",
+            "qwen", "doubao", "hunyuan", "glm", "moonshot", "spark", "minimax", "baichuan"],
     "vc":  ["seed_vc", "local_rvc", "elevenlabs"],
 }
 

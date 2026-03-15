@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react';
+import ComboSelect from '../shared/ComboSelect';
+import ModelInput from '../shared/ModelInput';
 import type { MiscSubPage, Status, ChatMessage } from '../../types';
 import {
-  IMAGE_GEN_PROVIDERS, IMAGE_GEN_PROVIDER_LABELS, IMAGE_GEN_MODELS, IMAGE_GEN_SIZES,
   IMAGE_UNDERSTAND_PROVIDERS, IMAGE_UNDERSTAND_PROVIDER_LABELS, IMAGE_UNDERSTAND_MODELS,
   TRANSLATE_PROVIDERS, TRANSLATE_LANGUAGES, PROVIDER_LABELS,
   DEFAULT_MODELS,
@@ -10,6 +11,7 @@ import {
   VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS,
   OCR_PROVIDERS, OCR_PROVIDER_LABELS, OCR_MODELS,
   LIPSYNC_PROVIDERS, LIPSYNC_PROVIDER_LABELS, LIPSYNC_MODELS,
+  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS,
 } from '../../constants';
 
 interface MiscPanelProps {
@@ -139,7 +141,6 @@ interface MiscPanelProps {
 }
 
 const ROW1_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
-  { key: 'image_gen',        label: '图像生成',  icon: '🖼️' },
   { key: 'image_understand', label: '图像理解',  icon: '🔍' },
   { key: 'translate',        label: '文字翻译',  icon: '🌐' },
   { key: 'code_assist',      label: '代码助手',  icon: '💻' },
@@ -152,13 +153,21 @@ const ROW2_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
 ];
 
 const ROW3_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
-  { key: 'ocr',     label: 'OCR 文档',  icon: '📄' },
+  { key: 'ocr',     label: 'OCR 图文识别',  icon: '📄' },
   { key: 'lipsync', label: '口型同步',  icon: '💋' },
 ];
 
 const CODE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'groq', 'mistral', 'xai', 'ollama', 'github'];
 
 const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
+
+function shortProv(label: string): string {
+  return label.replace(/（[^）]*）/g, '').replace(/【[^】]*】/g, '').trim();
+}
+
+const PILL_BASE = 'rounded-xl border px-2 py-2 text-xs font-medium transition-all text-center leading-tight';
+const PILL_ON  = 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:border-violet-500 dark:text-violet-300';
+const PILL_OFF = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50';
 
 export default function MiscPanel({
   miscSubPage, setMiscSubPage,
@@ -257,108 +266,24 @@ export default function MiscPanel({
     <div className="space-y-5">
       {/* 子页签 - 第一行 */}
       <div className="space-y-1.5">
-        <div className="flex gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-          {ROW1_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setMiscSubPage(tab.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
-                miscSubPage === tab.key
-                  ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}>
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-        {/* 第二行：本地/云端图像视频生成 */}
-        <div className="flex gap-1.5 rounded-2xl bg-slate-100/70 dark:bg-slate-800/70 p-1">
-          {ROW2_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setMiscSubPage(tab.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
-                miscSubPage === tab.key
-                  ? 'bg-white dark:bg-slate-700 text-pink-600 dark:text-pink-400 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}>
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-        {/* 第三行：OCR & 口型同步 */}
-        <div className="flex gap-1.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 p-1">
-          {ROW3_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setMiscSubPage(tab.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
-                miscSubPage === tab.key
-                  ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}>
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+        {[ROW1_TABS, ROW2_TABS, ROW3_TABS].map((row, i) => (
+          <div key={i} className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+            {row.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setMiscSubPage(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
+                  miscSubPage === tab.key
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}>
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        ))}
       </div>
-
-      {/* ── 图像生成 ── */}
-      {miscSubPage === 'image_gen' && (
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
-          <div>
-            <label className={labelCls}>服务商</label>
-            <div className="grid grid-cols-2 gap-2">
-              {IMAGE_GEN_PROVIDERS.map(p => (
-                <button key={p}
-                  onClick={() => onImageGenProviderChange(p)}
-                  className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all text-left ${
-                    imageGenProvider === p
-                      ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-                  }`}>
-                  {IMAGE_GEN_PROVIDER_LABELS[p] || p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <ApiKeyRow />
-
-          <div>
-            <label className={labelCls}>模型</label>
-            <input list="image-gen-model-list" className={fieldCls}
-              value={imageGenModel} onChange={e => setImageGenModel(e.target.value)}
-              placeholder="dall-e-3" />
-            <datalist id="image-gen-model-list">
-              {(IMAGE_GEN_MODELS[imageGenProvider] || []).map(m => <option key={m} value={m} />)}
-            </datalist>
-          </div>
-
-          <div>
-            <label className={labelCls}>{imageGenProvider === 'openai' || imageGenProvider === 'dashscope' ? '尺寸' : '比例'}</label>
-            <select className={fieldCls} value={imageGenSize} onChange={e => setImageGenSize(e.target.value)}>
-              {(IMAGE_GEN_SIZES[imageGenProvider] || []).map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={labelCls}>图像描述（提示词）</label>
-            <textarea rows={4} className={fieldCls}
-              value={imageGenPrompt} onChange={e => setImageGenPrompt(e.target.value)}
-              placeholder="描述你想生成的图像内容，越详细越好..." />
-          </div>
-
-          <button className={btnPrimary} disabled={busy} onClick={onRunImageGen}>
-            {busy ? '生成中...' : '生成图像'}
-          </button>
-        </div>
-      )}
 
       {/* ── 图像理解 ── */}
       {miscSubPage === 'image_understand' && (
@@ -384,12 +309,13 @@ export default function MiscPanel({
 
           <div>
             <label className={labelCls}>模型</label>
-            <input list="image-understand-model-list" className={fieldCls}
-              value={imageUnderstandModel} onChange={e => setImageUnderstandModel(e.target.value)}
-              placeholder="gpt-4o-mini" />
-            <datalist id="image-understand-model-list">
-              {(IMAGE_UNDERSTAND_MODELS[imageUnderstandProvider] || []).map(m => <option key={m} value={m} />)}
-            </datalist>
+            <ComboSelect
+              value={imageUnderstandModel}
+              onChange={setImageUnderstandModel}
+              options={(IMAGE_UNDERSTAND_MODELS[imageUnderstandProvider] || []).map(m => ({ value: m, label: m }))}
+              placeholder="留空用默认"
+              allowCustom
+            />
           </div>
 
           <div>
@@ -438,24 +364,27 @@ export default function MiscPanel({
 
           <div>
             <label className={labelCls}>模型</label>
-            <input className={fieldCls}
-              value={translateModel} onChange={e => setTranslateModel(e.target.value)}
-              placeholder={DEFAULT_MODELS.llm?.[translateProvider] || ''} />
+            <ModelInput value={translateModel} onChange={setTranslateModel} task="llm" provider={translateProvider} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>源语言</label>
-              <select className={fieldCls} value={translateSource} onChange={e => setTranslateSource(e.target.value)}>
-                <option value="自动检测">自动检测</option>
-                {TRANSLATE_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
+              <ComboSelect
+                value={translateSource}
+                onChange={setTranslateSource}
+                options={[{ value: '自动检测', label: '自动检测' }, ...TRANSLATE_LANGUAGES.map(l => ({ value: l, label: l }))]}
+                placeholder="选择语言"
+              />
             </div>
             <div>
               <label className={labelCls}>目标语言</label>
-              <select className={fieldCls} value={translateTarget} onChange={e => setTranslateTarget(e.target.value)}>
-                {TRANSLATE_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
+              <ComboSelect
+                value={translateTarget}
+                onChange={setTranslateTarget}
+                options={TRANSLATE_LANGUAGES.map(l => ({ value: l, label: l }))}
+                placeholder="目标语言"
+              />
             </div>
           </div>
 
@@ -506,8 +435,7 @@ export default function MiscPanel({
               </div>
               <div>
                 <label className={labelCls}>模型</label>
-                <input className={fieldCls} value={codeModel} onChange={e => setCodeModel(e.target.value)}
-                  placeholder={DEFAULT_MODELS.llm?.[codeProvider] || ''} />
+                <ModelInput value={codeModel} onChange={setCodeModel} task="llm" provider={codeProvider} />
               </div>
             </div>
             <div>
@@ -578,7 +506,9 @@ export default function MiscPanel({
 
       {/* ── 图像生成（本地+云） ── */}
       {miscSubPage === 'img_gen' && (() => {
-        const isLocal = imgGenProvider === 'comfyui';
+        const isComfyUI = imgGenProvider === 'comfyui';
+        const isLocal = LOCAL_PROVIDERS.has(imgGenProvider);
+        const isUnsupported = UNSUPPORTED_PROVIDERS.has(imgGenProvider);
         const models = IMG_GEN_MODELS[imgGenProvider] || [];
         const sizes = IMG_GEN_SIZES[imgGenProvider] || [];
         const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' ? '尺寸' : '比例';
@@ -586,43 +516,63 @@ export default function MiscPanel({
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
             <div>
               <label className={labelCls}>服务商</label>
-              <select className={fieldCls} value={imgGenProvider} onChange={e => onImgGenProviderChange(e.target.value)}>
-                {IMG_GEN_PROVIDERS.map(p => <option key={p} value={p}>{IMG_GEN_PROVIDER_LABELS[p] || p}</option>)}
-              </select>
+              <div className="grid grid-cols-3 gap-2">
+                {IMG_GEN_PROVIDERS.map(p => (
+                  <button key={p} onClick={() => onImgGenProviderChange(p)} className={`${PILL_BASE} ${imgGenProvider === p ? PILL_ON : PILL_OFF}`}>
+                    {shortProv(IMG_GEN_PROVIDER_LABELS[p] || p)}
+                  </button>
+                ))}
+              </div>
+              {imgGenProvider === 'flux' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，无需 API Key，首次需下载模型（约 2 GB）</p>}
+              {imgGenProvider === 'comfyui' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">需提前在本地启动 ComfyUI 服务（默认端口 8188）</p>}
+              {imgGenProvider === 'openai' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">DALL-E 3 支持自然语言描述，效果出色</p>}
+              {imgGenProvider === 'gemini' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">Imagen 3，支持多种宽高比，需要 Google AI API Key</p>}
+              {imgGenProvider === 'stability' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">Stability AI SD3，风格多样，需要 API Key</p>}
+              {imgGenProvider === 'dashscope' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">通义万象，需要阿里云百炼 API Key</p>}
             </div>
-            {isLocal ? (
+            {isComfyUI ? (
               <div>
                 <label className={labelCls}>ComfyUI 服务地址</label>
                 <input className={fieldCls} value={imgGenComfyUrl} onChange={e => setImgGenComfyUrl(e.target.value)} placeholder="http://127.0.0.1:8188" />
               </div>
-            ) : (
+            ) : !isLocal ? (
               <div>
                 <label className={labelCls}>API Key</label>
                 <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / AIza... / Bearer ..." />
               </div>
-            )}
-            {models.length > 0 && (
-              <div>
-                <label className={labelCls}>模型</label>
-                <select className={fieldCls} value={imgGenModel} onChange={e => setImgGenModel(e.target.value)}>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            )}
+            ) : null}
+            <div>
+              <label className={labelCls}>模型</label>
+              <ComboSelect
+                value={imgGenModel}
+                onChange={setImgGenModel}
+                options={models.map(m => ({ value: m, label: m }))}
+                placeholder={models[0] ? `默认：${models[0]}` : '输入模型名称'}
+                allowCustom
+              />
+              {imgGenModel === 'dall-e-3' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">质量最高，支持详细文字提示词</p>}
+              {imgGenModel === 'dall-e-2' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">速度较快，价格更低</p>}
+              {imgGenModel === 'sd3-large-turbo' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">Turbo 版，速度最快</p>}
+              {imgGenModel === 'sd3-large' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">标准版，质量最高</p>}
+              {imgGenModel === 'imagen-3.0-fast-generate-001' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">快速版，速度更快</p>}
+            </div>
             {sizes.length > 0 && (
               <div>
                 <label className={labelCls}>{sizeLabel}</label>
-                <select className={fieldCls} value={imgGenSize} onChange={e => setImgGenSize(e.target.value)}>
-                  {sizes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <ComboSelect
+                  value={imgGenSize}
+                  onChange={setImgGenSize}
+                  options={sizes.map(s => ({ value: s, label: s }))}
+                  placeholder="选择尺寸"
+                />
               </div>
             )}
             <div>
               <label className={labelCls}>图像描述（提示词）</label>
               <textarea rows={4} className={fieldCls} value={imgGenPrompt} onChange={e => setImgGenPrompt(e.target.value)} placeholder="描述你想生成的图像内容，越详细越好..." />
             </div>
-            <button className={`${btnPrimary} !bg-pink-600 hover:!bg-pink-700`} disabled={busy || !imgGenPrompt.trim()} onClick={onRunImgGen}>
-              {busy ? '生成中...' : '生成图像'}
+            <button className={`${btnPrimary} !bg-pink-600 hover:!bg-pink-700`} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={onRunImgGen}>
+              {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成图像'}
             </button>
           </div>
         );
@@ -630,36 +580,46 @@ export default function MiscPanel({
 
       {/* ── 换脸换图 ── */}
       {miscSubPage === 'img_i2i' && (() => {
-        const isLocal = imgI2iProvider === 'comfyui';
+        const isComfyUI = imgI2iProvider === 'comfyui';
+        const isLocal = LOCAL_PROVIDERS.has(imgI2iProvider);
+        const isUnsupported = UNSUPPORTED_PROVIDERS.has(imgI2iProvider);
         const models = IMG_I2I_MODELS[imgI2iProvider] || [];
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
             <div>
               <label className={labelCls}>服务商</label>
-              <select className={fieldCls} value={imgI2iProvider} onChange={e => onImgI2iProviderChange(e.target.value)}>
-                {IMG_I2I_PROVIDERS.map(p => <option key={p} value={p}>{IMG_I2I_PROVIDER_LABELS[p] || p}</option>)}
-              </select>
-              {isLocal && (
-                <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">⚠️ Mac 用户：换脸功能建议使用云端服务商（ComfyUI 换脸节点在 Apple Silicon 上仅支持 CPU 模式，速度较慢）</p>
-              )}
+              <div className="grid grid-cols-3 gap-2">
+                {IMG_I2I_PROVIDERS.map(p => (
+                  <button key={p} onClick={() => onImgI2iProviderChange(p)} className={`${PILL_BASE} ${imgI2iProvider === p ? PILL_ON : PILL_OFF}`}>
+                    {shortProv(IMG_I2I_PROVIDER_LABELS[p] || p)}
+                  </button>
+                ))}
+              </div>
+              {imgI2iProvider === 'facefusion' && <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">⚠️ Mac 用户：FaceFusion 在 Apple Silicon 上回退 CPU 模式，速度较慢</p>}
+              {imgI2iProvider === 'comfyui' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">需提前在本地启动 ComfyUI 服务，适合风格迁移</p>}
+              {(imgI2iProvider === 'replicate' || imgI2iProvider === 'dashscope') && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
             </div>
-            {isLocal ? (
+            {isComfyUI ? (
               <div>
                 <label className={labelCls}>ComfyUI 服务地址</label>
                 <input className={fieldCls} value={imgI2iComfyUrl} onChange={e => setImgI2iComfyUrl(e.target.value)} placeholder="http://127.0.0.1:8188" />
               </div>
-            ) : (
+            ) : !isLocal ? (
               <div>
                 <label className={labelCls}>API Key</label>
                 <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
               </div>
-            )}
+            ) : null}
             {models.length > 0 && (
               <div>
                 <label className={labelCls}>模型</label>
-                <select className={fieldCls} value={imgI2iModel} onChange={e => setImgI2iModel(e.target.value)}>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <ComboSelect
+                  value={imgI2iModel}
+                  onChange={setImgI2iModel}
+                  options={models.map(m => ({ value: m, label: m }))}
+                  allowCustom
+                  placeholder="选择模型"
+                />
               </div>
             )}
             <div>
@@ -678,8 +638,8 @@ export default function MiscPanel({
               <label className={labelCls}>变化强度 {imgI2iStrength.toFixed(2)}（0 = 几乎不变，1 = 完全重绘）</label>
               <input type="range" min={0} max={1} step={0.05} value={imgI2iStrength} onChange={e => setImgI2iStrength(Number(e.target.value))} className="w-full accent-rose-500" />
             </div>
-            <button className={`${btnPrimary} !bg-rose-600 hover:!bg-rose-700`} disabled={busy || !imgI2iSourceFile} onClick={onRunImgI2i}>
-              {busy ? '处理中...' : '开始换脸换图'}
+            <button className={`${btnPrimary} !bg-rose-600 hover:!bg-rose-700`} disabled={busy || !imgI2iSourceFile || isUnsupported} onClick={onRunImgI2i}>
+              {busy ? '处理中...' : isUnsupported ? '暂不支持' : '开始换脸换图'}
             </button>
           </div>
         );
@@ -687,29 +647,46 @@ export default function MiscPanel({
 
       {/* ── 视频生成 ── */}
       {miscSubPage === 'video_gen' && (() => {
+        const isLocal = LOCAL_PROVIDERS.has(videoGenProvider);
+        const isUnsupported = UNSUPPORTED_PROVIDERS.has(videoGenProvider);
         const models = VIDEO_GEN_MODELS[videoGenProvider] || [];
         const durations = VIDEO_GEN_DURATIONS[videoGenProvider] || [5];
-        const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
+        const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_local' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
             <div>
               <label className={labelCls}>服务商</label>
-              <select className={fieldCls} value={videoGenProvider} onChange={e => onVideoGenProviderChange(e.target.value)}>
-                {VIDEO_GEN_PROVIDERS.map(p => <option key={p} value={p}>{VIDEO_GEN_PROVIDER_LABELS[p] || p}</option>)}
-              </select>
+              <div className="grid grid-cols-3 gap-2">
+                {VIDEO_GEN_PROVIDERS.map(p => (
+                  <button key={p} onClick={() => onVideoGenProviderChange(p)} className={`${PILL_BASE} ${videoGenProvider === p ? PILL_ON : PILL_OFF}`}>
+                    {shortProv(VIDEO_GEN_PROVIDER_LABELS[p] || p)}
+                  </button>
+                ))}
+              </div>
+              {videoGenProvider === 'wan_local' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，无需 API Key，首次需下载模型（约 6 GB）</p>}
+              {videoGenProvider === 'kling' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">快手可灵，需要 Kling API Key（klingai.com）</p>}
+              {(videoGenProvider === 'wan_video' || videoGenProvider === 'runway' || videoGenProvider === 'pika' || videoGenProvider === 'sora') && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
             </div>
-            <div>
-              <label className={labelCls}>API Key</label>
-              <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
-            </div>
-            {models.length > 0 && (
+            {!isLocal && (
               <div>
-                <label className={labelCls}>模型</label>
-                <select className={fieldCls} value={videoGenModel} onChange={e => setVideoGenModel(e.target.value)}>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <label className={labelCls}>API Key</label>
+                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
               </div>
             )}
+            <div>
+              <label className={labelCls}>模型</label>
+              <ComboSelect
+                value={videoGenModel}
+                onChange={setVideoGenModel}
+                options={models.map(m => ({ value: m, label: m }))}
+                placeholder={models[0] ? `默认：${models[0]}` : '输入模型名称'}
+                allowCustom
+              />
+              {videoGenModel === 'Wan2.1-T2V-1.3B' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">文生视频（T2V），1.3B 轻量本地版</p>}
+              {videoGenModel === 'Wan2.1-I2V-1.3B' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">图生视频（I2V），需配合上方参考图片使用</p>}
+              {videoGenModel === 'kling-v2' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">可灵最新版，画质最佳</p>}
+              {videoGenModel === 'kling-v1-5' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">可灵 v1.5，速度与质量平衡</p>}
+            </div>
             {supportsI2v && (
               <div>
                 <label className={labelCls}>生成模式</label>
@@ -735,9 +712,12 @@ export default function MiscPanel({
             )}
             <div>
               <label className={labelCls}>时长（秒）</label>
-              <select className={fieldCls} value={videoGenDuration} onChange={e => setVideoGenDuration(Number(e.target.value))}>
-                {durations.map(d => <option key={d} value={d}>{d} 秒</option>)}
-              </select>
+              <ComboSelect
+                value={String(videoGenDuration)}
+                onChange={v => setVideoGenDuration(Number(v))}
+                options={durations.map(d => ({ value: String(d), label: `${d} 秒` }))}
+                placeholder="选择时长"
+              />
             </div>
             <div>
               <label className={labelCls}>视频描述（提示词）</label>
@@ -745,9 +725,9 @@ export default function MiscPanel({
             </div>
             <button
               className={btnPrimary}
-              disabled={busy || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
+              disabled={busy || isUnsupported || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
               onClick={onRunVideoGen}>
-              {busy ? '生成中...' : '生成视频'}
+              {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成视频'}
             </button>
           </div>
         );
@@ -755,44 +735,51 @@ export default function MiscPanel({
 
       {/* ── OCR 文档识别 ── */}
       {miscSubPage === 'ocr' && (() => {
-        const isLocal = ocrProvider === 'got_ocr';
+        const isLocal = LOCAL_PROVIDERS.has(ocrProvider);
+        const isUnsupported = UNSUPPORTED_PROVIDERS.has(ocrProvider);
         const models = OCR_MODELS[ocrProvider] || [];
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
             <div>
               <label className={labelCls}>服务商</label>
-              <select className={fieldCls} value={ocrProvider} onChange={e => onOcrProviderChange(e.target.value)}>
-                {OCR_PROVIDERS.map(p => <option key={p} value={p}>{OCR_PROVIDER_LABELS[p] || p}</option>)}
-              </select>
-              {isLocal && (
-                <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">GOT-OCR2.0：支持复杂图表、数学公式、扫描文档，两台机器均可本地运行</p>
-              )}
-            </div>
-            {isLocal ? (
-              <div>
-                <label className={labelCls}>本地服务地址</label>
-                <input className={fieldCls} value={ocrLocalUrl} onChange={e => setOcrLocalUrl(e.target.value)} placeholder="http://127.0.0.1:8890" />
+              <div className="grid grid-cols-2 gap-2">
+                {OCR_PROVIDERS.map(p => (
+                  <button key={p} onClick={() => onOcrProviderChange(p)} className={`${PILL_BASE} ${ocrProvider === p ? PILL_ON : PILL_OFF}`}>
+                    {shortProv(OCR_PROVIDER_LABELS[p] || p)}
+                  </button>
+                ))}
               </div>
-            ) : (
+              {ocrProvider === 'got_ocr' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">支持复杂图表、数学公式、扫描文档，首次需下载模型（约 1 GB）</p>}
+              {ocrProvider === 'azure_doc' && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
+              {ocrProvider === 'openai' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">基于 GPT-4o 视觉能力，适合通用文字与排版识别</p>}
+              {ocrProvider === 'gemini' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">基于 Gemini 视觉能力，免费额度充足，适合批量识别</p>}
+            </div>
+            {!isLocal && (
               <div>
                 <label className={labelCls}>API Key</label>
                 <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / AIza... / Bearer ..." />
               </div>
             )}
-            {models.length > 0 && (
-              <div>
-                <label className={labelCls}>模型</label>
-                <select className={fieldCls} value={ocrModel} onChange={e => setOcrModel(e.target.value)}>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className={labelCls}>模型</label>
+              <ComboSelect
+                value={ocrModel}
+                onChange={setOcrModel}
+                options={models.map(m => ({ value: m, label: m }))}
+                placeholder={models[0] ? `默认：${models[0]}` : '输入模型名称'}
+                allowCustom
+              />
+              {ocrModel === 'gpt-4o' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">识别精度最高，价格较贵</p>}
+              {ocrModel === 'gpt-4o-mini' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">速度快、价格低，适合简单文档</p>}
+              {ocrModel === 'gemini-2.5-flash' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">速度快，免费额度充足</p>}
+              {ocrModel === 'gemini-2.5-pro' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">精度更高，适合复杂版面</p>}
+            </div>
             <div>
               <label className={labelCls}>上传图片 / 文档（PDF、PNG、JPG 等）</label>
               <input type="file" accept="image/*,.pdf" className={fileCls} onChange={e => setOcrFile(e.target.files?.[0] ?? null)} />
             </div>
-            <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !ocrFile} onClick={onRunOcr}>
-              {busy ? '识别中...' : '开始 OCR 识别'}
+            <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !ocrFile || isUnsupported} onClick={onRunOcr}>
+              {busy ? '识别中...' : isUnsupported ? '暂不支持' : '开始 OCR 识别'}
             </button>
           </div>
         );
@@ -800,25 +787,24 @@ export default function MiscPanel({
 
       {/* ── 口型同步 ── */}
       {miscSubPage === 'lipsync' && (() => {
-        const isLocal = lipsyncProvider === 'liveportrait' || lipsyncProvider === 'sadtalker';
+        const isLocal = LOCAL_PROVIDERS.has(lipsyncProvider);
+        const isUnsupported = UNSUPPORTED_PROVIDERS.has(lipsyncProvider);
         const models = LIPSYNC_MODELS[lipsyncProvider] || [];
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
             <div>
               <label className={labelCls}>服务商</label>
-              <select className={fieldCls} value={lipsyncProvider} onChange={e => onLipsyncProviderChange(e.target.value)}>
-                {LIPSYNC_PROVIDERS.map(p => <option key={p} value={p}>{LIPSYNC_PROVIDER_LABELS[p] || p}</option>)}
-              </select>
-              {isLocal && (
-                <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">LivePortrait：物理拟真度最高，~4GB VRAM，两台机器均支持（4050 CUDA / MBP MPS）</p>
-              )}
-            </div>
-            {isLocal ? (
-              <div>
-                <label className={labelCls}>本地服务地址（Gradio / API）</label>
-                <input className={fieldCls} value={lipsyncLocalUrl} onChange={e => setLipsyncLocalUrl(e.target.value)} placeholder="http://127.0.0.1:7860" />
+              <div className="grid grid-cols-2 gap-2">
+                {LIPSYNC_PROVIDERS.map(p => (
+                  <button key={p} onClick={() => onLipsyncProviderChange(p)} className={`${PILL_BASE} ${lipsyncProvider === p ? PILL_ON : PILL_OFF}`}>
+                    {shortProv(LIPSYNC_PROVIDER_LABELS[p] || p)}
+                  </button>
+                ))}
               </div>
-            ) : (
+              {lipsyncProvider === 'liveportrait' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，用驱动视频的表情/动作生成人物动画，无需 API Key</p>}
+              {(lipsyncProvider === 'sadtalker' || lipsyncProvider === 'heygen' || lipsyncProvider === 'did') && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
+            </div>
+            {!isLocal && (
               <div>
                 <label className={labelCls}>API Key</label>
                 <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
@@ -827,21 +813,39 @@ export default function MiscPanel({
             {models.length > 0 && (
               <div>
                 <label className={labelCls}>模型</label>
-                <select className={fieldCls} value={lipsyncModel} onChange={e => setLipsyncModel(e.target.value)}>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <ComboSelect
+                  value={lipsyncModel}
+                  onChange={setLipsyncModel}
+                  options={models.map(m => ({ value: m, label: m }))}
+                  allowCustom
+                  placeholder="选择模型"
+                />
               </div>
             )}
             <div>
-              <label className={labelCls}>视频 / 人物图片（驱动源）</label>
-              <input type="file" accept="video/*,image/*" className={fileCls} onChange={e => setLipsyncVideoFile(e.target.files?.[0] ?? null)} />
+              <label className={labelCls}>
+                {lipsyncProvider === 'liveportrait' ? '人物图片（源人脸）' : '视频 / 人物图片（驱动源）'}
+              </label>
+              <input
+                type="file"
+                accept={lipsyncProvider === 'liveportrait' ? 'image/*' : 'video/*,image/*'}
+                className={fileCls}
+                onChange={e => setLipsyncVideoFile(e.target.files?.[0] ?? null)}
+              />
             </div>
             <div>
-              <label className={labelCls}>音频文件（目标口型音频）</label>
-              <input type="file" accept="audio/*" className={fileCls} onChange={e => setLipsyncAudioFile(e.target.files?.[0] ?? null)} />
+              <label className={labelCls}>
+                {lipsyncProvider === 'liveportrait' ? '驱动视频（提供动作/表情）' : '音频文件（目标口型音频）'}
+              </label>
+              <input
+                type="file"
+                accept={lipsyncProvider === 'liveportrait' ? 'video/*' : 'audio/*'}
+                className={fileCls}
+                onChange={e => setLipsyncAudioFile(e.target.files?.[0] ?? null)}
+              />
             </div>
-            <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile} onClick={onRunLipsync}>
-              {busy ? '处理中...' : '开始口型同步'}
+            <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile || isUnsupported} onClick={onRunLipsync}>
+              {busy ? '处理中...' : isUnsupported ? '暂不支持' : '开始口型同步'}
             </button>
           </div>
         );

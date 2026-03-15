@@ -31,14 +31,14 @@ export function useImageExt({
 }: UseImageExtProps) {
 
   // ── 图像生成状态 ──
-  const [imgGenProvider, setImgGenProvider] = useState('comfyui');
+  const [imgGenProvider, setImgGenProvider] = useState('flux');
   const [imgGenPrompt, setImgGenPrompt] = useState('');
   const [imgGenModel, setImgGenModel] = useState('');
   const [imgGenSize, setImgGenSize] = useState('1024x1024');
   const [imgGenComfyUrl, setImgGenComfyUrl] = useState('http://127.0.0.1:8188');
 
   // ── 换脸换图状态 ──
-  const [imgI2iProvider, setImgI2iProvider] = useState('comfyui');
+  const [imgI2iProvider, setImgI2iProvider] = useState('facefusion');
   const [imgI2iSourceFile, setImgI2iSourceFile] = useState<File | null>(null);
   const [imgI2iRefFile, setImgI2iRefFile] = useState<File | null>(null);
   const [imgI2iPrompt, setImgI2iPrompt] = useState('');
@@ -47,9 +47,9 @@ export function useImageExt({
   const [imgI2iComfyUrl, setImgI2iComfyUrl] = useState('http://127.0.0.1:8188');
 
   // ── 视频生成状态 ──
-  const [videoGenProvider, setVideoGenProvider] = useState('kling');
+  const [videoGenProvider, setVideoGenProvider] = useState('wan_local');
   const [videoGenPrompt, setVideoGenPrompt] = useState('');
-  const [videoGenModel, setVideoGenModel] = useState('kling-v2');
+  const [videoGenModel, setVideoGenModel] = useState('Wan2.1-T2V-1.3B');
   const [videoGenDuration, setVideoGenDuration] = useState(5);
   const [videoGenImageFile, setVideoGenImageFile] = useState<File | null>(null);
   const [videoGenMode, setVideoGenMode] = useState<'t2v' | 'i2v'>('t2v');
@@ -205,10 +205,10 @@ export function useImageExt({
       const res = await fetch(`${backendBaseUrl}/tasks/ocr`, { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
-      addInstantJobResult('ocr', `OCR · ${ocrFile.name}`, ocrProvider, ocrProvider === 'got_ocr', {
-        status: 'completed', result_text: data.text || '',
-      });
-      onNavigateTasks();
+      if (data.job_id) {
+        await fetchJobs();
+        onNavigateTasks();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'OCR 识别失败');
     } finally {

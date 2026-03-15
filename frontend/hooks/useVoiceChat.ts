@@ -16,13 +16,13 @@ export function useVoiceChat({
 }: UseVoiceChatParams) {
   const [vchatMsgs, setVchatMsgs] = useState<VoiceChatMsg[]>([]);
   const [vchatStatus, setVchatStatus] = useState<VoiceChatStatus>('idle');
-  const [vchatSttProvider, setVchatSttProvider] = useState('whisper');
+  const [vchatSttProvider, setVchatSttProvider] = useState('faster_whisper');
   const [vchatSttModel, setVchatSttModel] = useState('');
   const [vchatLlmProvider, setVchatLlmProvider] = useState('gemini');
   const [vchatLlmModel, setVchatLlmModel] = useState('');
   const [vchatTtsProvider, setVchatTtsProvider] = useState('fish_speech');
   const [vchatTtsModel, setVchatTtsModel] = useState('');
-  const [vchatVoiceId, setVchatVoiceId] = useState('');
+  const [vchatTtsRefAudio, setVchatTtsRefAudio] = useState<File | null>(null);
   const [vchatApiKey, setVchatApiKey] = useState('');
   const [vchatEndpoint, setVchatEndpoint] = useState('');
   const vchatScrollRef = useRef<HTMLDivElement>(null);
@@ -103,8 +103,8 @@ export function useVoiceChat({
       ttsFd.append('model', vchatTtsModel);
       ttsFd.append('api_key', vchatIsLocalTts() ? '' : vchatApiKey);
       ttsFd.append('cloud_endpoint', vchatEndpoint);
-      ttsFd.append('voice_id', vchatVoiceId);
       ttsFd.append('output_dir', '');
+      if (vchatTtsRefAudio) ttsFd.append('reference_audio', vchatTtsRefAudio, vchatTtsRefAudio.name);
       const ttsRes = await fetch(`${backendBaseUrl}/tasks/tts`, { method: 'POST', body: ttsFd });
       const ttsData = await safeJson(ttsRes);
       let audioUrl = '';
@@ -136,7 +136,7 @@ export function useVoiceChat({
     vchatLlmModel, setVchatLlmModel,
     vchatTtsProvider, setVchatTtsProvider,
     vchatTtsModel, setVchatTtsModel,
-    vchatVoiceId, setVchatVoiceId,
+    vchatTtsRefAudio, setVchatTtsRefAudio,
     vchatApiKey, setVchatApiKey,
     vchatEndpoint, setVchatEndpoint,
     vchatScrollRef,

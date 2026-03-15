@@ -62,6 +62,7 @@ interface MediaPanelProps {
   setSubtitleOutputFmt: (v: 'srt' | 'vtt') => void;
   hwAccel: string;
   setHwAccel: (v: string) => void;
+  hwAccelDetected: string;
   outputDir: string;
   setOutputDir: (v: string) => void;
   status: string;
@@ -99,7 +100,7 @@ export default function MediaPanel({
   durationMin, setDurationMin, durationSec, setDurationSec,
   endMin, setEndMin, endSec, setEndSec,
   subtitleOutputFmt, setSubtitleOutputFmt,
-  hwAccel, setHwAccel,
+  hwAccel, setHwAccel, hwAccelDetected,
   outputDir, setOutputDir,
   status, onRunMediaConvert, onRunSubtitleConvert,
   fieldCls, fileCls, labelCls, btnSec,
@@ -116,28 +117,11 @@ export default function MediaPanel({
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
 
-      {/* 操作选择 — 四项并排 */}
-      <div className="space-y-2">
-        <span className={labelCls}>操作</span>
-        <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
-          {([
-            { value: 'convert',          label: '格式转换' },
-            { value: 'clip',             label: '截取片段' },
-            { value: 'subtitle_extract', label: '提取字幕' },
-            { value: 'subtitle_convert', label: '字幕互转' },
-          ] as { value: MediaAction; label: string }[]).map(opt => (
-            <button key={opt.value}
-              className={`flex-1 py-2 text-sm font-medium transition-all ${mediaAction === opt.value ? 'bg-slate-800 dark:bg-slate-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200'}`}
-              onClick={() => { setMediaAction(opt.value); setMediaFile(null); }}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* 输入文件 */}
       <label className="block">
-        <span className={labelCls}>输入文件</span>
+        <span className={labelCls}>
+          {mediaAction === 'subtitle_extract' ? '输入视频（必须内嵌字幕轨道）' : '输入文件'}
+        </span>
         <input className={fileCls} type="file"
           accept={
             mediaAction === 'subtitle_convert' ? '.srt,.vtt,.ass,.ssa' :
@@ -199,7 +183,11 @@ export default function MediaPanel({
             ))}
           </select>
           {hwAccel === 'auto' && (
-            <p className="text-xs text-slate-400 dark:text-slate-500">自动按顺序探测：Mac GPU → NVIDIA → Intel → AMD → 软件</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {hwAccelDetected
+                ? <><span className="text-emerald-600 dark:text-emerald-400 font-medium">已检测：</span>{hwAccelDetected}</>
+                : '检测中...'}
+            </p>
           )}
           {hwAccel === 'software' && (
             <p className="text-xs text-amber-500">软件编码会占用大量 CPU，可能导致发热，建议仅在硬件加速不可用时使用</p>

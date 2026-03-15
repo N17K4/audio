@@ -47,7 +47,6 @@ async def run_facefusion_i2i(
         "--target-path", target_image_path,
         "--output-path", output_path,
         "--execution-providers", "cuda" if _has_cuda() else "cpu",
-        "--headless",
     ]
     if model:
         cmd += ["--face-swapper-model", model]

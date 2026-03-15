@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState, useRef } from 'react';
 import type { Status, Job } from '../types';
 import { LOCAL_PROVIDERS } from '../constants';
 import { safeJson } from '../utils';
@@ -69,6 +69,9 @@ export function useVC({
   rvcRmsMixRate,
   rvcProtect,
 }: UseVCParams) {
+  const [vcRecordedFile, setVcRecordedFile] = useState<File | null>(null);
+  const [vcRecordedObjectUrl, setVcRecordedObjectUrl] = useState<string | null>(null);
+  const [vcRecordingDir, setVcRecordingDir] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const abortCtrlRef = useRef<AbortController | null>(null);
@@ -151,8 +154,18 @@ export function useVC({
       const recorder = new MediaRecorder(audioStream);
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
+        audioStream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        await handleVoiceConvert(blob);
+        if (vcRecordedObjectUrl) URL.revokeObjectURL(vcRecordedObjectUrl);
+        setVcRecordedObjectUrl(URL.createObjectURL(blob));
+        setVcRecordedFile(new File([blob], 'recording.webm', { type: 'audio/webm' }));
+        const api = window.electronAPI;
+        if (api?.saveRecording) {
+          const fname = `vc_recording_${Date.now()}.webm`;
+          const dir = await api.saveRecording(fname, await blob.arrayBuffer());
+          setVcRecordingDir(dir);
+        }
+        setStatus('idle');
       };
       recorder.start();
       recorderRef.current = recorder;
@@ -163,9 +176,16 @@ export function useVC({
     }
   }
 
-  function stopVcRecording() { recorderRef.current?.stop(); setStatus('processing'); }
+  function stopVcRecording() { recorderRef.current?.stop(); }
+
+  function clearVcRecording() {
+    if (vcRecordedObjectUrl) URL.revokeObjectURL(vcRecordedObjectUrl);
+    setVcRecordedFile(null);
+    setVcRecordedObjectUrl(null);
+    setVcRecordingDir(null);
+  }
 
   function abortCurrentRequest() { abortCtrlRef.current?.abort(); }
 
-  return { handleVoiceConvert, startVcRecording, stopVcRecording, abortCurrentRequest };
+  return { handleVoiceConvert, startVcRecording, stopVcRecording, vcRecordedFile, vcRecordedObjectUrl, vcRecordingDir, clearVcRecording, abortCurrentRequest };
 }

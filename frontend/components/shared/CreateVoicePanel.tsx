@@ -12,6 +12,7 @@ interface CreateVoicePanelProps {
   setShowCreateVoice: (v: boolean) => void;
   onCreateVoice: () => void;
   fieldCls: string;
+  fileCls: string;
   labelCls: string;
 }
 
@@ -28,6 +29,7 @@ export default function CreateVoicePanel({
   setShowCreateVoice,
   onCreateVoice,
   fieldCls,
+  fileCls,
   labelCls,
 }: CreateVoicePanelProps) {
   const eng = engine || newVoiceEngine;
@@ -60,12 +62,12 @@ export default function CreateVoicePanel({
         <>
           <label className="block">
             <span className={labelCls}>模型文件 .pth（必填）</span>
-            <input className={fieldCls} type="file" accept=".pth,.onnx,.pt,.safetensors"
+            <input className={fileCls} type="file" accept=".pth,.onnx,.pt,.safetensors"
               onChange={e => setNewVoiceModel(e.target.files?.[0] || null)} />
           </label>
           <label className="block">
             <span className={labelCls}>索引文件 .index（可选）</span>
-            <input className={fieldCls} type="file" accept=".index"
+            <input className={fileCls} type="file" accept=".index"
               onChange={e => setNewVoiceIndex(e.target.files?.[0] || null)} />
           </label>
         </>
@@ -74,7 +76,7 @@ export default function CreateVoicePanel({
         <span className={labelCls}>
           {isRvc ? '参考音频（可选，用于音色预览）' : '参考音频（必填，用于声音克隆）'}
         </span>
-        <input className={fieldCls} type="file" accept="audio/*"
+        <input className={fileCls} type="file" accept="audio/*"
           onChange={e => setNewVoiceRef(e.target.files?.[0] || null)} />
       </label>
       <button className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"

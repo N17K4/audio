@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import traceback
 import uuid
 from pathlib import Path
@@ -116,7 +117,7 @@ async def _run_tts_job(job_id: str, fn, *fn_args) -> None:
     if not job:
         return
     is_local = job.get("is_local", False)
-    ctx = LOCAL_SEM if is_local else asyncio.nullcontext()
+    ctx = LOCAL_SEM if is_local else contextlib.nullcontext()
     async with ctx:
         if JOBS.get(job_id) is None:
             return

@@ -158,7 +158,7 @@
           "path": "hubert_base.pt",
           "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt",
           "size_mb": 360,
-          "required": false,
+          "required": true,
           "_note": "ContentVec 特征提取器，RVC 音色训练时需要",
           "sha256": "f54b40fd2802423a5643779c4861af1e9ee9c1564dc9d32f54f20b5ffba7db96"
         },
@@ -166,7 +166,7 @@
           "path": "pretrained_v2/f0G40k.pth",
           "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/pretrained_v2/f0G40k.pth",
           "size_mb": 400,
-          "required": false,
+          "required": true,
           "_note": "RVC v2 预训练生成器，音色训练后用作基础模型",
           "sha256": "3b2c44035e782c4b14ddc0bede9e2f4a724d025cd073f736d4f43708453adfcb"
         }
@@ -216,6 +216,183 @@
         }
       ],
       "env_key": "WHISPER_CHECKPOINT_DIR"
+    },
+    "got_ocr": {
+      "version": "2.0",
+      "code_dir": "runtime/got_ocr",
+      "checkpoint_dir": "checkpoints/got_ocr",
+      "pip_packages": [
+        "transformers>=4.48,<6",
+        "tiktoken",
+        "verovio",
+        "pymupdf"
+      ],
+      "runtime_pip_packages": [
+        "torch",
+        "torchvision",
+        "Pillow"
+      ],
+      "hf_cache_downloads": [
+        {
+          "repo_id": "stepfun-ai/GOT-OCR-2.0-hf",
+          "revision": "d3017ef2c2c1395888c8d635c5e0508bcb0ac78d",
+          "cache_dir_rel": "checkpoints/hf_cache",
+          "size_mb": 1500,
+          "required": false,
+          "note": "GOT-OCR2.0 580M 参数 OCR 模型，存入全局 HF cache"
+        }
+      ],
+      "env_key": "GOT_OCR_CHECKPOINT_DIR"
+    },
+    "liveportrait": {
+      "version": "3.x-fp16",
+      "code_dir": "runtime/liveportrait",
+      "checkpoint_dir": "checkpoints/liveportrait",
+      "pip_packages": [
+        "imageio",
+        "imageio-ffmpeg",
+        "av",
+        "omegaconf",
+        "einops",
+        "safetensors",
+        "onnx",
+        "onnxruntime",
+        "scikit-image"
+      ],
+      "runtime_pip_packages": [
+        "torch",
+        "torchvision",
+        "Pillow",
+        "liveportrait"
+      ],
+      "hf_cache_downloads": [
+        {
+          "repo_id": "KwaiVGI/LivePortrait",
+          "revision": "main",
+          "cache_dir_rel": "checkpoints/hf_cache",
+          "size_mb": 1800,
+          "required": false,
+          "note": "LivePortrait FP16 模型（外观特征提取、运动提取、warping、生成器等，含 animals 版）"
+        }
+      ],
+      "_note": "引擎通过 pip install liveportrait 安装，或克隆到 runtime/liveportrait/engine/",
+      "env_key": "LIVEPORTRAIT_CHECKPOINT_DIR"
+    },
+    "facefusion": {
+      "version": "3.5.4",
+      "code_dir": "runtime/facefusion/engine",
+      "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
+      "pip_packages": [
+        "onnxruntime"
+      ],
+      "runtime_pip_packages": [],
+      "_setup_note": "FaceFusion 3.x 需 clone https://github.com/facefusion/facefusion.git 到 runtime/facefusion/engine/，然后运行其 install.py。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
+      "env_key": "FACEFUSION_CHECKPOINT_DIR",
+      "checkpoint_files": [
+        {
+          "path": "retinaface_10g.onnx",
+          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/retinaface_10g.onnx",
+          "size_mb": 16,
+          "required": true,
+          "_note": "人脸检测器（RetinaFace）",
+          "sha256": "808399c3d0b40ed340634ed590ae564a7caa09e5659916923a95d4470b54ff5a"
+        },
+        {
+          "path": "arcface_w600k_r50.onnx",
+          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/arcface_w600k_r50.onnx",
+          "size_mb": 166,
+          "required": true,
+          "_note": "人脸识别器（ArcFace ResNet-50）",
+          "sha256": "f1f79dc3b0b79a69f94799af1fffebff09fbd78fd96a275fd8f0cbbea23270d1"
+        },
+        {
+          "path": "2dfan4.onnx",
+          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/2dfan4.onnx",
+          "size_mb": 93,
+          "required": true,
+          "_note": "人脸关键点（2D-FAN-4）",
+          "sha256": "678c6fa539d52335a31c980feefdf4a6e02d781d83dce00af8a894f114557285"
+        },
+        {
+          "path": "inswapper_128_fp16.onnx",
+          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/inswapper_128_fp16.onnx",
+          "size_mb": 265,
+          "required": true,
+          "_note": "换脸模型（InSwapper 128 FP16）",
+          "sha256": "c4eccca86ad177586c85c28bf1a64a9d9ed237e283a15818d831f7facfd3f420"
+        }
+      ]
+    },
+    "wan": {
+      "version": "2.1",
+      "code_dir": "runtime/wan",
+      "checkpoint_dir": "checkpoints/wan",
+      "pip_packages": [
+        "diffusers>=0.30",
+        "accelerate",
+        "imageio",
+        "imageio-ffmpeg"
+      ],
+      "runtime_pip_packages": [
+        "torch",
+        "torchvision",
+        "transformers>=4.40",
+        "Pillow"
+      ],
+      "hf_cache_downloads": [
+        {
+          "repo_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+          "revision": "0fad780a534b6463e45facd96134c9f345acfa5b",
+          "cache_dir_rel": "checkpoints/hf_cache",
+          "size_mb": 15600,
+          "note": "Wan 2.1 T2V 1.3B 官方 diffusers 格式（含 model_index.json）。包含：transformer ~5.3GB + umt5-XXL 文本编码器 ~9.8GB + VAE ~484MB，合计约 15.6GB",
+          "required": false
+        }
+      ],
+      "env_key": "WAN_CHECKPOINT_DIR",
+      "_note": "注意：原始 Wan-AI/Wan2.1-T2V-1.3B 是 .pth 原始格式，diffusers 无法加载。必须使用 Wan-AI/Wan2.1-T2V-1.3B-Diffusers。Wan2.1-T2V-14B 体积约 22GB，可手动运行 pnpm run checkpoints --engine wan 下载"
+    },
+    "flux": {
+      "version": "1.0-schnell-Q4_K_M",
+      "code_dir": "runtime/flux",
+      "checkpoint_dir": "checkpoints/flux",
+      "pip_packages": [
+        "gguf",
+        "diffusers>=0.32",
+        "accelerate",
+        "sentencepiece",
+        "protobuf"
+      ],
+      "runtime_pip_packages": [
+        "torch",
+        "torchvision",
+        "transformers",
+        "Pillow"
+      ],
+      "hf_cache_downloads": [
+        {
+          "repo_id": "city96/FLUX.1-schnell-gguf",
+          "filename": "flux1-schnell-Q4_K_S.gguf",
+          "revision": "main",
+          "cache_dir_rel": "checkpoints/flux",
+          "size_mb": 6468,
+          "required": false,
+          "note": "Flux.1-Schnell GGUF Q4_K_S Transformer（无门控，~6.5GB）"
+        },
+        {
+          "repo_id": "black-forest-labs/FLUX.1-schnell",
+          "revision": "main",
+          "cache_dir_rel": "checkpoints/hf_cache",
+          "size_mb": 10000,
+          "required": false,
+          "hf_token_required": true,
+          "ignore_patterns": [
+            "flux1-schnell.safetensors"
+          ],
+          "note": "Flux.1-Schnell 基础组件（T5-XXL text encoder ~9.3GB + CLIP-L ~235MB + VAE ~335MB）。需登录 HuggingFace 并同意使用条款（gated repo，免费）。"
+        }
+      ],
+      "env_key": "FLUX_CHECKPOINT_DIR"
     }
   }
 }

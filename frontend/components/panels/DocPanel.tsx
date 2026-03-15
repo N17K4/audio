@@ -84,9 +84,9 @@ export default function DocPanel({
   const numCls = 'w-24 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all text-center';
 
   const tabBtn = (active: boolean) =>
-    `flex-1 py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-slate-800 dark:bg-slate-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200'}`;
+    `flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`;
   const subLbl = (active: boolean) =>
-    `text-xs ${active ? 'text-slate-300' : 'text-slate-400 dark:text-slate-600'}`;
+    `text-xs ${active ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-600'}`;
 
   const canRunToolbox = status !== 'processing' && (
     (docSubPage === 'image' && !!imgFile) ||
@@ -96,20 +96,6 @@ export default function DocPanel({
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
-
-      {/* 六项 tab 并排 */}
-      <div>
-        <span className={labelCls}>功能</span>
-        <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
-          {[...DOC_PAGES, ...TOOL_PAGES].map(opt => (
-            <button key={opt.value} className={tabBtn(docSubPage === opt.value)}
-              onClick={() => { setDocSubPage(opt.value); setDocFile(null); }}>
-              <span className="text-sm font-medium">{opt.label}</span>
-              <span className={subLbl(docSubPage === opt.value)}>{opt.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* ── 文档：输入文件 ── */}
       {isDocPage(docSubPage) && (
@@ -149,7 +135,7 @@ export default function DocPanel({
       {docSubPage === 'pdf_extract' && (
         <div>
           <span className={labelCls}>提取内容</span>
-          <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
+          <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
             {([
               { value: 'text',   label: '提取文字', sub: '输出 .txt' },
               { value: 'images', label: '提取图片', sub: '输出 .zip' },
@@ -208,7 +194,7 @@ export default function DocPanel({
         <>
           <div>
             <span className={labelCls}>模式</span>
-            <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
+            <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
               {([{ v: 'generate', l: '生成二维码' }, { v: 'decode', l: '识别二维码' }] as const).map(opt => (
                 <button key={opt.v}
                   className={`flex-1 py-2 text-sm font-medium transition-all ${qrMode === opt.v ? 'bg-slate-800 dark:bg-slate-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200'}`}

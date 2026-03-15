@@ -27,10 +27,12 @@ from services.stt.groq_stt import run_groq_stt
 from services.stt.openai_stt import run_openai_stt
 from services.stt.whisper_stt import run_whisper_stt
 from services.stt.faster_whisper_stt import run_faster_whisper_stt
+from services.stt.dashscope_stt import run_dashscope_stt
 from services.llm.anthropic_llm import run_claude_llm
 from services.llm.openai_compat_llm import run_openai_compat_llm
 from services.tts.cartesia_tts import run_cartesia_tts
 from services.tts.dashscope_tts import run_dashscope_tts
+from services.tts.minimax_tts import run_minimax_tts
 from services.tts.elevenlabs_tts import run_elevenlabs_tts
 from services.tts.fish_speech_tts import run_fish_speech_tts
 from services.tts.gemini_tts import run_gemini_tts
@@ -58,10 +60,19 @@ router = APIRouter()
 
 # OpenAI 兼容 LLM provider → base URL
 OPENAI_COMPAT_LLM: dict = {
-    "groq":    "https://api.groq.com/openai/v1",
+    "groq":     "https://api.groq.com/openai/v1",
     "deepseek": "https://api.deepseek.com/v1",
-    "mistral": "https://api.mistral.ai/v1",
-    "xai":     "https://api.x.ai/v1",
+    "mistral":  "https://api.mistral.ai/v1",
+    "xai":      "https://api.x.ai/v1",
+    # 中国云端 API
+    "qwen":     "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "doubao":   "https://ark.volces.com/api/v3",
+    "hunyuan":  "https://api.hunyuan.cloud.tencent.com/v1",
+    "glm":      "https://open.bigmodel.cn/api/paas/v4",
+    "moonshot": "https://api.moonshot.cn/v1",
+    "spark":    "https://spark-api-open.xf-yun.com/v1",
+    "minimax":  "https://api.minimax.chat/v1",
+    "baichuan": "https://api.baichuan-ai.com/v1",
 }
 
 # OpenAI 兼容 LLM 默认模型
@@ -70,6 +81,15 @@ OPENAI_COMPAT_DEFAULT_MODEL: dict = {
     "deepseek": "deepseek-chat",
     "mistral":  "mistral-small-latest",
     "xai":      "grok-3-mini",
+    # 中国云端 API
+    "qwen":     "qwen-plus",
+    "doubao":   "",          # 需用户填写 ep-xxx
+    "hunyuan":  "hunyuan-lite",
+    "glm":      "glm-4-flash",
+    "moonshot": "moonshot-v1-8k",
+    "spark":    "lite",
+    "minimax":  "MiniMax-Text-01",
+    "baichuan": "Baichuan4-Air",
 }
 
 
@@ -138,6 +158,8 @@ async def task_tts(
             return await run_cartesia_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
         elif p == "dashscope":
             return await run_dashscope_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
+        elif p == "minimax_tts":
+            return await run_minimax_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported TTS provider: {provider}")
 
@@ -210,6 +232,13 @@ async def task_stt(
             filename=file.filename or "audio.webm",
             api_key=api_key,
             model=model or "whisper-large-v3-turbo",
+        )
+    elif p == "dashscope":
+        result = await run_dashscope_stt(
+            content=content,
+            filename=file.filename or "audio.webm",
+            api_key=api_key,
+            model=model or "paraformer-realtime-v2",
         )
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported STT provider: {provider}")
@@ -300,9 +329,15 @@ async def task_llm(
     if p == "claude":
         return await run_claude_llm(prompt=prompt, api_key=api_key, model=model or "claude-opus-4-5", messages=parsed_messages)
     if p in OPENAI_COMPAT_LLM:
+        effective_model = model.strip() or OPENAI_COMPAT_DEFAULT_MODEL.get(p, "")
+        if p == "doubao" and not effective_model.startswith("ep-"):
+            raise HTTPException(
+                status_code=400,
+                detail="豆包（Doubao）模型 ID 必须以 ep- 开头，请在火山引擎控制台（ark.console.volcengine.com）创建推理接入点并复制 Endpoint ID（格式：ep-xxxxxxxx-xxxxx）",
+            )
         return await run_openai_compat_llm(
             prompt=prompt, api_key=api_key,
-            model=model or OPENAI_COMPAT_DEFAULT_MODEL[p],
+            model=effective_model,
             messages=parsed_messages,
             base_url=OPENAI_COMPAT_LLM[p],
             provider_name=p,
@@ -1041,21 +1076,21 @@ async def task_ocr(
 
     p = provider.strip().lower()
     content = await file.read()
-    label = file.filename[:30]
+    filename = file.filename
+    mime = file.content_type or "image/png"
+    label = filename[:30]
+    is_local = p == "got_ocr"
 
-    if p == "got_ocr":
-        result = await run_got_ocr(file_content=content, filename=file.filename, model=model or "GOT-OCR2.0")
-        return {
-            "status": "success",
-            "task": "ocr",
-            "provider": p,
-            "text": result.get("text", ""),
-            "filename": file.filename,
-        }
+    if p not in ("got_ocr", "openai", "gemini", "claude"):
+        raise HTTPException(status_code=400, detail=f"Unsupported OCR provider: {provider}")
 
-    # 云端 OCR 通过 LLM vision 实现
-    if p in ("openai", "gemini", "claude"):
-        mime = file.content_type or "image/png"
+    job = _make_job("ocr", f"OCR · {label}", p, is_local=is_local)
+    job_id = job["id"]
+
+    async def _do():
+        if p == "got_ocr":
+            result = await run_got_ocr(file_content=content, filename=filename, model=model or "GOT-OCR2.0")
+            return {"status": "completed", "result_text": result.get("text", "")}
         if p == "openai":
             from services.image_understand.openai_image_understand import run_openai_image_understand
             r = await run_openai_image_understand(
@@ -1077,15 +1112,12 @@ async def task_ocr(
                 prompt="请识别图片中所有文字，只输出文字内容，保留原始格式",
                 api_key=api_key, model=model or "claude-opus-4-5",
             )
-        return {
-            "status": "success",
-            "task": "ocr",
-            "provider": p,
-            "text": r.get("result_text") or r.get("text") or "",
-            "filename": file.filename,
-        }
+        return {"status": "completed", "result_text": r.get("result_text") or r.get("text") or ""}
 
-    raise HTTPException(status_code=400, detail=f"Unsupported OCR provider: {provider}")
+    task = asyncio.create_task(_run_tts_job(job_id, _do))
+    job["_task"] = task
+    logger.info("ocr job %s queued (provider=%s)", job_id, p)
+    return {"status": "queued", "job_id": job_id}
 
 
 # ─── 口型同步 ─────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Status, TaskType, VcInputMode, ToolboxSubPage } from '../types';
+import type { Status, TaskType, VcInputMode, ToolboxSubPage, MediaAction, DocSubPage } from '../types';
 import { TASK_LABELS, TASK_PHASES, TASK_ICON_CFG, LS, LOCAL_PROVIDERS, URL_ONLY_PROVIDERS } from '../constants';
 import { rlog } from '../utils';
 
@@ -39,14 +39,35 @@ export default function Home() {
   const [showHome, setShowHome] = useState(true);
   const [showTasks, setShowTasks] = useState(false);
   const [showSystem, setShowSystem] = useState(false);
+  const [showAudioTools, setShowAudioTools] = useState(false);
+  const [showFormatConvert, setShowFormatConvert] = useState(false);
+  const [formatGroup, setFormatGroup] = useState<'media' | 'doc'>('media');
+  const [hwAccelDetected, setHwAccelDetected] = useState('');
 
-  const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' : taskType;
+  const AUDIO_TASK_TYPES: TaskType[] = ['tts', 'vc', 'asr', 'llm', 'voice_chat'];
+
+  const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' : showAudioTools ? 'audio_tools' : showFormatConvert ? 'format_convert' : taskType;
 
   function navigate(page: Page) {
-    if (page === 'home') { setShowHome(true); setShowTasks(false); setShowSystem(false); }
-    else if (page === 'tasks') { setShowHome(false); setShowTasks(true); setShowSystem(false); fetchJobs(); }
-    else if (page === 'system') { setShowHome(false); setShowTasks(false); setShowSystem(true); }
-    else { setShowHome(false); setShowTasks(false); setShowSystem(false); setTaskType(page as TaskType); }
+    if (page === 'home') { setShowHome(true); setShowTasks(false); setShowSystem(false); setShowAudioTools(false); setShowFormatConvert(false); }
+    else if (page === 'tasks') { setShowHome(false); setShowTasks(true); setShowSystem(false); setShowAudioTools(false); setShowFormatConvert(false); fetchJobs(); }
+    else if (page === 'system') { setShowHome(false); setShowTasks(false); setShowSystem(true); setShowAudioTools(false); setShowFormatConvert(false); }
+    else if (page === 'audio_tools') {
+      setShowHome(false); setShowTasks(false); setShowSystem(false); setShowFormatConvert(false);
+      setShowAudioTools(true);
+      if (!AUDIO_TASK_TYPES.includes(taskType)) setTaskType('tts');
+    }
+    else if (page === 'format_convert') {
+      setShowHome(false); setShowTasks(false); setShowSystem(false); setShowAudioTools(false);
+      setShowFormatConvert(true);
+      if (!hwAccelDetected) {
+        fetch(`${backend.backendBaseUrl}/hw-accel`)
+          .then(r => r.json())
+          .then(d => setHwAccelDetected(d.label || ''))
+          .catch(() => {});
+      }
+    }
+    else { setShowHome(false); setShowTasks(false); setShowSystem(false); setShowAudioTools(false); setShowFormatConvert(false); setTaskType(page as TaskType); }
   }
 
   function navigateTasks() {
@@ -96,7 +117,7 @@ export default function Home() {
 
   // ─── 共享设置 ─────────────────────────────────────────────────────────────
   const [providerMap, setProviderMap] = useState<Record<string, string>>({
-    tts: 'fish_speech', vc: 'seed_vc', asr: 'whisper', llm: 'gemini',
+    tts: 'fish_speech', vc: 'seed_vc', asr: 'faster_whisper', llm: 'gemini',
   });
   const [apiKey, setApiKey] = useState('');
   const [cloudEndpoint, setCloudEndpoint] = useState('');
@@ -474,7 +495,7 @@ export default function Home() {
       </button>
 
       {/* ── 主内容区 ── */}
-      <div className="flex-1 overflow-y-auto min-w-0 bg-slate-50 dark:bg-slate-950">
+      <div className={`flex-1 overflow-y-auto min-w-0 bg-slate-50 dark:bg-slate-950 ${showSystem ? 'hidden' : ''}`}>
         <div className="p-6 md:p-8">
           <div className="mx-auto w-full max-w-3xl space-y-5">
 
@@ -492,19 +513,69 @@ export default function Home() {
               />
             )}
 
-            {/* 任务页标题栏 */}
-            {!showHome && !showTasks && !showSystem && (
+            {/* 音频工具标题栏 + 子 Tab */}
+            {showAudioTools && (
+              <div className="pb-1">
+                <header className="flex items-center gap-3.5 pb-3">
+                  <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+                    <rect width="28" height="28" rx="7" fill="#4f46e5"/>
+                    <rect x="5" y="13" width="2.5" height="6" rx="1.2" fill="#c7d2fe"/>
+                    <rect x="9" y="9" width="2.5" height="10" rx="1.2" fill="#a5b4fc"/>
+                    <rect x="13" y="6" width="2.5" height="16" rx="1.2" fill="#818cf8"/>
+                    <rect x="17" y="10" width="2.5" height="8" rx="1.2" fill="#a5b4fc"/>
+                    <rect x="21" y="14" width="2.5" height="4" rx="1.2" fill="#c7d2fe"/>
+                  </svg>
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">AI音频</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT · LLM · 语音</p>
+                  </div>
+                </header>
+                <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+                  {([
+                    ['tts',        '文本转语音', 'TTS'  ],
+                    ['vc',         '音色转换',   'VC'   ],
+                    ['asr',        '语音转文本', 'STT'  ],
+                    ['llm',        '聊天',       'LLM'  ],
+                    ['voice_chat', '语音聊天',   'Voice'],
+                  ] as [TaskType, string, string][]).map(([key, label, abbr]) => (
+                    <button key={key} onClick={() => setTaskType(key)}
+                      className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${taskType === key ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                      <span className="text-sm font-medium leading-tight">{label}</span>
+                      <span className={`text-[10px] font-mono leading-tight ${taskType === key ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-600'}`}>{abbr}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 格式转换标题栏 */}
+            {showFormatConvert && (
               <header className="flex items-center gap-3.5 pb-1">
-                <TaskIcon task={taskType} size={36} />
+                <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+                  <rect width="28" height="28" rx="7" fill="#0f766e"/>
+                  <path d="M7 10h10M7 10l3-3M7 10l3 3" stroke="#99f6e4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M21 18H11M21 18l-3-3M21 18l-3 3" stroke="#5eead4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
                 <div>
-                  <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{TASK_LABELS[taskType]}</h1>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">{TASK_ICON_CFG[taskType].abbr}</p>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">格式转换</h1>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">音视频 · 文档</p>
+                </div>
+              </header>
+            )}
+
+            {/* 扩展功能标题栏 */}
+            {!showHome && !showTasks && !showSystem && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
+              <header className="flex items-center gap-3.5 pb-1">
+                <TaskIcon task="misc" size={36} />
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{TASK_LABELS['misc']}</h1>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">{TASK_ICON_CFG['misc'].abbr}</p>
                 </div>
               </header>
             )}
 
             {/* TTS 面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'tts' && (
+            {showAudioTools && taskType === 'tts' && (
               <TtsPanel
                 taskType="tts"
                 capabilities={backend.capabilities}
@@ -525,6 +596,13 @@ export default function Home() {
                 setTtsVoice={tts.setTtsVoice}
                 ttsRefAudio={tts.ttsRefAudio}
                 setTtsRefAudio={tts.setTtsRefAudio}
+                ttsRefInputMode={tts.ttsRefInputMode}
+                setTtsRefInputMode={tts.setTtsRefInputMode}
+                ttsRefRecordedObjectUrl={tts.ttsRefRecordedObjectUrl}
+                ttsRecordingDir={tts.ttsRecordingDir}
+                onStartTtsRefRecording={tts.startTtsRefRecording}
+                onStopTtsRefRecording={tts.stopTtsRefRecording}
+                onClearTtsRefRecording={tts.clearTtsRefRecording}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
@@ -537,7 +615,7 @@ export default function Home() {
             )}
 
             {/* VC 面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'vc' && (
+            {showAudioTools && taskType === 'vc' && (
               <VcPanel
                 taskType="vc"
                 capabilities={backend.capabilities}
@@ -576,6 +654,10 @@ export default function Home() {
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}
+                vcRecordedFile={vc.vcRecordedFile}
+                vcRecordedObjectUrl={vc.vcRecordedObjectUrl}
+                vcRecordingDir={vc.vcRecordingDir}
+                onClearVcRecording={vc.clearVcRecording}
                 onHandleVoiceConvert={vc.handleVoiceConvert}
                 onStartVcRecording={vc.startVcRecording}
                 onStopVcRecording={vc.stopVcRecording}
@@ -620,7 +702,7 @@ export default function Home() {
             )}
 
             {/* ASR 面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'asr' && (
+            {showAudioTools && taskType === 'asr' && (
               <AsrPanel
                 taskType="asr"
                 capabilities={backend.capabilities}
@@ -637,6 +719,14 @@ export default function Home() {
                 setAsrFile={asr.setAsrFile}
                 asrModel={asr.asrModel}
                 setAsrModel={asr.setAsrModel}
+                asrInputMode={asr.asrInputMode}
+                setAsrInputMode={asr.setAsrInputMode}
+                asrRecordedObjectUrl={asr.asrRecordedObjectUrl}
+                asrRecordingDir={asr.asrRecordingDir}
+                onStartAsrRecording={asr.startAsrRecording}
+                onStopAsrRecording={asr.stopAsrRecording}
+                onClearAsrRecording={asr.clearAsrRecording}
+                outputDir={outputDir}
                 status={status}
                 onRunAsr={asr.runAsr}
                 fieldCls={fieldCls}
@@ -645,7 +735,7 @@ export default function Home() {
             )}
 
             {/* LLM 聊天面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'llm' && (
+            {showAudioTools && taskType === 'llm' && (
               <LlmPanel
                 taskType="llm"
                 capabilities={backend.capabilities}
@@ -673,7 +763,7 @@ export default function Home() {
             )}
 
             {/* 语音聊天面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'voice_chat' && (
+            {showAudioTools && taskType === 'voice_chat' && (
               <VoiceChatPanel
                 vchatMsgs={voiceChat.vchatMsgs}
                 setVchatMsgs={voiceChat.setVchatMsgs}
@@ -690,15 +780,14 @@ export default function Home() {
                 setVchatTtsProvider={voiceChat.setVchatTtsProvider}
                 vchatTtsModel={voiceChat.vchatTtsModel}
                 setVchatTtsModel={voiceChat.setVchatTtsModel}
-                vchatVoiceId={voiceChat.vchatVoiceId}
-                setVchatVoiceId={voiceChat.setVchatVoiceId}
+                vchatTtsRefAudio={voiceChat.vchatTtsRefAudio}
+                setVchatTtsRefAudio={voiceChat.setVchatTtsRefAudio}
                 vchatApiKey={voiceChat.vchatApiKey}
                 setVchatApiKey={voiceChat.setVchatApiKey}
                 vchatEndpoint={voiceChat.vchatEndpoint}
                 setVchatEndpoint={voiceChat.setVchatEndpoint}
+                capabilities={backend.capabilities}
                 engineVersions={backend.engineVersions}
-                voices={backend.voices}
-                onRefreshVoices={backend.fetchVoices}
                 vchatScrollRef={voiceChat.vchatScrollRef}
                 onStartRecording={voiceChat.startVchatRecording}
                 onStopRecording={voiceChat.stopVchatRecording}
@@ -709,80 +798,127 @@ export default function Home() {
               />
             )}
 
-            {/* 格式转换面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'media' && (
-              <MediaPanel
-                mediaFile={media.mediaFile}
-                setMediaFile={media.setMediaFile}
-                mediaAction={media.mediaAction}
-                setMediaAction={media.setMediaAction}
-                mediaOutputFormat={media.mediaOutputFormat}
-                setMediaOutputFormat={media.setMediaOutputFormat}
-                startMin={media.startMin}
-                setStartMin={media.setStartMin}
-                startSec={media.startSec}
-                setStartSec={media.setStartSec}
-                clipEndMode={media.clipEndMode}
-                setClipEndMode={media.setClipEndMode}
-                durationMin={media.durationMin}
-                setDurationMin={media.setDurationMin}
-                durationSec={media.durationSec}
-                setDurationSec={media.setDurationSec}
-                endMin={media.endMin}
-                setEndMin={media.setEndMin}
-                endSec={media.endSec}
-                setEndSec={media.setEndSec}
-                subtitleOutputFmt={media.subtitleOutputFmt}
-                setSubtitleOutputFmt={media.setSubtitleOutputFmt}
-                hwAccel={media.hwAccel}
-                setHwAccel={media.setHwAccel}
-                outputDir={outputDir}
-                setOutputDir={setOutputDir}
-                status={status}
-                onRunMediaConvert={() => { navigateTasks(); media.runMediaConvert(); }}
-                onRunSubtitleConvert={() => { navigateTasks(); media.runSubtitleConvert(); }}
-                fieldCls={fieldCls}
-                fileCls={fileCls}
-                labelCls={labelCls}
-                btnSec={btnSec}
-              />
-            )}
+            {/* 格式转换：外部两行标签 + 内容 */}
+            {showFormatConvert && (
+              <>
+                <div className="space-y-1">
+                  {/* 音视频工具 */}
+                  <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+                    {([
+                      { value: 'convert' as MediaAction,          label: '音视频转换', pkg: 'ffmpeg' },
+                      { value: 'clip' as MediaAction,             label: '截取片段',   pkg: 'ffmpeg' },
+                      { value: 'subtitle_extract' as MediaAction, label: '提取字幕',   pkg: 'ffmpeg' },
+                      { value: 'subtitle_convert' as MediaAction, label: '字幕互转',   pkg: 'ffmpeg' },
+                    ]).map(opt => {
+                      const active = formatGroup === 'media' && media.mediaAction === opt.value;
+                      return (
+                        <button key={opt.value}
+                          className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                          onClick={() => { setFormatGroup('media'); media.setMediaAction(opt.value); media.setMediaFile(null); }}>
+                          <span className="text-sm font-medium leading-tight">{opt.label}</span>
+                          <span className={`text-[10px] font-mono leading-tight ${active ? 'text-teal-500 dark:text-teal-400' : 'text-slate-400 dark:text-slate-600'}`}>{opt.pkg}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* 文档工具 */}
+                  <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+                    {([
+                      { value: 'pdf_to_word' as DocSubPage,   label: 'PDF 转 Word', pkg: 'pdf2docx' },
+                      { value: 'doc_convert' as DocSubPage,   label: '文档互转',    pkg: 'pandoc'   },
+                      { value: 'pdf_extract' as DocSubPage,   label: 'PDF 提取',    pkg: 'PyMuPDF'  },
+                      { value: 'image' as DocSubPage,         label: '图片处理',    pkg: 'Pillow'   },
+                      { value: 'qr' as DocSubPage,            label: '二维码',      pkg: 'qrcode'   },
+                      { value: 'text_encoding' as DocSubPage, label: '编码转换',    pkg: 'chardet'  },
+                    ]).map(opt => {
+                      const active = formatGroup === 'doc' && doc.docSubPage === opt.value;
+                      return (
+                        <button key={opt.value}
+                          className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                          onClick={() => { setFormatGroup('doc'); doc.setDocSubPage(opt.value); doc.setDocFile(null); }}>
+                          <span className="text-sm font-medium leading-tight">{opt.label}</span>
+                          <span className={`text-[10px] font-mono leading-tight ${active ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-600'}`}>{opt.pkg}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {/* 文档与工具面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'doc' && (
-              <DocPanel
-                docSubPage={doc.docSubPage}
-                setDocSubPage={doc.setDocSubPage}
-                docFile={doc.docFile}
-                setDocFile={doc.setDocFile}
-                docOutputFormat={doc.docOutputFormat}
-                setDocOutputFormat={doc.setDocOutputFormat}
-                docExtractMode={doc.docExtractMode}
-                setDocExtractMode={doc.setDocExtractMode}
-                onRunDocConvert={doc.runDocConvert}
-                imgFile={toolbox.imgFile} setImgFile={toolbox.setImgFile}
-                imgOutputFmt={toolbox.imgOutputFmt} setImgOutputFmt={toolbox.setImgOutputFmt}
-                imgResizeW={toolbox.imgResizeW} setImgResizeW={toolbox.setImgResizeW}
-                imgResizeH={toolbox.imgResizeH} setImgResizeH={toolbox.setImgResizeH}
-                imgQuality={toolbox.imgQuality} setImgQuality={toolbox.setImgQuality}
-                qrMode={toolbox.qrMode} setQrMode={toolbox.setQrMode}
-                qrText={toolbox.qrText} setQrText={toolbox.setQrText}
-                qrFile={toolbox.qrFile} setQrFile={toolbox.setQrFile}
-                encFile={toolbox.encFile} setEncFile={toolbox.setEncFile}
-                encTarget={toolbox.encTarget} setEncTarget={toolbox.setEncTarget}
-                onRunToolbox={() => toolbox.runToolbox(doc.docSubPage as ToolboxSubPage)}
-                outputDir={outputDir}
-                setOutputDir={setOutputDir}
-                status={status}
-                fieldCls={fieldCls}
-                fileCls={fileCls}
-                labelCls={labelCls}
-                btnSec={btnSec}
-              />
+                {formatGroup === 'media' && (
+                  <MediaPanel
+                    mediaFile={media.mediaFile}
+                    setMediaFile={media.setMediaFile}
+                    mediaAction={media.mediaAction}
+                    setMediaAction={media.setMediaAction}
+                    mediaOutputFormat={media.mediaOutputFormat}
+                    setMediaOutputFormat={media.setMediaOutputFormat}
+                    startMin={media.startMin}
+                    setStartMin={media.setStartMin}
+                    startSec={media.startSec}
+                    setStartSec={media.setStartSec}
+                    clipEndMode={media.clipEndMode}
+                    setClipEndMode={media.setClipEndMode}
+                    durationMin={media.durationMin}
+                    setDurationMin={media.setDurationMin}
+                    durationSec={media.durationSec}
+                    setDurationSec={media.setDurationSec}
+                    endMin={media.endMin}
+                    setEndMin={media.setEndMin}
+                    endSec={media.endSec}
+                    setEndSec={media.setEndSec}
+                    subtitleOutputFmt={media.subtitleOutputFmt}
+                    setSubtitleOutputFmt={media.setSubtitleOutputFmt}
+                    hwAccel={media.hwAccel}
+                    setHwAccel={media.setHwAccel}
+                    hwAccelDetected={hwAccelDetected}
+                    outputDir={outputDir}
+                    setOutputDir={setOutputDir}
+                    status={status}
+                    onRunMediaConvert={() => { navigateTasks(); media.runMediaConvert(); }}
+                    onRunSubtitleConvert={() => { navigateTasks(); media.runSubtitleConvert(); }}
+                    fieldCls={fieldCls}
+                    fileCls={fileCls}
+                    labelCls={labelCls}
+                    btnSec={btnSec}
+                  />
+                )}
+
+                {formatGroup === 'doc' && (
+                  <DocPanel
+                    docSubPage={doc.docSubPage}
+                    setDocSubPage={doc.setDocSubPage}
+                    docFile={doc.docFile}
+                    setDocFile={doc.setDocFile}
+                    docOutputFormat={doc.docOutputFormat}
+                    setDocOutputFormat={doc.setDocOutputFormat}
+                    docExtractMode={doc.docExtractMode}
+                    setDocExtractMode={doc.setDocExtractMode}
+                    onRunDocConvert={doc.runDocConvert}
+                    imgFile={toolbox.imgFile} setImgFile={toolbox.setImgFile}
+                    imgOutputFmt={toolbox.imgOutputFmt} setImgOutputFmt={toolbox.setImgOutputFmt}
+                    imgResizeW={toolbox.imgResizeW} setImgResizeW={toolbox.setImgResizeW}
+                    imgResizeH={toolbox.imgResizeH} setImgResizeH={toolbox.setImgResizeH}
+                    imgQuality={toolbox.imgQuality} setImgQuality={toolbox.setImgQuality}
+                    qrMode={toolbox.qrMode} setQrMode={toolbox.setQrMode}
+                    qrText={toolbox.qrText} setQrText={toolbox.setQrText}
+                    qrFile={toolbox.qrFile} setQrFile={toolbox.setQrFile}
+                    encFile={toolbox.encFile} setEncFile={toolbox.setEncFile}
+                    encTarget={toolbox.encTarget} setEncTarget={toolbox.setEncTarget}
+                    onRunToolbox={() => toolbox.runToolbox(doc.docSubPage as ToolboxSubPage)}
+                    outputDir={outputDir}
+                    setOutputDir={setOutputDir}
+                    status={status}
+                    fieldCls={fieldCls}
+                    fileCls={fileCls}
+                    labelCls={labelCls}
+                    btnSec={btnSec}
+                  />
+                )}
+              </>
             )}
 
             {/* 扩展功能面板 */}
-            {!showHome && !showTasks && !showSystem && taskType === 'misc' && (
+            {!showHome && !showTasks && !showSystem && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
               <MiscPanel
                 miscSubPage={misc.miscSubPage}
                 setMiscSubPage={misc.setMiscSubPage}
@@ -954,17 +1090,19 @@ export default function Home() {
               </div>
             )}
 
-            {/* 系统工具 */}
-            {showSystem && (
-              <SystemPanel
-                backendBaseUrl={backend.backendBaseUrl}
-                isElectron={isElectron}
-              />
-            )}
-
           </div>{/* max-w-3xl */}
         </div>{/* p-4 */}
       </div>{/* flex-1 main scroll */}
+
+      {/* 系统工具 — 独立全高容器，不在滚动区内，侧边栏/标题才能真正固定 */}
+      {showSystem && (
+        <div className="flex-1 overflow-hidden min-w-0 flex flex-col bg-slate-50 dark:bg-slate-950">
+          <SystemPanel
+            backendBaseUrl={backend.backendBaseUrl}
+            isElectron={isElectron}
+          />
+        </div>
+      )}
 
     </div>
   );

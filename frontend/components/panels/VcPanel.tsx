@@ -44,6 +44,10 @@ interface VcPanelProps {
   outputDir: string;
   setOutputDir: (v: string) => void;
   status: Status;
+  vcRecordedFile: File | null;
+  vcRecordedObjectUrl: string | null;
+  vcRecordingDir: string | null;
+  onClearVcRecording: () => void;
   onHandleVoiceConvert: (audio: Blob | File) => void;
   onStartVcRecording: () => void;
   onStopVcRecording: () => void;
@@ -127,6 +131,10 @@ export default function VcPanel({
   outputDir,
   setOutputDir,
   status,
+  vcRecordedFile,
+  vcRecordedObjectUrl,
+  vcRecordingDir,
+  onClearVcRecording,
   onHandleVoiceConvert,
   onStartVcRecording,
   onStopVcRecording,
@@ -246,6 +254,7 @@ export default function VcPanel({
                 setShowCreateVoice={(v) => { if (!v) setVoiceTab('select'); setShowCreateVoice(v); }}
                 onCreateVoice={onCreateVoice}
                 fieldCls={fieldCls}
+                fileCls={fileCls}
                 labelCls={labelCls}
               />
             )}
@@ -322,7 +331,7 @@ export default function VcPanel({
             <button key={m}
               className={`flex-1 py-2 text-sm font-medium transition-all ${vcInputMode === m ? 'bg-slate-800 dark:bg-slate-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200'}`}
               onClick={() => setVcInputMode(m)}>
-              {m === 'record' ? '实时录音' : '上传文件'}
+              {m === 'record' ? '电脑内录' : '上传文件'}
             </button>
           ))}
         </div>
@@ -334,13 +343,31 @@ export default function VcPanel({
           </div>
         ) : (
           <div className="flex gap-2">
-            {status === 'idle' && (
+            {status === 'idle' && !vcRecordedFile && (
               <button className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartVcRecording}>开始录音</button>
             )}
             {status === 'recording' && (
               <button className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 text-sm font-semibold text-white shadow-sm animate-pulse transition-all" onClick={onStopVcRecording}>停止录音</button>
             )}
-            {status === 'processing' && <span className="text-sm text-slate-400 py-2 opacity-0 pointer-events-none">处理中...</span>}
+            {status === 'idle' && vcRecordedFile && (
+              <button className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartVcRecording}>重新录音</button>
+            )}
+            {status === 'processing' && <span className="text-sm text-slate-400 py-2">处理中...</span>}
+          </div>
+        )}
+        {vcInputMode === 'record' && vcRecordedObjectUrl && (
+          <div className="space-y-2">
+            <audio controls src={vcRecordedObjectUrl} className="w-full h-9" />
+            {vcRecordingDir && window.electronAPI?.openDir && (
+              <button
+                onClick={() => window.electronAPI!.openDir!(vcRecordingDir)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                打开录音目录
+              </button>
+            )}
           </div>
         )}
       </div>}
@@ -449,9 +476,13 @@ export default function VcPanel({
         </div>
       </details>}
 
-      {(!isLocal || voiceTab === 'select') && vcInputMode === 'upload' && (
+      {(!isLocal || voiceTab === 'select') && (
         <button className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-button-primary transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={() => vcFile && onHandleVoiceConvert(vcFile)} disabled={status === 'processing' || !vcFile}>
+          onClick={() => {
+            const audio = vcInputMode === 'upload' ? vcFile : vcRecordedFile;
+            if (audio) onHandleVoiceConvert(audio);
+          }}
+          disabled={status === 'processing' || status === 'recording' || (vcInputMode === 'upload' ? !vcFile : !vcRecordedFile)}>
           {status === 'processing' ? '处理中...' : '开始转换'}
         </button>
       )}

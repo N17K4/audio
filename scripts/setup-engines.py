@@ -128,6 +128,51 @@ def install_to_target(
     return all_ok
 
 
+# ─── Flux 专项安装（需根据平台选择 diffusers GGUF 依赖）───────────────────────
+
+def setup_flux_engine(project_root: Path, packages: list[str], py: str) -> bool:
+    """安装 Flux GGUF 推理依赖。
+    diffusers >= 0.32 原生支持 GGUF 量化，仅需安装 gguf + diffusers。
+    Mac MPS 和 CUDA 均通过相同的 pip 依赖支持。
+    """
+    print("  [flux] 安装 Flux GGUF 推理依赖")
+    all_ok = True
+    for pkg in packages:
+        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True)
+        if check.returncode == 0:
+            print(f"  ✓ {pkg}  (已安装)")
+            continue
+        print(f"  [pip] 安装 {pkg} ...")
+        result = subprocess.run(
+            [py, "-m", "pip", "install", pkg, "--quiet"],
+            capture_output=True, text=True, timeout=600,
+        )
+        if result.returncode == 0:
+            print(f"    ✓ 安装成功: {pkg}")
+        else:
+            print(f"    ✗ 安装失败: {result.stderr.strip()[:200]}")
+            all_ok = False
+
+    # 验证 GGUF 加载能力
+    test_script = (
+        "from diffusers import FluxTransformer2DModel\n"
+        "try:\n"
+        "    from diffusers.quantizers.gguf import GGUFQuantizationConfig\n"
+        "    print('gguf_quant: ok')\n"
+        "except ImportError:\n"
+        "    print('gguf_quant: not available (diffusers may need upgrade)')\n"
+    )
+    check = subprocess.run([py, "-c", test_script], capture_output=True, text=True)
+    if check.returncode == 0:
+        print(f"  ✓ Flux diffusers GGUF 支持验证通过")
+        print(f"    {check.stdout.strip()}")
+    else:
+        print(f"  ⚠ Flux 验证警告: {check.stderr.strip()[:200]}")
+        # 非致命错误，不影响 all_ok
+    return all_ok
+
+
 # ─── RVC 专项安装 ─────────────────────────────────────────────────────────────
 
 def _patch_fairseq_for_py312(py: str) -> None:
@@ -573,6 +618,77 @@ def _patch_fish_speech_generate(engine_dir: Path) -> None:
             print("  ✓ llama.py MPS dtype 补丁已应用")
 
 
+# ─── LivePortrait engine 源码 ────────────────────────────────────────────────
+
+_LIVEPORTRAIT_REPO = "https://github.com/KlingAIResearch/LivePortrait"
+# 固定到已验证 commit（2026-03-02，docs: update star-history links）
+_LIVEPORTRAIT_COMMIT = "49784e879821538ecda5c8e4ca0472f4cb6236cf"
+
+# 只复制推理所需的顶层条目
+_LIVEPORTRAIT_KEEP = ["liveportrait", "inference.py", "src", "configs"]
+# 克隆后删除不需要的目录
+_LIVEPORTRAIT_RM = ["assets", "docs", "scripts", ".github"]
+
+
+def setup_liveportrait_engine(project_root: Path) -> bool:
+    """克隆 LivePortrait 并精简到推理所需文件。"""
+    import shutil
+
+    engine_dir = project_root / "runtime" / "liveportrait" / "engine"
+    sentinel = engine_dir / "liveportrait" / "__init__.py"
+
+    if sentinel.exists():
+        print(f"  ✓ liveportrait engine 已存在（{sentinel}）")
+        return True
+
+    print(f"  [liveportrait] 克隆 {_LIVEPORTRAIT_REPO} @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
+    sys.stdout.flush()
+    tmp_dir = project_root / "runtime" / "liveportrait" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    # init+fetch 固定到指定 commit（GitHub 不支持 clone --depth 1 <sha>）
+    cmds = [
+        ["git", "-C", str(tmp_dir), "init"],
+        ["git", "-C", str(tmp_dir), "remote", "add", "origin", _LIVEPORTRAIT_REPO],
+        ["git", "-C", str(tmp_dir), "fetch", "--depth", "1", "origin", _LIVEPORTRAIT_COMMIT],
+        ["git", "-C", str(tmp_dir), "checkout", "FETCH_HEAD"],
+    ]
+    for cmd in cmds:
+        print(f"  $ {' '.join(cmd)}")
+        sys.stdout.flush()
+        r = subprocess.run(cmd, capture_output=False, text=True)
+        if r.returncode != 0:
+            print(f"  ✗ 命令失败（exit {r.returncode}）")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in _LIVEPORTRAIT_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _LIVEPORTRAIT_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ liveportrait engine 就绪（{n} 个文件）")
+    return True
+
+
 # ─── Seed-VC engine 源码 ──────────────────────────────────────────────────────
 
 # 无 tag，固定到已验证的 commit SHA（无法用 --branch，改用 init+fetch）
@@ -873,6 +989,8 @@ def main_build() -> int:
         print(f"▶ {engine_name}")
         if engine_name == "rvc":
             ok = setup_rvc_engine(project_root)
+        elif engine_name == "flux":
+            ok = setup_flux_engine(project_root, packages, py)
         else:
             ok = setup_pip_packages(engine_name, packages, py)
         if not ok:
@@ -886,6 +1004,11 @@ def main_build() -> int:
 
     print("▶ seed_vc engine")
     if not setup_seed_vc_engine(project_root):
+        all_ok = False
+    print()
+
+    print("▶ liveportrait engine")
+    if not setup_liveportrait_engine(project_root):
         all_ok = False
     print()
 
@@ -967,6 +1090,23 @@ def main_runtime(args: argparse.Namespace) -> int:
 
 # ─── 入口 ─────────────────────────────────────────────────────────────────────
 
+def main_setup_engine(engine: str) -> int:
+    """只克隆/安装指定引擎的源码目录（供 UI 安装按钮按需调用）。"""
+    project_root = Path(__file__).resolve().parent.parent
+    engine_map = {
+        "liveportrait": lambda: setup_liveportrait_engine(project_root),
+        "fish_speech":  lambda: setup_fish_speech_engine(project_root),
+        "seed_vc":      lambda: setup_seed_vc_engine(project_root),
+    }
+    fn = engine_map.get(engine)
+    if fn is None:
+        print(f"  [{engine}] 无需单独 setup（无源码克隆步骤）")
+        return 0
+    print(f"▶ setup engine: {engine}")
+    ok = fn()
+    return 0 if ok else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="安装引擎 pip 依赖 + FFmpeg")
     parser.add_argument(
@@ -985,8 +1125,14 @@ def main() -> int:
         "--json-progress", action="store_true", dest="json_progress",
         help="输出 JSON Lines 进度（供 Electron IPC 使用）",
     )
+    parser.add_argument(
+        "--engine", default="",
+        help="只安装指定引擎的源码目录（liveportrait / fish_speech / seed_vc）",
+    )
     args = parser.parse_args()
 
+    if args.engine:
+        return main_setup_engine(args.engine)
     if args.runtime:
         return main_runtime(args)
     else:

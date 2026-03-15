@@ -1,5 +1,6 @@
 import type { Status } from '../../types';
-import { IMG_I2I_PROVIDERS, IMG_I2I_PROVIDER_LABELS, IMG_I2I_MODELS } from '../../constants';
+import { IMG_I2I_PROVIDERS, IMG_I2I_PROVIDER_LABELS, IMG_I2I_MODELS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
+import ComboSelect from '../shared/ComboSelect';
 
 interface ImageI2IPanelProps {
   status: Status;
@@ -42,7 +43,9 @@ export default function ImageI2IPanel({
   fieldCls, fileCls, labelCls,
 }: ImageI2IPanelProps) {
   const busy = status === 'processing';
-  const isLocal = imgI2iProvider === 'comfyui';
+  const isComfyUI = imgI2iProvider === 'comfyui';
+  const isLocal = LOCAL_PROVIDERS.has(imgI2iProvider);
+  const isUnsupported = UNSUPPORTED_PROVIDERS.has(imgI2iProvider);
   const models = IMG_I2I_MODELS[imgI2iProvider] || [];
 
   return (
@@ -50,35 +53,40 @@ export default function ImageI2IPanel({
       {/* 服务商下拉 */}
       <div>
         <label className={labelCls}>服务商</label>
-        <select className={fieldCls} value={imgI2iProvider} onChange={e => onProviderChange(e.target.value)}>
-          {IMG_I2I_PROVIDERS.map(p => (
-            <option key={p} value={p}>{IMG_I2I_PROVIDER_LABELS[p] || p}</option>
-          ))}
-        </select>
+        <ComboSelect
+          value={imgI2iProvider}
+          onChange={onProviderChange}
+          options={IMG_I2I_PROVIDERS.map(p => ({ value: p, label: IMG_I2I_PROVIDER_LABELS[p] || p }))}
+          placeholder="选择服务商"
+        />
       </div>
 
       {/* 认证 */}
-      {isLocal ? (
+      {isComfyUI ? (
         <div>
           <label className={labelCls}>ComfyUI 服务地址</label>
           <input className={fieldCls} value={imgI2iComfyUrl} onChange={e => setImgI2iComfyUrl(e.target.value)}
             placeholder="http://127.0.0.1:8188" />
         </div>
-      ) : (
+      ) : !isLocal ? (
         <div>
           <label className={labelCls}>API Key</label>
           <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
             placeholder="sk-... / Bearer ..." />
         </div>
-      )}
+      ) : null}
 
       {/* 模型 */}
       {models.length > 0 && (
         <div>
           <label className={labelCls}>模型</label>
-          <select className={fieldCls} value={imgI2iModel} onChange={e => setImgI2iModel(e.target.value)}>
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <ComboSelect
+            value={imgI2iModel}
+            onChange={setImgI2iModel}
+            options={models.map(m => ({ value: m, label: m }))}
+            allowCustom
+            placeholder="选择模型"
+          />
         </div>
       )}
 
@@ -113,8 +121,8 @@ export default function ImageI2IPanel({
           className="w-full accent-rose-500" />
       </div>
 
-      <button className={btnPrimary} disabled={busy || !imgI2iSourceFile} onClick={onRun}>
-        {busy ? '处理中...' : '开始换脸换图'}
+      <button className={btnPrimary} disabled={busy || !imgI2iSourceFile || isUnsupported} onClick={onRun}>
+        {busy ? '处理中...' : isUnsupported ? '暂不支持' : '开始换脸换图'}
       </button>
     </div>
   );

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Body
 
 from config import BACKEND_HOST, BACKEND_PORT, MODEL_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings
-from utils.engine import get_checkpoint_dir
+from utils.engine import get_checkpoint_dir, detect_ffmpeg_hwaccel
 from utils.voices import list_voices
 from pathlib import Path
 import job_queue
@@ -50,6 +50,14 @@ async def runtime_info():
 @router.get("/capabilities")
 async def get_capabilities():
     return {"tasks": TASK_CAPABILITIES}
+
+
+@router.get("/hw-accel")
+async def hw_accel_info():
+    """探测并返回当前可用的 FFmpeg 硬件加速编码器（结果缓存，首次调用较慢）。"""
+    import asyncio
+    hw = await asyncio.to_thread(detect_ffmpeg_hwaccel)
+    return {"hwaccel": hw["hwaccel"], "encoder": hw["encoder"], "label": hw["label"]}
 
 
 @router.get("/settings")

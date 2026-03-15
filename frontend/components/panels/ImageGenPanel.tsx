@@ -1,5 +1,6 @@
 import type { Status } from '../../types';
-import { IMG_GEN_PROVIDERS, IMG_GEN_PROVIDER_LABELS, IMG_GEN_MODELS, IMG_GEN_SIZES } from '../../constants';
+import { IMG_GEN_PROVIDERS, IMG_GEN_PROVIDER_LABELS, IMG_GEN_MODELS, IMG_GEN_SIZES, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
+import ComboSelect from '../shared/ComboSelect';
 
 interface ImageGenPanelProps {
   status: Status;
@@ -36,7 +37,9 @@ export default function ImageGenPanel({
   fieldCls, fileCls, labelCls,
 }: ImageGenPanelProps) {
   const busy = status === 'processing';
-  const isLocal = imgGenProvider === 'comfyui';
+  const isComfyUI = imgGenProvider === 'comfyui';
+  const isLocal = LOCAL_PROVIDERS.has(imgGenProvider);
+  const isUnsupported = UNSUPPORTED_PROVIDERS.has(imgGenProvider);
   const models = IMG_GEN_MODELS[imgGenProvider] || [];
   const sizes = IMG_GEN_SIZES[imgGenProvider] || [];
   const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' ? '尺寸' : '比例';
@@ -46,35 +49,40 @@ export default function ImageGenPanel({
       {/* 服务商下拉 */}
       <div>
         <label className={labelCls}>服务商</label>
-        <select className={fieldCls} value={imgGenProvider} onChange={e => onProviderChange(e.target.value)}>
-          {IMG_GEN_PROVIDERS.map(p => (
-            <option key={p} value={p}>{IMG_GEN_PROVIDER_LABELS[p] || p}</option>
-          ))}
-        </select>
+        <ComboSelect
+          value={imgGenProvider}
+          onChange={onProviderChange}
+          options={IMG_GEN_PROVIDERS.map(p => ({ value: p, label: IMG_GEN_PROVIDER_LABELS[p] || p }))}
+          placeholder="选择服务商"
+        />
       </div>
 
       {/* 认证 */}
-      {isLocal ? (
+      {isComfyUI ? (
         <div>
           <label className={labelCls}>ComfyUI 服务地址</label>
           <input className={fieldCls} value={imgGenComfyUrl} onChange={e => setImgGenComfyUrl(e.target.value)}
             placeholder="http://127.0.0.1:8188" />
         </div>
-      ) : (
+      ) : !isLocal ? (
         <div>
           <label className={labelCls}>API Key</label>
           <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
             placeholder="sk-... / AIza... / Bearer ..." />
         </div>
-      )}
+      ) : null}
 
       {/* 模型 */}
       {models.length > 0 && (
         <div>
           <label className={labelCls}>模型</label>
-          <select className={fieldCls} value={imgGenModel} onChange={e => setImgGenModel(e.target.value)}>
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <ComboSelect
+            value={imgGenModel}
+            onChange={setImgGenModel}
+            options={models.map(m => ({ value: m, label: m }))}
+            placeholder={`默认：${models[0]}`}
+            allowCustom
+          />
         </div>
       )}
 
@@ -82,9 +90,12 @@ export default function ImageGenPanel({
       {sizes.length > 0 && (
         <div>
           <label className={labelCls}>{sizeLabel}</label>
-          <select className={fieldCls} value={imgGenSize} onChange={e => setImgGenSize(e.target.value)}>
-            {sizes.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <ComboSelect
+            value={imgGenSize}
+            onChange={setImgGenSize}
+            options={sizes.map(s => ({ value: s, label: s }))}
+            placeholder="选择尺寸"
+          />
         </div>
       )}
 
@@ -96,8 +107,8 @@ export default function ImageGenPanel({
           placeholder="描述你想生成的图像内容，越详细越好..." />
       </div>
 
-      <button className={btnPrimary} disabled={busy || !imgGenPrompt.trim()} onClick={onRun}>
-        {busy ? '生成中...' : '生成图像'}
+      <button className={btnPrimary} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={onRun}>
+        {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成图像'}
       </button>
     </div>
   );

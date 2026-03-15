@@ -1,5 +1,6 @@
 import type { Status } from '../../types';
-import { VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS } from '../../constants';
+import { VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
+import ComboSelect from '../shared/ComboSelect';
 
 interface VideoGenPanelProps {
   status: Status;
@@ -39,36 +40,45 @@ export default function VideoGenPanel({
   fieldCls, fileCls, labelCls,
 }: VideoGenPanelProps) {
   const busy = status === 'processing';
+  const isLocal = LOCAL_PROVIDERS.has(videoGenProvider);
+  const isUnsupported = UNSUPPORTED_PROVIDERS.has(videoGenProvider);
   const models = VIDEO_GEN_MODELS[videoGenProvider] || [];
   const durations = VIDEO_GEN_DURATIONS[videoGenProvider] || [5];
-  const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
+  const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_local' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
 
   return (
     <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
       {/* 服务商下拉 */}
       <div>
         <label className={labelCls}>服务商</label>
-        <select className={fieldCls} value={videoGenProvider} onChange={e => onProviderChange(e.target.value)}>
-          {VIDEO_GEN_PROVIDERS.map(p => (
-            <option key={p} value={p}>{VIDEO_GEN_PROVIDER_LABELS[p] || p}</option>
-          ))}
-        </select>
+        <ComboSelect
+          value={videoGenProvider}
+          onChange={onProviderChange}
+          options={VIDEO_GEN_PROVIDERS.map(p => ({ value: p, label: VIDEO_GEN_PROVIDER_LABELS[p] || p }))}
+          placeholder="选择服务商"
+        />
       </div>
 
-      {/* API Key */}
-      <div>
-        <label className={labelCls}>API Key</label>
-        <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-          placeholder="sk-... / Bearer ..." />
-      </div>
+      {/* API Key（本地引擎不需要） */}
+      {!isLocal && (
+        <div>
+          <label className={labelCls}>API Key</label>
+          <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
+            placeholder="sk-... / Bearer ..." />
+        </div>
+      )}
 
       {/* 模型 */}
       {models.length > 0 && (
         <div>
           <label className={labelCls}>模型</label>
-          <select className={fieldCls} value={videoGenModel} onChange={e => setVideoGenModel(e.target.value)}>
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <ComboSelect
+            value={videoGenModel}
+            onChange={setVideoGenModel}
+            options={models.map(m => ({ value: m, label: m }))}
+            placeholder={`默认：${models[0]}`}
+            allowCustom
+          />
         </div>
       )}
 
@@ -111,9 +121,12 @@ export default function VideoGenPanel({
       {/* 时长 */}
       <div>
         <label className={labelCls}>时长（秒）</label>
-        <select className={fieldCls} value={videoGenDuration} onChange={e => setVideoGenDuration(Number(e.target.value))}>
-          {durations.map(d => <option key={d} value={d}>{d} 秒</option>)}
-        </select>
+        <ComboSelect
+          value={String(videoGenDuration)}
+          onChange={v => setVideoGenDuration(Number(v))}
+          options={durations.map(d => ({ value: String(d), label: `${d} 秒` }))}
+          placeholder="选择时长"
+        />
       </div>
 
       {/* 提示词 */}
@@ -126,9 +139,9 @@ export default function VideoGenPanel({
 
       <button
         className={btnPrimary}
-        disabled={busy || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
+        disabled={busy || isUnsupported || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
         onClick={onRun}>
-        {busy ? '生成中...' : '生成视频'}
+        {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成视频'}
       </button>
     </div>
   );

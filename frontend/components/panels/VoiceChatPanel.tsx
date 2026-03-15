@@ -1,7 +1,7 @@
-import type { VoiceChatMsg, VoiceChatStatus, VoiceInfo } from '../../types';
-import { PROVIDER_LABELS, LOCAL_PROVIDERS, PROVIDER_TO_ENGINE } from '../../constants';
+import type { VoiceChatMsg, VoiceChatStatus, CapabilityMap } from '../../types';
+import { PROVIDER_LABELS, LOCAL_PROVIDERS, PROVIDER_TO_ENGINE, DEFAULT_CAPS } from '../../constants';
 import ModelInput from '../shared/ModelInput';
-import VoiceSelector from '../shared/VoiceSelector';
+import ComboSelect from '../shared/ComboSelect';
 
 interface VoiceChatPanelProps {
   vchatMsgs: VoiceChatMsg[];
@@ -19,15 +19,14 @@ interface VoiceChatPanelProps {
   setVchatTtsProvider: (v: string) => void;
   vchatTtsModel: string;
   setVchatTtsModel: (v: string) => void;
-  vchatVoiceId: string;
-  setVchatVoiceId: (v: string) => void;
+  vchatTtsRefAudio: File | null;
+  setVchatTtsRefAudio: (v: File | null) => void;
   vchatApiKey: string;
   setVchatApiKey: (v: string) => void;
   vchatEndpoint: string;
   setVchatEndpoint: (v: string) => void;
+  capabilities: CapabilityMap;
   engineVersions: Record<string, { version: string; ready: boolean }>;
-  voices: VoiceInfo[];
-  onRefreshVoices: () => void;
   vchatScrollRef: React.RefObject<HTMLDivElement>;
   onStartRecording: () => void;
   onStopRecording: () => void;
@@ -53,15 +52,14 @@ export default function VoiceChatPanel({
   setVchatTtsProvider,
   vchatTtsModel,
   setVchatTtsModel,
-  vchatVoiceId,
-  setVchatVoiceId,
+  vchatTtsRefAudio,
+  setVchatTtsRefAudio,
   vchatApiKey,
   setVchatApiKey,
   vchatEndpoint,
   setVchatEndpoint,
+  capabilities,
   engineVersions,
-  voices,
-  onRefreshVoices,
   vchatScrollRef,
   onStartRecording,
   onStopRecording,
@@ -81,12 +79,12 @@ export default function VoiceChatPanel({
         <div className="flex gap-3 flex-wrap">
           <label className="flex-1 min-w-[160px]">
             <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">API 密钥（云服务共用）</span>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all" type="password"
+            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-800 dark:focus:border-indigo-500" type="password"
               value={vchatApiKey} onChange={e => setVchatApiKey(e.target.value)} placeholder="云服务 API 密钥" />
           </label>
           <label className="flex-1 min-w-[160px]">
             <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">服务地址（Ollama 等）</span>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all"
+            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-800 dark:focus:border-indigo-500"
               value={vchatEndpoint} onChange={e => setVchatEndpoint(e.target.value)} placeholder="http://localhost:11434" />
           </label>
         </div>
@@ -95,10 +93,13 @@ export default function VoiceChatPanel({
           {/* STT */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-indigo-600 uppercase tracking-wide">① STT</span>
-            <select className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 py-2 text-xs text-slate-800 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all"
-              value={vchatSttProvider} onChange={e => setVchatSttProvider(e.target.value)}>
-              {['whisper', 'openai', 'gemini'].map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
-            </select>
+            <ComboSelect
+              compact
+              value={vchatSttProvider}
+              onChange={setVchatSttProvider}
+              options={(capabilities.asr ?? DEFAULT_CAPS.asr).map(p => ({ value: p, label: PROVIDER_LABELS[p] || p }))}
+              placeholder="选择 STT 服务"
+            />
             {!LOCAL_PROVIDERS.has(vchatSttProvider) && (
               <ModelInput value={vchatSttModel} onChange={setVchatSttModel} task="asr" provider={vchatSttProvider} placeholder="模型（可选）" />
             )}
@@ -109,19 +110,25 @@ export default function VoiceChatPanel({
           {/* LLM */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-indigo-600 uppercase tracking-wide">② LLM</span>
-            <select className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 py-2 text-xs text-slate-800 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all"
-              value={vchatLlmProvider} onChange={e => setVchatLlmProvider(e.target.value)}>
-              {['gemini', 'openai', 'ollama', 'github'].map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
-            </select>
+            <ComboSelect
+              compact
+              value={vchatLlmProvider}
+              onChange={setVchatLlmProvider}
+              options={(capabilities.llm ?? DEFAULT_CAPS.llm).map(p => ({ value: p, label: PROVIDER_LABELS[p] || p }))}
+              placeholder="选择 LLM 服务"
+            />
             <ModelInput value={vchatLlmModel} onChange={setVchatLlmModel} task="llm" provider={vchatLlmProvider} />
           </div>
           {/* TTS */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-indigo-600 uppercase tracking-wide">③ TTS</span>
-            <select className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-2.5 py-2 text-xs text-slate-800 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all"
-              value={vchatTtsProvider} onChange={e => setVchatTtsProvider(e.target.value)}>
-              {['fish_speech', 'openai', 'gemini', 'elevenlabs'].map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
-            </select>
+            <ComboSelect
+              compact
+              value={vchatTtsProvider}
+              onChange={setVchatTtsProvider}
+              options={(capabilities.tts ?? DEFAULT_CAPS.tts).map(p => ({ value: p, label: PROVIDER_LABELS[p] || p }))}
+              placeholder="选择 TTS 服务"
+            />
             {!LOCAL_PROVIDERS.has(vchatTtsProvider) && (
               <ModelInput value={vchatTtsModel} onChange={setVchatTtsModel} task="tts" provider={vchatTtsProvider} placeholder="模型（可选）" />
             )}
@@ -131,8 +138,18 @@ export default function VoiceChatPanel({
           </div>
         </div>
 
-        {/* TTS 音色 */}
-        <VoiceSelector label="TTS 音色（语音合成用）" value={vchatVoiceId} onChange={setVchatVoiceId} voices={voices} onRefresh={onRefreshVoices} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
+        {/* TTS 参考音频（Fish Speech 声音克隆必填） */}
+        {vchatTtsProvider === 'fish_speech' && (
+          <label className="block">
+            <span className={labelCls}>参考音频（Fish Speech 声音克隆必填）</span>
+            <input className={`block w-full text-sm text-slate-700 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-900/40 dark:file:text-indigo-300`}
+              type="file" accept="audio/*"
+              onChange={e => setVchatTtsRefAudio(e.target.files?.[0] || null)} />
+            {vchatTtsRefAudio && (
+              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">{vchatTtsRefAudio.name}</p>
+            )}
+          </label>
+        )}
       </div>
 
       {/* 对话记录 */}
