@@ -499,12 +499,39 @@ def prefetch_faster_whisper_model(
     print(f"  [faster-whisper] 下载 {model} 模型到 {model_dir} ...")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    # 用 faster_whisper.utils.download_model(output_dir=...) 直接下载到指定目录（非 HF cache 格式）
+    # 回退：huggingface_hub.snapshot_download(local_dir=...) 也会直接写入目标目录
+    script = f"""
+import sys, os
+# 确保不受外部 HF_HUB_OFFLINE 影响
+os.environ.pop("HF_HUB_OFFLINE", None)
+os.environ.pop("TRANSFORMERS_OFFLINE", None)
+output_dir = {str(model_dir)!r}
+try:
+    from faster_whisper.utils import download_model
+    download_model({model!r}, output_dir=output_dir, local_files_only=False)
+    print("ok:download_model")
+except Exception as e1:
+    # 回退到 huggingface_hub
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="Systran/faster-whisper-{model}",
+            local_dir=output_dir,
+            local_dir_use_symlinks=False,
+        )
+        print("ok:snapshot_download")
+    except Exception as e2:
+        print(f"err1={{e1}}", file=sys.stderr)
+        print(f"err2={{e2}}", file=sys.stderr)
+        sys.exit(1)
+"""
+    # 传入干净的环境（去掉 HF_HUB_OFFLINE，保留其余环境变量）
+    clean_env = {k: v for k, v in os.environ.items() if k not in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")}
     r = subprocess.run(
-        [py, "-c",
-         f"from faster_whisper import WhisperModel; "
-         f"WhisperModel({model!r}, device='cpu', compute_type='int8', download_root={str(checkpoint_dir)!r}); "
-         f"print('done')"],
+        [py, "-c", script],
         capture_output=True, text=True, timeout=600,
+        env=clean_env,
     )
     if r.returncode == 0 and model_bin.exists() and model_bin.stat().st_size > 0:
         size_mb = model_bin.stat().st_size // 1024 // 1024
@@ -512,9 +539,9 @@ def prefetch_faster_whisper_model(
         emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=True)
         return True
     else:
-        stderr = (r.stderr or "").strip()[:300]
-        print(f"    ✗ 下载失败: {stderr}")
-        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=False, error=stderr)
+        err = ((r.stderr or "") + (r.stdout or "")).strip()[:300]
+        print(f"    ✗ 下载失败: {err}")
+        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=False, error=err)
         return False
 
 

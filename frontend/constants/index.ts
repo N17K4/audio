@@ -44,8 +44,10 @@ export const PROVIDER_LABELS: Record<string, string> = {
   dashscope: 'DashScope（阿里云）', deepgram: 'Deepgram', groq: 'Groq',
   claude: 'Claude（Anthropic）', deepseek: 'DeepSeek', mistral: 'Mistral', xai: 'xAI（Grok）',
   github: 'GitHub Models', stability: 'Stability AI',
-  comfyui: 'ComfyUI（本地）', replicate: 'Replicate',
-  kling: '可灵（Kling, 快手）', wan_video: '万象视频（阿里）', pika: 'Pika', runway: 'RunwayML（Gen-3）', sora: 'Sora（OpenAI）',
+  comfyui: 'ComfyUI（本地）', replicate: 'Replicate', facefusion: 'FaceFusion 3.x（本地）',
+  wan_local: 'Wan 2.1（本地）', kling: '可灵（Kling, 快手）', wan_video: '万象视频（阿里）', pika: 'Pika', runway: 'RunwayML（Gen-3）', sora: 'Sora（OpenAI）',
+  got_ocr: 'GOT-OCR2.0（本地）', azure_doc: 'Azure Document Intelligence',
+  liveportrait: 'LivePortrait（本地）', sadtalker: 'SadTalker（本地）', heygen: 'HeyGen', did: 'D-ID',
 };
 
 // 各服务商常用模型列表（用于 datalist 下拉提示）
@@ -150,7 +152,7 @@ export const IMAGE_UNDERSTAND_MODELS: Record<string, string[]> = {
 export const TRANSLATE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'groq', 'mistral', 'xai', 'ollama', 'github'];
 export const TRANSLATE_LANGUAGES = ['中文', '英文', '日文', '韩文', '法文', '德文', '西班牙文', '俄文', '阿拉伯文', '葡萄牙文'];
 
-export const LOCAL_PROVIDERS = new Set(['faster_whisper', 'whisper', 'local_rvc', 'seed_vc', 'fish_speech', 'comfyui']);
+export const LOCAL_PROVIDERS = new Set(['faster_whisper', 'whisper', 'local_rvc', 'seed_vc', 'fish_speech', 'comfyui', 'facefusion', 'wan_local', 'got_ocr', 'liveportrait', 'sadtalker']);
 // 前端 provider 名 → manifest engine key
 export const PROVIDER_TO_ENGINE: Record<string, string> = {
   fish_speech: 'fish_speech',

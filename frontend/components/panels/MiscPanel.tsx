@@ -8,6 +8,8 @@ import {
   IMG_GEN_PROVIDERS, IMG_GEN_PROVIDER_LABELS, IMG_GEN_MODELS, IMG_GEN_SIZES,
   IMG_I2I_PROVIDERS, IMG_I2I_PROVIDER_LABELS, IMG_I2I_MODELS,
   VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS,
+  OCR_PROVIDERS, OCR_PROVIDER_LABELS, OCR_MODELS,
+  LIPSYNC_PROVIDERS, LIPSYNC_PROVIDER_LABELS, LIPSYNC_MODELS,
 } from '../../constants';
 
 interface MiscPanelProps {
@@ -107,6 +109,28 @@ interface MiscPanelProps {
   videoGenImageFile: File | null;
   setVideoGenImageFile: (f: File | null) => void;
   onRunVideoGen: () => void;
+  // ocr
+  ocrProvider: string;
+  onOcrProviderChange: (p: string) => void;
+  ocrFile: File | null;
+  setOcrFile: (f: File | null) => void;
+  ocrModel: string;
+  setOcrModel: (m: string) => void;
+  ocrLocalUrl: string;
+  setOcrLocalUrl: (u: string) => void;
+  onRunOcr: () => void;
+  // lipsync
+  lipsyncProvider: string;
+  onLipsyncProviderChange: (p: string) => void;
+  lipsyncVideoFile: File | null;
+  setLipsyncVideoFile: (f: File | null) => void;
+  lipsyncAudioFile: File | null;
+  setLipsyncAudioFile: (f: File | null) => void;
+  lipsyncModel: string;
+  setLipsyncModel: (m: string) => void;
+  lipsyncLocalUrl: string;
+  setLipsyncLocalUrl: (u: string) => void;
+  onRunLipsync: () => void;
   // style
   fieldCls: string;
   fileCls: string;
@@ -125,6 +149,11 @@ const ROW2_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
   { key: 'img_gen',   label: '图像生成',  icon: '✨' },
   { key: 'img_i2i',  label: '换脸换图',  icon: '🔄' },
   { key: 'video_gen', label: '视频生成',  icon: '🎬' },
+];
+
+const ROW3_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
+  { key: 'ocr',     label: 'OCR 文档',  icon: '📄' },
+  { key: 'lipsync', label: '口型同步',  icon: '💋' },
 ];
 
 const CODE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'groq', 'mistral', 'xai', 'ollama', 'github'];
@@ -179,6 +208,17 @@ export default function MiscPanel({
   videoGenMode, setVideoGenMode,
   videoGenImageFile, setVideoGenImageFile,
   onRunVideoGen,
+  ocrProvider, onOcrProviderChange,
+  ocrFile, setOcrFile,
+  ocrModel, setOcrModel,
+  ocrLocalUrl, setOcrLocalUrl,
+  onRunOcr,
+  lipsyncProvider, onLipsyncProviderChange,
+  lipsyncVideoFile, setLipsyncVideoFile,
+  lipsyncAudioFile, setLipsyncAudioFile,
+  lipsyncModel, setLipsyncModel,
+  lipsyncLocalUrl, setLipsyncLocalUrl,
+  onRunLipsync,
   fieldCls, fileCls, labelCls, btnSec,
 }: MiscPanelProps) {
   const busy = status === 'processing';
@@ -232,7 +272,7 @@ export default function MiscPanel({
             </button>
           ))}
         </div>
-        {/* 第二行：本地/云端生成功能 */}
+        {/* 第二行：本地/云端图像视频生成 */}
         <div className="flex gap-1.5 rounded-2xl bg-slate-100/70 dark:bg-slate-800/70 p-1">
           {ROW2_TABS.map(tab => (
             <button
@@ -241,6 +281,22 @@ export default function MiscPanel({
               className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
                 miscSubPage === tab.key
                   ? 'bg-white dark:bg-slate-700 text-pink-600 dark:text-pink-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}>
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+        {/* 第三行：OCR & 口型同步 */}
+        <div className="flex gap-1.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 p-1">
+          {ROW3_TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setMiscSubPage(tab.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
+                miscSubPage === tab.key
+                  ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}>
               <span>{tab.icon}</span>
@@ -692,6 +748,100 @@ export default function MiscPanel({
               disabled={busy || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
               onClick={onRunVideoGen}>
               {busy ? '生成中...' : '生成视频'}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── OCR 文档识别 ── */}
+      {miscSubPage === 'ocr' && (() => {
+        const isLocal = ocrProvider === 'got_ocr';
+        const models = OCR_MODELS[ocrProvider] || [];
+        return (
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            <div>
+              <label className={labelCls}>服务商</label>
+              <select className={fieldCls} value={ocrProvider} onChange={e => onOcrProviderChange(e.target.value)}>
+                {OCR_PROVIDERS.map(p => <option key={p} value={p}>{OCR_PROVIDER_LABELS[p] || p}</option>)}
+              </select>
+              {isLocal && (
+                <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">GOT-OCR2.0：支持复杂图表、数学公式、扫描文档，两台机器均可本地运行</p>
+              )}
+            </div>
+            {isLocal ? (
+              <div>
+                <label className={labelCls}>本地服务地址</label>
+                <input className={fieldCls} value={ocrLocalUrl} onChange={e => setOcrLocalUrl(e.target.value)} placeholder="http://127.0.0.1:8890" />
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>API Key</label>
+                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / AIza... / Bearer ..." />
+              </div>
+            )}
+            {models.length > 0 && (
+              <div>
+                <label className={labelCls}>模型</label>
+                <select className={fieldCls} value={ocrModel} onChange={e => setOcrModel(e.target.value)}>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className={labelCls}>上传图片 / 文档（PDF、PNG、JPG 等）</label>
+              <input type="file" accept="image/*,.pdf" className={fileCls} onChange={e => setOcrFile(e.target.files?.[0] ?? null)} />
+            </div>
+            <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !ocrFile} onClick={onRunOcr}>
+              {busy ? '识别中...' : '开始 OCR 识别'}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── 口型同步 ── */}
+      {miscSubPage === 'lipsync' && (() => {
+        const isLocal = lipsyncProvider === 'liveportrait' || lipsyncProvider === 'sadtalker';
+        const models = LIPSYNC_MODELS[lipsyncProvider] || [];
+        return (
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            <div>
+              <label className={labelCls}>服务商</label>
+              <select className={fieldCls} value={lipsyncProvider} onChange={e => onLipsyncProviderChange(e.target.value)}>
+                {LIPSYNC_PROVIDERS.map(p => <option key={p} value={p}>{LIPSYNC_PROVIDER_LABELS[p] || p}</option>)}
+              </select>
+              {isLocal && (
+                <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">LivePortrait：物理拟真度最高，~4GB VRAM，两台机器均支持（4050 CUDA / MBP MPS）</p>
+              )}
+            </div>
+            {isLocal ? (
+              <div>
+                <label className={labelCls}>本地服务地址（Gradio / API）</label>
+                <input className={fieldCls} value={lipsyncLocalUrl} onChange={e => setLipsyncLocalUrl(e.target.value)} placeholder="http://127.0.0.1:7860" />
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>API Key</label>
+                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
+              </div>
+            )}
+            {models.length > 0 && (
+              <div>
+                <label className={labelCls}>模型</label>
+                <select className={fieldCls} value={lipsyncModel} onChange={e => setLipsyncModel(e.target.value)}>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className={labelCls}>视频 / 人物图片（驱动源）</label>
+              <input type="file" accept="video/*,image/*" className={fileCls} onChange={e => setLipsyncVideoFile(e.target.files?.[0] ?? null)} />
+            </div>
+            <div>
+              <label className={labelCls}>音频文件（目标口型音频）</label>
+              <input type="file" accept="audio/*" className={fileCls} onChange={e => setLipsyncAudioFile(e.target.files?.[0] ?? null)} />
+            </div>
+            <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile} onClick={onRunLipsync}>
+              {busy ? '处理中...' : '开始口型同步'}
             </button>
           </div>
         );

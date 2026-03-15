@@ -3,6 +3,7 @@ import {
   IMG_GEN_MODELS, IMG_GEN_SIZES,
   IMG_I2I_MODELS,
   VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS,
+  OCR_MODELS, LIPSYNC_MODELS,
 } from '../constants';
 
 interface UseImageExtProps {
@@ -177,6 +178,88 @@ export function useImageExt({
     }
   }
 
+  // ── OCR 状态 ──
+  const [ocrProvider, setOcrProvider] = useState('got_ocr');
+  const [ocrFile, setOcrFile] = useState<File | null>(null);
+  const [ocrModel, setOcrModel] = useState('GOT-OCR2.0');
+  const [ocrLocalUrl, setOcrLocalUrl] = useState('http://127.0.0.1:8890');
+
+  function handleOcrProviderChange(p: string) {
+    setOcrProvider(p);
+    const models = OCR_MODELS[p] || [];
+    if (models.length > 0) setOcrModel(models[0]);
+  }
+
+  async function runOcr() {
+    if (!ocrFile) { setError('请上传图片或文档'); return; }
+    setError('');
+    setStatus('processing');
+    setProcessingStartTime(Date.now());
+    try {
+      const fd = new FormData();
+      fd.append('file', ocrFile);
+      fd.append('provider', ocrProvider);
+      fd.append('api_key', ocrProvider === 'got_ocr' ? '' : apiKey);
+      fd.append('cloud_endpoint', ocrProvider === 'got_ocr' ? ocrLocalUrl : cloudEndpoint);
+      fd.append('model', ocrModel);
+      const res = await fetch(`${backendBaseUrl}/tasks/ocr`, { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
+      addInstantJobResult('ocr', `OCR · ${ocrFile.name}`, ocrProvider, ocrProvider === 'got_ocr', {
+        status: 'completed', result_text: data.text || '',
+      });
+      onNavigateTasks();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'OCR 识别失败');
+    } finally {
+      setStatus('idle');
+      setProcessingStartTime(null);
+    }
+  }
+
+  // ── 口型同步状态 ──
+  const [lipsyncProvider, setLipsyncProvider] = useState('liveportrait');
+  const [lipsyncVideoFile, setLipsyncVideoFile] = useState<File | null>(null);
+  const [lipsyncAudioFile, setLipsyncAudioFile] = useState<File | null>(null);
+  const [lipsyncModel, setLipsyncModel] = useState('');
+  const [lipsyncLocalUrl, setLipsyncLocalUrl] = useState('http://127.0.0.1:7860');
+
+  function handleLipsyncProviderChange(p: string) {
+    setLipsyncProvider(p);
+    const models = LIPSYNC_MODELS[p] || [];
+    setLipsyncModel(models[0] || '');
+  }
+
+  async function runLipsync() {
+    if (!lipsyncVideoFile) { setError('请上传视频或人物图片'); return; }
+    if (!lipsyncAudioFile) { setError('请上传音频文件'); return; }
+    setError('');
+    setStatus('processing');
+    setProcessingStartTime(Date.now());
+    try {
+      const fd = new FormData();
+      fd.append('video', lipsyncVideoFile);
+      fd.append('audio', lipsyncAudioFile);
+      fd.append('provider', lipsyncProvider);
+      const isLocal = lipsyncProvider === 'liveportrait' || lipsyncProvider === 'sadtalker';
+      fd.append('api_key', isLocal ? '' : apiKey);
+      fd.append('cloud_endpoint', isLocal ? lipsyncLocalUrl : cloudEndpoint);
+      fd.append('model', lipsyncModel);
+      const res = await fetch(`${backendBaseUrl}/tasks/lipsync`, { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
+      if (data.job_id) {
+        await fetchJobs();
+        onNavigateTasks();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '口型同步失败');
+    } finally {
+      setStatus('idle');
+      setProcessingStartTime(null);
+    }
+  }
+
   return {
     // image gen
     imgGenProvider, handleImgGenProviderChange,
@@ -202,5 +285,18 @@ export function useImageExt({
     videoGenImageFile, setVideoGenImageFile,
     videoGenMode, setVideoGenMode,
     runVideoGen,
+    // ocr
+    ocrProvider, handleOcrProviderChange,
+    ocrFile, setOcrFile,
+    ocrModel, setOcrModel,
+    ocrLocalUrl, setOcrLocalUrl,
+    runOcr,
+    // lipsync
+    lipsyncProvider, handleLipsyncProviderChange,
+    lipsyncVideoFile, setLipsyncVideoFile,
+    lipsyncAudioFile, setLipsyncAudioFile,
+    lipsyncModel, setLipsyncModel,
+    lipsyncLocalUrl, setLipsyncLocalUrl,
+    runLipsync,
   };
 }
