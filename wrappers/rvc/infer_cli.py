@@ -45,7 +45,7 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     if env_val:
         return env_val
     base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "runtime" / "manifest.json"
+    manifest_path = base / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -100,7 +100,7 @@ def get_embedded_python() -> str:
 
 def detect_project_local_engine_cmd() -> str:
     base_dir = Path(__file__).resolve().parent
-    engine_dir = base_dir / "engine"
+    engine_dir = base_dir.parent.parent / "runtime" / "rvc" / "engine"
     if not engine_dir.exists():
         return ""
 

@@ -27,28 +27,8 @@ models/**/*.index
 models/voices/user/*
 !models/voices/user/.gitkeep
 
-# ─── runtime 目录 ─────────────────────────────────────────────────────────────
-# 默认忽略 runtime/ 下所有内容，然后逐一解除需要跟踪的目录
-runtime/*
-!runtime/manifest.json
-
-# rvc：全部跟踪（engine/infer.py 由 setup-engines.py 生成，需要版本控制）
-!runtime/rvc/
-!runtime/rvc/**
-
-# whisper：全部跟踪
-!runtime/whisper/
-!runtime/whisper/**
-
-# fish_speech：跟踪 wrapper 脚本；engine/ 由 git clone 动态获取，不跟踪
-!runtime/fish_speech/
-!runtime/fish_speech/**
-runtime/fish_speech/engine/
-
-# seed_vc：跟踪 wrapper 脚本；engine/ 由 git clone 动态获取，不跟踪
-!runtime/seed_vc/
-!runtime/seed_vc/**
-runtime/seed_vc/engine/
+# ─── runtime 目录（引擎二进制/克隆，不跟踪）─────────────────────────────────────
+runtime/
 
 # ─── checkpoints / 大模型 ──────────────────────────────────────────────────────
 checkpoints/

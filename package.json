@@ -108,6 +108,20 @@
       {
         "from": "runtime/faster_whisper/",
         "to": "runtime/faster_whisper/"
+      },
+      {
+        "from": "runtime/got_ocr/",
+        "to": "runtime/got_ocr/"
+      },
+      {
+        "from": "runtime/facefusion/",
+        "to": "runtime/facefusion/",
+        "filter": [
+          "**/*",
+          "!engine/.git/**",
+          "!engine/tests/**",
+          "!engine/docs/**"
+        ]
       }
     ],
     "directories": {
@@ -119,6 +133,10 @@
         {
           "from": "runtime/mac/python/",
           "to": "runtime/mac/python/"
+        },
+        {
+          "from": "runtime/mac/bin/",
+          "to": "runtime/mac/bin/"
         }
       ]
     },
@@ -128,6 +146,10 @@
         {
           "from": "runtime/win/python/",
           "to": "runtime/win/python/"
+        },
+        {
+          "from": "runtime/win/bin/",
+          "to": "runtime/win/bin/"
         }
       ]
     }

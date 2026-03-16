@@ -1,0 +1,7 @@
+{
+  "command": "",
+  "note": "留空则自动使用内置 faster-whisper 库推理（需在 runtime Python 中安装 faster-whisper）。也可指定自定义推理脚本路径。",
+  "examples": [
+    "\"{python}\" \"runtime/faster_whisper/engine/transcribe.py\" --input {input} --output {output} --model {model}"
+  ]
+}

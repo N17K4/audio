@@ -316,8 +316,8 @@ function openSetupGuideWindow(missingEngines) {
       let manifest = {};
       try {
         const mp = app.isPackaged
-          ? path.join(process.resourcesPath, 'runtime', 'manifest.json')
-          : path.join(__dirname, 'runtime', 'manifest.json');
+          ? path.join(process.resourcesPath, 'wrappers', 'manifest.json')
+          : path.join(__dirname, 'wrappers', 'manifest.json');
         manifest = JSON.parse(fs.readFileSync(mp, 'utf-8'));
       } catch {}
       setupGuideWin.webContents.send('setup:info', { missingEngines, manifest });
@@ -614,7 +614,7 @@ ipcMain.handle('app:getDiskUsage', () => {
   // 读取 manifest.json — 单一数据源，存储版本号、大小、默认安装标志
   let _manifest = {};
   try {
-    const mp = path.join(resRoot, 'runtime', 'manifest.json');
+    const mp = path.join(resRoot, 'wrappers', 'manifest.json');
     _manifest = JSON.parse(fs.readFileSync(mp, 'utf-8'));
   } catch { /**/ }
   const _eng  = (k) => (_manifest.engines?.[k] || {});

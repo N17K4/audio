@@ -44,7 +44,7 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     if env_val:
         return env_val
     base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "runtime" / "manifest.json"
+    manifest_path = base / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -80,8 +80,9 @@ def get_embedded_python() -> str:
 def _worker_paths(checkpoint_dir: str) -> tuple[str, str]:
     """返回 (socket_path, pid_path)，以 checkpoint_dir hash 区分不同实例。"""
     import hashlib
+    import tempfile
     h = hashlib.md5(checkpoint_dir.encode()).hexdigest()[:8]
-    tmp = os.environ.get("TMPDIR") or "/tmp"
+    tmp = tempfile.gettempdir()
     return (
         os.path.join(tmp, f"fish_speech_worker_{h}.sock"),
         os.path.join(tmp, f"fish_speech_worker_{h}.pid"),
@@ -255,7 +256,7 @@ def main() -> int:
     # ── 持久化 Worker 模式 ────────────────────────────────────────────────────
 
     # 检查依赖
-    engine_dir = Path(__file__).resolve().parent / "engine"
+    engine_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "fish_speech" / "engine"
     if not engine_dir.exists():
         print("[fish_speech] engine 目录不存在，请先运行 pnpm run checkpoints", file=sys.stderr)
         return 3

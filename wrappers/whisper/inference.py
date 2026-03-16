@@ -43,7 +43,7 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     if env_val:
         return env_val
     base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "runtime" / "manifest.json"
+    manifest_path = base / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -98,7 +98,7 @@ def load_cmd_template() -> str:
 
 def detect_engine_cmd() -> str:
     """自动探测 engine/ 子目录中的推理脚本。"""
-    engine_dir = Path(__file__).resolve().parent / "engine"
+    engine_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "whisper" / "engine"
     if not engine_dir.exists():
         return ""
 

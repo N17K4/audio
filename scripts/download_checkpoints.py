@@ -250,7 +250,12 @@ def check_and_download(
             all_ok = False
             continue
 
-        if not url:
+        # 支持 repo_id + filename + repo_type 格式（HF dataset 等）
+        repo_id_field: str = file_cfg.get("repo_id", "")
+        filename_field: str = file_cfg.get("filename", "")
+        repo_type_field: str = file_cfg.get("repo_type", "model")
+
+        if not url and not repo_id_field:
             print(f"    没有下载链接，请手动放置到: {dest}")
             if required:
                 all_ok = False
@@ -258,6 +263,36 @@ def check_and_download(
 
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
+            # repo_id 直接下载模式（支持 dataset / model 等 repo_type）
+            if repo_id_field and filename_field and not url:
+                from huggingface_hub import hf_hub_download as _hf_dl
+                token = get_hf_token()
+                print(f"  [HF {repo_type_field}] {repo_id_field}/{filename_field}")
+                downloaded = _hf_dl(
+                    repo_id=repo_id_field,
+                    filename=filename_field,
+                    repo_type=repo_type_field,
+                    local_dir=str(dest.parent),
+                    token=token,
+                )
+                dl_path = Path(downloaded)
+                if dl_path.resolve() != dest.resolve() and dl_path.exists():
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dl_path.rename(dest)
+                if dest.exists() and dest.stat().st_size > 0:
+                    actual = sha256_file(dest)
+                    sha256_updates.setdefault(engine_name, {})[rel_path] = actual
+                    print(f"    ✓ 下载完成  {dest.stat().st_size // 1024 // 1024} MB")
+                    emit("file_done", engine=engine_name, file=rel_path, ok=True)
+                    if expected_sha256 and actual != expected_sha256:
+                        print(f"    ⚠ SHA256 与 manifest 预期不符，已记录新哈希")
+                else:
+                    print(f"    ✗ 下载后文件异常")
+                    emit("file_done", engine=engine_name, file=rel_path, ok=False, error="下载后文件异常")
+                    if required:
+                        all_ok = False
+                continue
+
             hf_info = parse_hf_url(url)
             if hf_info:
                 repo_id, filename, revision = hf_info
@@ -931,6 +966,11 @@ def main() -> int:
     manifest_path = resources_root / "runtime" / "manifest.json"
     if not manifest_path.exists():
         manifest_path = project_root / "runtime" / "manifest.json"
+        resources_root = project_root
+    if not manifest_path.exists():
+        manifest_path = resources_root / "wrappers" / "manifest.json"
+    if not manifest_path.exists():
+        manifest_path = project_root / "wrappers" / "manifest.json"
         resources_root = project_root
 
     if not manifest_path.exists():

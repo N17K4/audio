@@ -56,6 +56,22 @@ jobs:
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
 
+      # ── 5a. 安装引擎依赖（rvc-python / fairseq 等装入嵌入式 Python）──────────
+      # setup-engines.py 负责安装 rvc-python、bitarray 等非 poetry 管理的包
+      - name: 安装引擎依赖（setup-engines）
+        shell: pwsh
+        run: |
+          $py = "runtime\win\python\python.exe"
+          & $py scripts/setup-engines.py
+        continue-on-error: false
+
+      # ── 5b. 下载内置音色模型（从 HuggingFace N17K4/ai-workshop-assets 下载）───
+      - name: 下载内置音色模型
+        shell: pwsh
+        run: |
+          $py = "runtime\win\python\python.exe"
+          & $py scripts/download_checkpoints.py --engine voices
+
       # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend

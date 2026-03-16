@@ -7,6 +7,28 @@
       "category": "pypi",
       "user_facing": true,
       "url": "https://pypi.org/simple",
+      "mirrors": [
+        {
+          "name": "官方源",
+          "url": "https://pypi.org/simple"
+        },
+        {
+          "name": "清华大学",
+          "url": "https://pypi.tuna.tsinghua.edu.cn/simple"
+        },
+        {
+          "name": "阿里云",
+          "url": "https://mirrors.aliyun.com/pypi/simple"
+        },
+        {
+          "name": "腾讯云",
+          "url": "https://mirrors.cloud.tencent.com/pypi/simple"
+        },
+        {
+          "name": "华为云",
+          "url": "https://repo.huaweicloud.com/repository/pypi/simple"
+        }
+      ],
       "size_display": "~2–4 GB（torch / torchaudio 等）",
       "phase": "用户首次启动",
       "mirror_support": true,
@@ -17,6 +39,20 @@
       "category": "huggingface",
       "user_facing": true,
       "url": "https://huggingface.co",
+      "mirrors": [
+        {
+          "name": "官方源",
+          "url": "https://huggingface.co"
+        },
+        {
+          "name": "HF Mirror（中国大陆）",
+          "url": "https://hf-mirror.com"
+        },
+        {
+          "name": "ModelScope（中国大陆）",
+          "url": "https://modelscope.cn"
+        }
+      ],
       "size_display": "~1–5 GB（按引擎，Fish Speech ~500 MB，Seed-VC ~1 GB，RVC/Whisper 按需）",
       "phase": "用户安装引擎",
       "mirror_support": true,
@@ -106,7 +142,11 @@
   "engines": {
     "fish_speech": {
       "version": "1.5",
-      "ui": { "label": "Fish Speech", "size_display": "~1 GB", "default_install": true },
+      "ui": {
+        "label": "Fish Speech",
+        "size_display": "~1 GB",
+        "default_install": true
+      },
       "code_dir": "runtime/fish_speech/engine",
       "checkpoint_dir": "checkpoints/fish_speech",
       "pip_packages": [
@@ -173,7 +213,11 @@
     },
     "seed_vc": {
       "version": "2.0",
-      "ui": { "label": "Seed-VC", "size_display": "~2.7 GB", "default_install": true },
+      "ui": {
+        "label": "Seed-VC",
+        "size_display": "~2.7 GB",
+        "default_install": true
+      },
       "code_dir": "runtime/seed_vc/engine",
       "checkpoint_dir": "checkpoints/seed_vc",
       "pip_packages": [
@@ -256,7 +300,11 @@
     },
     "rvc": {
       "version": "2.0",
-      "ui": { "label": "RVC", "size_display": "~760 MB", "default_install": true },
+      "ui": {
+        "label": "RVC",
+        "size_display": "~760 MB",
+        "default_install": true
+      },
       "code_dir": "runtime/rvc/engine",
       "checkpoint_dir": "checkpoints/rvc",
       "checkpoint_files": [
@@ -294,7 +342,11 @@
     },
     "faster_whisper": {
       "version": "1.x",
-      "ui": { "label": "Faster Whisper", "size_display": "base · ~150 MB", "default_install": true },
+      "ui": {
+        "label": "Faster Whisper",
+        "size_display": "base · ~150 MB",
+        "default_install": true
+      },
       "code_dir": "runtime/faster_whisper",
       "checkpoint_dir": "checkpoints/faster_whisper",
       "pip_packages": [
@@ -307,7 +359,11 @@
     },
     "whisper": {
       "version": "large-v3",
-      "ui": { "label": "Whisper", "size_display": "~1.5 GB", "default_install": false },
+      "ui": {
+        "label": "Whisper",
+        "size_display": "~1.5 GB",
+        "default_install": false
+      },
       "code_dir": "runtime/whisper/engine",
       "checkpoint_dir": "checkpoints/whisper",
       "_pip_packages_disabled": [
@@ -327,7 +383,11 @@
     },
     "got_ocr": {
       "version": "2.0",
-      "ui": { "label": "GOT-OCR", "size_display": "~1.5 GB", "default_install": false },
+      "ui": {
+        "label": "GOT-OCR",
+        "size_display": "~1.5 GB",
+        "default_install": false
+      },
       "code_dir": "runtime/got_ocr",
       "checkpoint_dir": "checkpoints/got_ocr",
       "pip_packages": [
@@ -356,7 +416,11 @@
     },
     "liveportrait": {
       "version": "3.x-fp16",
-      "ui": { "label": "LivePortrait", "size_display": "~1.8 GB", "default_install": false },
+      "ui": {
+        "label": "LivePortrait",
+        "size_display": "~1.8 GB",
+        "default_install": false
+      },
       "code_dir": "runtime/liveportrait",
       "checkpoint_dir": "checkpoints/liveportrait",
       "pip_packages": [
@@ -374,8 +438,7 @@
       "runtime_pip_packages": [
         "torch",
         "torchvision",
-        "Pillow",
-        "liveportrait"
+        "Pillow"
       ],
       "hf_cache_downloads": [
         {
@@ -392,19 +455,31 @@
     },
     "facefusion": {
       "version": "3.5.4",
-      "ui": { "label": "FaceFusion", "size_display": "~540 MB", "default_install": true },
+      "ui": {
+        "label": "FaceFusion",
+        "size_display": "~540 MB",
+        "default_install": true
+      },
       "code_dir": "runtime/facefusion/engine",
       "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
       "pip_packages": [
-        "onnxruntime"
+        "onnxruntime",
+        "insightface>=0.7.3",
+        "opencv-python",
+        "numpy",
+        "Pillow",
+        "tqdm",
+        "psutil"
       ],
       "runtime_pip_packages": [],
-      "_setup_note": "FaceFusion 3.x 需 clone https://github.com/facefusion/facefusion.git 到 runtime/facefusion/engine/，然后运行其 install.py。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
+      "_setup_note": "FaceFusion 3.x clone https://github.com/facefusion/facefusion.git tag 3.5.4 到 runtime/facefusion/engine/（由 setup-engines.py 自动完成）。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
       "env_key": "FACEFUSION_CHECKPOINT_DIR",
       "checkpoint_files": [
         {
           "path": "retinaface_10g.onnx",
-          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/retinaface_10g.onnx",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "retinaface_10g.onnx",
           "size_mb": 16,
           "required": true,
           "_note": "人脸检测器（RetinaFace）",
@@ -412,7 +487,9 @@
         },
         {
           "path": "arcface_w600k_r50.onnx",
-          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/arcface_w600k_r50.onnx",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "arcface_w600k_r50.onnx",
           "size_mb": 166,
           "required": true,
           "_note": "人脸识别器（ArcFace ResNet-50）",
@@ -420,7 +497,9 @@
         },
         {
           "path": "2dfan4.onnx",
-          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/2dfan4.onnx",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "2dfan4.onnx",
           "size_mb": 93,
           "required": true,
           "_note": "人脸关键点（2D-FAN-4）",
@@ -428,7 +507,9 @@
         },
         {
           "path": "inswapper_128_fp16.onnx",
-          "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/inswapper_128_fp16.onnx",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "inswapper_128_fp16.onnx",
           "size_mb": 265,
           "required": true,
           "_note": "换脸模型（InSwapper 128 FP16）",
@@ -436,9 +517,105 @@
         }
       ]
     },
+    "voices": {
+      "version": "1.0",
+      "ui": {
+        "label": "内置音色",
+        "size_display": "~1.1 GB",
+        "default_install": true
+      },
+      "checkpoint_dir": "models/voices",
+      "checkpoint_files": [
+        {
+          "path": "hutao-jp/model.pth",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "hutao-jp/model.pth",
+          "size_mb": 53,
+          "required": true,
+          "sha256": "d87a656e79015a368bd8e02937640dd63fe4af4ba7140cff132102a3092ddf0d"
+        },
+        {
+          "path": "hutao-jp/hutao.index",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "hutao-jp/hutao.index",
+          "size_mb": 65,
+          "required": false,
+          "sha256": "bd05a09ce5340a59c9487a650cc17d1e52ab8c64e6ec90a34b027c5fa995b432"
+        },
+        {
+          "path": "Ayayaka/model.pth",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "Ayayaka/model.pth",
+          "size_mb": 53,
+          "required": true,
+          "sha256": "3573bb6a7978c3dcff13bf69876b5e2a6b5f0df7258325431f0f6d75c8dffd58"
+        },
+        {
+          "path": "Ayayaka/ayaka.index",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "Ayayaka/ayaka.index",
+          "size_mb": 101,
+          "required": false,
+          "sha256": "94b548f86e65a0e999141f5932f15a648788bc14a7716459516e27042fdca4af"
+        },
+        {
+          "path": "tsukuyomi/model.pth",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "tsukuyomi/model.pth",
+          "size_mb": 53,
+          "required": true,
+          "sha256": "baba41a3245958c7d769a045abdb25e3a7027e3380c365afca4037c6fa646b66"
+        },
+        {
+          "path": "raiden/model.pth",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "raiden/model.pth",
+          "size_mb": 55,
+          "required": true,
+          "sha256": "f038cbf92ee58522831e8c6a723f53d11df8b7d157e39cd68d477f70d7e444b2"
+        },
+        {
+          "path": "raiden/raiden-jp_v2.index",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "raiden/raiden-jp_v2.index",
+          "size_mb": 501,
+          "required": false,
+          "sha256": "227f40cfcde9edd581ef53edd91a8a34425c983199ea331a38f539be7b2716b0"
+        },
+        {
+          "path": "voice_730603/model.pth",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "voice_730603/model.pth",
+          "size_mb": 70,
+          "required": true,
+          "sha256": "dca91fdc7e1cab9c74a838ef3c42295f316dac6bc78facf16930544fbcf8b55f"
+        },
+        {
+          "path": "voice_730603/index.index",
+          "repo_id": "N17K4/ai-workshop-assets",
+          "repo_type": "dataset",
+          "filename": "voice_730603/index.index",
+          "size_mb": 15,
+          "required": false,
+          "sha256": "15e289a87f662cc5863601fee3005aa8965b9f2d67b1054dc01890aa5b9617c9"
+        }
+      ]
+    },
     "wan": {
       "version": "2.1",
-      "ui": { "label": "Wan 2.1", "size_display": "~15.6 GB", "default_install": false },
+      "ui": {
+        "label": "Wan 2.1",
+        "size_display": "~15.6 GB",
+        "default_install": false
+      },
       "code_dir": "runtime/wan",
       "checkpoint_dir": "checkpoints/wan",
       "pip_packages": [
@@ -469,7 +646,11 @@
     },
     "flux": {
       "version": "1.0-schnell-Q4_K_M",
-      "ui": { "label": "Flux.1-Schnell", "size_display": "~16.5 GB", "default_install": false },
+      "ui": {
+        "label": "Flux.1-Schnell",
+        "size_display": "~16.5 GB",
+        "default_install": false
+      },
       "code_dir": "runtime/flux",
       "checkpoint_dir": "checkpoints/flux",
       "pip_packages": [
@@ -513,7 +694,11 @@
     },
     "sd": {
       "version": "sd-turbo",
-      "ui": { "label": "Stable Diffusion Turbo", "size_display": "~24 GB", "default_install": false },
+      "ui": {
+        "label": "Stable Diffusion Turbo",
+        "size_display": "~24 GB",
+        "default_install": false
+      },
       "description": "Stable Diffusion Turbo 本地图像生成（~2.3 GB，无需 HF 账号，1-4 步，512px）",
       "code_dir": "runtime/sd",
       "checkpoint_dir": "checkpoints/sd",

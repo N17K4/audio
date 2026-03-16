@@ -42,6 +42,14 @@ jobs:
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
 
+      # ── 5a. 安装引擎依赖（rvc-python 等装入嵌入式 Python）───────────────────
+      - name: 安装引擎依赖（setup-engines）
+        run: runtime/mac/python/bin/python3 scripts/setup-engines.py
+
+      # ── 5b. 下载内置音色模型（从 HuggingFace N17K4/ai-workshop-assets 下载）───
+      - name: 下载内置音色模型
+        run: runtime/mac/python/bin/python3 scripts/download_checkpoints.py --engine voices
+
       # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend

@@ -43,6 +43,40 @@ def get_embedded_python(project_root: Path) -> str:
     return str(p) if p.exists() else ""
 
 
+# ─── HuggingFace 资产仓库（引擎源码 zip + 内置音色）────────────────────────────
+
+HF_ASSETS_REPO = "N17K4/ai-workshop-assets"
+
+
+def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
+    """从 HF dataset 仓库下载引擎 zip 并解压到 engine_dir，成功返回 True。"""
+    import shutil
+    try:
+        from huggingface_hub import hf_hub_download
+        print(f"  [HF] 尝试从 {HF_ASSETS_REPO} 下载 {filename} ...")
+        zip_path = hf_hub_download(
+            repo_id=HF_ASSETS_REPO,
+            filename=filename,
+            repo_type="dataset",
+        )
+        tmp = engine_dir.parent / "_engine_hf_tmp"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(tmp)
+        # zip 内有唯一顶层目录时直接用它，否则把 tmp 本身作为来源
+        extracted = list(tmp.iterdir())
+        src = extracted[0] if len(extracted) == 1 and extracted[0].is_dir() else tmp
+        if engine_dir.exists():
+            shutil.rmtree(engine_dir)
+        shutil.move(str(src), str(engine_dir))
+        shutil.rmtree(tmp, ignore_errors=True)
+        return True
+    except Exception as e:
+        print(f"  HF 下载失败 ({e})，回退到 git clone ...")
+        return False
+
+
 # ─── JSON Lines 输出（给 Electron IPC 用）────────────────────────────────────
 
 def _emit(obj: dict, json_progress: bool) -> None:
@@ -543,6 +577,13 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
         print(f"  ✓ fish_speech engine 已存在（{sentinel}）")
         return True
 
+    # 优先从 HuggingFace 下载预打包 zip
+    if _download_engine_zip_from_hf("fish_speech_v1.5.0.zip", engine_dir):
+        _patch_fish_speech_generate(engine_dir)
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ fish_speech engine 就绪（{n} 个文件，HF 下载）")
+        return True
+
     print(f"  [fish_speech] 克隆 {_FISH_SPEECH_REPO} @ {_FISH_SPEECH_TAG} ...")
     tmp_dir = project_root / "runtime" / "fish_speech" / "_engine_tmp"
     if tmp_dir.exists():
@@ -624,6 +665,73 @@ def _patch_fish_speech_generate(engine_dir: Path) -> None:
             print("  ✓ llama.py MPS dtype 补丁已应用")
 
 
+# ─── FaceFusion engine 源码 ──────────────────────────────────────────────────
+
+_FACEFUSION_REPO = "https://github.com/facefusion/facefusion"
+_FACEFUSION_TAG  = "3.5.4"
+
+# 只复制推理所需的顶层条目（排除大型示例/文档/测试）
+_FACEFUSION_KEEP = ["facefusion", "facefusion.py"]
+_FACEFUSION_RM   = [".github", "tests", "docs", "assets"]
+
+
+def setup_facefusion_engine(project_root: Path) -> bool:
+    """克隆 FaceFusion 并精简到推理所需文件。"""
+    import shutil
+
+    engine_dir = project_root / "runtime" / "facefusion" / "engine"
+    sentinel = engine_dir / "facefusion.py"
+
+    if sentinel.exists():
+        print(f"  ✓ facefusion engine 已存在（{sentinel}）")
+        return True
+
+    # 优先从 HuggingFace 下载预打包 zip
+    if _download_engine_zip_from_hf("facefusion_3.5.4.zip", engine_dir):
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ facefusion engine 就绪（{n} 个文件，HF 下载）")
+        return True
+
+    print(f"  [facefusion] 克隆 {_FACEFUSION_REPO} @ {_FACEFUSION_TAG} ...")
+    tmp_dir = project_root / "runtime" / "facefusion" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+
+    r = subprocess.run(
+        ["git", "clone", "--depth", "1", "--branch", _FACEFUSION_TAG,
+         _FACEFUSION_REPO, str(tmp_dir)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        print(f"  ✗ clone 失败: {r.stderr.strip()[:300]}")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in _FACEFUSION_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _FACEFUSION_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ facefusion engine 就绪（{n} 个文件）")
+    return True
+
+
 # ─── LivePortrait engine 源码 ────────────────────────────────────────────────
 
 _LIVEPORTRAIT_REPO = "https://github.com/KlingAIResearch/LivePortrait"
@@ -645,6 +753,12 @@ def setup_liveportrait_engine(project_root: Path) -> bool:
 
     if sentinel.exists():
         print(f"  ✓ liveportrait engine 已存在（{sentinel}）")
+        return True
+
+    # 优先从 HuggingFace 下载预打包 zip
+    if _download_engine_zip_from_hf("liveportrait_49784e87.zip", engine_dir):
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ liveportrait engine 就绪（{n} 个文件，HF 下载）")
         return True
 
     print(f"  [liveportrait] 克隆 {_LIVEPORTRAIT_REPO} @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
@@ -726,6 +840,13 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
 
     if sentinel.exists():
         print(f"  ✓ seed_vc engine 已存在（{sentinel}）")
+        return True
+
+    # 优先从 HuggingFace 下载预打包 zip
+    if _download_engine_zip_from_hf("seed_vc_51383efd.zip", engine_dir):
+        _patch_seed_vc_inference(engine_dir)
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ seed_vc engine 就绪（{n} 个文件，HF 下载）")
         return True
 
     print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
@@ -1037,7 +1158,7 @@ def download_pandoc(project_root: Path) -> bool:
 
 def main_build() -> int:
     project_root = Path(__file__).resolve().parent.parent
-    manifest_path = project_root / "runtime" / "manifest.json"
+    manifest_path = project_root / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json: {manifest_path}")
         return 1
@@ -1088,6 +1209,11 @@ def main_build() -> int:
         all_ok = False
     print()
 
+    print("▶ facefusion engine")
+    if not setup_facefusion_engine(project_root):
+        all_ok = False
+    print()
+
     print("▶ ffmpeg")
     if not download_ffmpeg(project_root):
         all_ok = False
@@ -1121,9 +1247,9 @@ def main_runtime(args: argparse.Namespace) -> int:
     resources_root_env = os.getenv("RESOURCES_ROOT", "")
     resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
 
-    manifest_path = resources_root / "runtime" / "manifest.json"
+    manifest_path = resources_root / "wrappers" / "manifest.json"
     if not manifest_path.exists():
-        manifest_path = project_root / "runtime" / "manifest.json"
+        manifest_path = project_root / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         _emit({"type": "log", "message": f"✗ 找不到 manifest.json: {manifest_path}"}, json_progress)
         return 1
@@ -1173,6 +1299,7 @@ def main_setup_engine(engine: str) -> int:
         "liveportrait": lambda: setup_liveportrait_engine(project_root),
         "fish_speech":  lambda: setup_fish_speech_engine(project_root),
         "seed_vc":      lambda: setup_seed_vc_engine(project_root),
+        "facefusion":   lambda: setup_facefusion_engine(project_root),
     }
     fn = engine_map.get(engine)
     if fn is None:
@@ -1203,7 +1330,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--engine", default="",
-        help="只安装指定引擎的源码目录（liveportrait / fish_speech / seed_vc）",
+        help="只安装指定引擎的源码目录（liveportrait / fish_speech / seed_vc / facefusion）",
     )
     args = parser.parse_args()
 

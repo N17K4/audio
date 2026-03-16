@@ -8,6 +8,7 @@ from config import (
     APP_ROOT,
     RESOURCES_ROOT,
     RUNTIME_ROOT,
+    WRAPPERS_ROOT,
     RVC_RUNTIME_CONFIG_PATH,
     FISH_SPEECH_ENGINE_JSON,
     SEED_VC_ENGINE_JSON,
@@ -89,8 +90,8 @@ def get_pandoc_binary() -> str:
 
 def detect_rvc_infer_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # download_checkpoints.py 自动生成
-        RUNTIME_ROOT / "rvc" / "infer_cli.py",
+        RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # setup-engines.py 自动生成
+        WRAPPERS_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "tools" / "rvc" / "infer_cli.py",
     ]
@@ -106,7 +107,7 @@ def detect_rvc_infer_script() -> str:
 
 def detect_fish_speech_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "fish_speech" / "inference.py",
+        WRAPPERS_ROOT / "fish_speech" / "inference.py",
         RUNTIME_ROOT / "fish_speech" / "tools" / "inference_engine.py",
         RUNTIME_ROOT / "fish_speech" / "fish_speech" / "inference.py",
     ]
@@ -148,7 +149,7 @@ def get_fish_speech_command_template() -> str:
 
 def detect_seed_vc_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "seed_vc" / "inference.py",
+        WRAPPERS_ROOT / "seed_vc" / "inference.py",
         RUNTIME_ROOT / "seed_vc" / "run_inference.py",
         RUNTIME_ROOT / "seed_vc" / "seed_vc" / "inference.py",
     ]
@@ -190,7 +191,7 @@ def get_seed_vc_command_template() -> str:
 
 def detect_whisper_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "whisper" / "inference.py",
+        WRAPPERS_ROOT / "whisper" / "inference.py",
     ]
     for p in candidates:
         exists = p.exists()
@@ -230,7 +231,7 @@ def get_whisper_command_template() -> str:
 
 def detect_faster_whisper_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "faster_whisper" / "inference.py",
+        WRAPPERS_ROOT / "faster_whisper" / "inference.py",
     ]
     for p in candidates:
         exists = p.exists()
@@ -324,8 +325,9 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     engines = (_MANIFEST.get("engines") or {})
     cfg = engines.get(engine, {})
     env_key = cfg.get("env_key") or f"{engine.upper()}_CHECKPOINT_DIR"
-    # HF 缓存统一指向 checkpoints/hf_cache（绝对路径，避免相对路径错位）
-    hf_cache = str(CHECKPOINTS_ROOT / "hf_cache")
+    # HF 缓存：优先 resources/checkpoints/hf_cache（打包预置），否则 userData
+    _bundled_hf = RESOURCES_ROOT / "checkpoints" / "hf_cache"
+    hf_cache = str(_bundled_hf if _bundled_hf.exists() else CHECKPOINTS_ROOT / "hf_cache")
     merged = {
         **os.environ,
         env_key: get_checkpoint_dir(engine),
@@ -348,7 +350,12 @@ def build_engine_env(engine: str) -> Dict[str, str]:
 
 def get_checkpoint_dir(engine: str) -> str:
     """从 manifest 读取引擎的 checkpoint 目录，返回绝对路径字符串。
-    env_key 环境变量优先于 manifest 配置。"""
+
+    解析优先级：
+    1) 引擎专属环境变量（如 SEED_VC_CHECKPOINT_DIR）
+    2) resources/checkpoints/<engine>/ — 打包时预置的 checkpoint（默认安装引擎）
+    3) CHECKPOINTS_ROOT/<engine>/ — userData，用于用户事后通过引导下载的可选引擎
+    """
     engines = (_MANIFEST.get("engines") or {})
     cfg = engines.get(engine, {})
     env_key = cfg.get("env_key") or f"{engine.upper()}_CHECKPOINT_DIR"
@@ -356,9 +363,13 @@ def get_checkpoint_dir(engine: str) -> str:
     if env_val:
         return env_val
     rel = cfg.get("checkpoint_dir", f"checkpoints/{engine}")
-    # rel 格式为 "checkpoints/fish_speech"，去掉前缀后拼 CHECKPOINTS_ROOT
-    if rel.startswith("checkpoints/"):
-        return str((CHECKPOINTS_ROOT / rel[len("checkpoints/"):]).resolve())
+    sub = rel[len("checkpoints/"):] if rel.startswith("checkpoints/") else None
+    # 优先使用 resources/ 里打包的 checkpoint（打包前由 pnpm run checkpoints 写入）
+    if sub is not None:
+        bundled = RESOURCES_ROOT / "checkpoints" / sub
+        if bundled.exists():
+            return str(bundled.resolve())
+        return str((CHECKPOINTS_ROOT / sub).resolve())
     return str((RESOURCES_ROOT / rel).resolve())
 
 
@@ -437,7 +448,7 @@ def detect_ffmpeg_hwaccel() -> dict:
 # ---------------------------------------------------------------------------
 
 def detect_got_ocr_script() -> str:
-    candidates = [RUNTIME_ROOT / "got_ocr" / "inference.py"]
+    candidates = [WRAPPERS_ROOT / "got_ocr" / "inference.py"]
     for p in candidates:
         if p.exists():
             logger.debug("[detect-got_ocr] 找到脚本: %s", p)
@@ -458,7 +469,7 @@ def get_got_ocr_command_template() -> str:
 
 
 def detect_liveportrait_script() -> str:
-    candidates = [RUNTIME_ROOT / "liveportrait" / "inference.py"]
+    candidates = [WRAPPERS_ROOT / "liveportrait" / "inference.py"]
     for p in candidates:
         if p.exists():
             logger.debug("[detect-liveportrait] 找到脚本: %s", p)
@@ -480,7 +491,7 @@ def get_liveportrait_command_template() -> str:
 
 def detect_facefusion_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "facefusion" / "inference.py",
+        WRAPPERS_ROOT / "facefusion" / "inference.py",
         RUNTIME_ROOT / "facefusion" / "engine" / "facefusion.py",
     ]
     for p in candidates:
@@ -503,7 +514,7 @@ def get_facefusion_command_template() -> str:
 
 
 def detect_wan_script() -> str:
-    candidates = [RUNTIME_ROOT / "wan" / "inference.py"]
+    candidates = [WRAPPERS_ROOT / "wan" / "inference.py"]
     for p in candidates:
         if p.exists():
             logger.debug("[detect-wan] 找到脚本: %s", p)
@@ -524,7 +535,7 @@ def get_wan_command_template() -> str:
 
 
 def detect_flux_script() -> str:
-    candidates = [RUNTIME_ROOT / "flux" / "inference.py"]
+    candidates = [WRAPPERS_ROOT / "flux" / "inference.py"]
     for p in candidates:
         if p.exists():
             logger.debug("[detect-flux] 找到脚本: %s", p)

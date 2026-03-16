@@ -9,6 +9,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 # dev 模式下默认为项目根目录（runtime/、checkpoints/ 均在此处）
 RESOURCES_ROOT = Path(os.getenv("RESOURCES_ROOT", str(APP_ROOT))).resolve()
 RUNTIME_ROOT = RESOURCES_ROOT / "runtime"
+WRAPPERS_ROOT = RESOURCES_ROOT / "wrappers"
 
 # 模型 checkpoints 目录：生产模式由 Electron 传入 CHECKPOINTS_DIR（userData/checkpoints/）
 # 开发模式回退到项目根下的 checkpoints/
@@ -24,10 +25,10 @@ VOICES_DIR = MODEL_ROOT / "voices"
 USER_VOICES_DIR = VOICES_DIR / "user"
 UPLOADS_DIR = MODEL_ROOT / "uploads"
 RVC_RUNTIME_CONFIG_PATH = MODEL_ROOT / "rvc_runtime.json"
-FISH_SPEECH_ENGINE_JSON = RUNTIME_ROOT / "fish_speech" / "engine.json"
-SEED_VC_ENGINE_JSON = RUNTIME_ROOT / "seed_vc" / "engine.json"
-WHISPER_ENGINE_JSON = RUNTIME_ROOT / "whisper" / "engine.json"
-FASTER_WHISPER_ENGINE_JSON = RUNTIME_ROOT / "faster_whisper" / "engine.json"
+FISH_SPEECH_ENGINE_JSON = WRAPPERS_ROOT / "fish_speech" / "engine.json"
+SEED_VC_ENGINE_JSON = WRAPPERS_ROOT / "seed_vc" / "engine.json"
+WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "whisper" / "engine.json"
+FASTER_WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "faster_whisper" / "engine.json"
 
 RUNTIME_TEMP_DIR = Path(tempfile.gettempdir()) / "ai-workshop-temp"
 DOWNLOAD_DIR = RUNTIME_TEMP_DIR / "download"
@@ -80,7 +81,7 @@ CARTESIA_BASE_URL = "https://api.cartesia.ai"
 ELEVENLABS_STS_PATH_TEMPLATE = "/v1/speech-to-speech/{voice_id}"
 
 # ─── Manifest（产物固化清单）────────────────────────────────────────────────────
-_MANIFEST_PATH = RUNTIME_ROOT / "manifest.json"
+_MANIFEST_PATH = WRAPPERS_ROOT / "manifest.json"
 
 
 def _load_manifest() -> Dict:

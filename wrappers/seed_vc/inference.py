@@ -46,7 +46,7 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     if env_val:
         return env_val
     base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "runtime" / "manifest.json"
+    manifest_path = base / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
