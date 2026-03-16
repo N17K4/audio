@@ -1,6 +1,7 @@
 import type { Status } from '../../types';
 import { VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
 import ComboSelect from '../shared/ComboSelect';
+import FileDrop from '../shared/FileDrop';
 
 interface VideoGenPanelProps {
   status: Status;
@@ -130,8 +131,15 @@ export default function VideoGenPanel({
       {videoGenMode === 'i2v' && (
         <div>
           <label className={labelCls}>参考图片</label>
-          <input type="file" accept="image/*" className={fileCls}
-            onChange={e => setVideoGenImageFile(e.target.files?.[0] ?? null)} />
+          <FileDrop
+            files={videoGenImageFile ? [videoGenImageFile] : []}
+            onAdd={fs => setVideoGenImageFile(fs[0])}
+            onRemove={() => setVideoGenImageFile(null)}
+            accept="image/*"
+            compact
+            iconType="image"
+            emptyLabel="点击或拖拽参考图片"
+          />
         </div>
       )}
 

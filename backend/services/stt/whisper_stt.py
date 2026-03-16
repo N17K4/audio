@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from logging_setup import logger
 from utils.engine import get_whisper_command_template, build_engine_env
+from utils.audit import log_ai_call, log_ai_error
 
 
 async def run_whisper_stt(content: bytes, filename: str, model: str = "base") -> Dict:
@@ -35,6 +36,7 @@ async def run_whisper_stt(content: bytes, filename: str, model: str = "base") ->
             .replace("{output}", txt_tmp_path)
             .replace("{model}", model)
         )
+        log_ai_call("whisper", {"input": audio_tmp_path, "model": model}, command=cmd)
         try:
             import asyncio
             completed = await asyncio.to_thread(
@@ -49,6 +51,7 @@ async def run_whisper_stt(content: bytes, filename: str, model: str = "base") ->
             stdout = (completed.stdout or "").strip()[:10000]
             stderr = (completed.stderr or "").strip()[:10000]
             logger.error("Whisper 失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+            log_ai_error("whisper", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
             raise HTTPException(
                 status_code=500,
                 detail=f"Whisper 失败 (code={completed.returncode}): {stderr}",

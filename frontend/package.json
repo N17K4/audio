@@ -5,6 +5,7 @@
     "build": "next build"
   },
   "dependencies": {
+    "fflate": "^0.8.2",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",

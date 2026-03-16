@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from config import BACKEND_HOST, BACKEND_PORT, DOWNLOAD_DIR, RUNTIME_ROOT
 from logging_setup import logger
 from utils.engine import get_embedded_python, build_engine_env
+from utils.audit import log_ai_call, log_ai_error
 
 
 def _get_facefusion_script() -> str:
@@ -56,6 +57,7 @@ async def run_facefusion_i2i(
     ]
 
     logger.debug("[facefusion] 执行换脸: %s", " ".join(str(c) for c in cmd))
+    log_ai_call("facefusion", {"source": source_image_path, "target": target_image_path, "output": output_path}, command=cmd)
     try:
         completed = await asyncio.to_thread(
             subprocess.run,
@@ -70,6 +72,7 @@ async def run_facefusion_i2i(
         stderr = (completed.stderr or "").strip()
         stdout = (completed.stdout or "").strip()
         logger.error("[facefusion] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+        log_ai_error("facefusion", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
         tail = (stderr or stdout)[-3000:]
         raise HTTPException(status_code=500, detail=f"FaceFusion 失败 (code={completed.returncode}): {tail}")
 

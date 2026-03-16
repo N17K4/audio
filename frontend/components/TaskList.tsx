@@ -265,7 +265,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         <TasksIcon size={36} badge={activeJobs.length} />
         <div className="flex-1">
           <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">任务列表</h1>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">TTS / VC 异步任务队列</p>
+          <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT · 图像生成 · 图像处理 · 视频生成 · OCR · 口型同步 · 文档转换 · 媒体转换</p>
         </div>
         <button className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors" onClick={onFetchJobs}>刷新</button>
         {doneJobs.length > 0 && (

@@ -610,6 +610,27 @@ ipcMain.handle('app:getDiskUsage', () => {
   const runtimePlatform = isMac ? 'mac' : 'win';
 
   const ckptRoot = getCheckpointsDir();
+
+  // 读取 manifest.json — 单一数据源，存储版本号、大小、默认安装标志
+  let _manifest = {};
+  try {
+    const mp = path.join(resRoot, 'runtime', 'manifest.json');
+    _manifest = JSON.parse(fs.readFileSync(mp, 'utf-8'));
+  } catch { /**/ }
+  const _eng  = (k) => (_manifest.engines?.[k] || {});
+  const _ui   = (k) => (_eng(k).ui   || {});
+  const _ver  = (k) => (_eng(k).version || '');
+  const _size = (k) => (_ui(k).size_display || '');
+  // 版本以数字开头才加 "v" 前缀（避免 "vsd-turbo" 这类非语义化版本号）
+  const _fmtVer = (v) => v ? (/^\d/.test(v) ? `v${v}` : v) : '';
+  // 构建引擎行标签（不含版本，版本由前端 badge 展示）
+  const _engLabel  = (k, suffix) => `${_ui(k).label || k} ${suffix}`.trim();
+  // 构建权重行标签（只含体积，不含版本）
+  const _ckptLabel = (k, suffix) => {
+    const s = _size(k);
+    const base = suffix ? `${_ui(k).label || k} ${suffix}` : (_ui(k).label || k);
+    return `${base}${s ? `（${s}）` : ''}`;
+  };
   const measureRes = (relPath) => {
     const full = path.join(resRoot, relPath);
     return dirExists(full) ? getDirSize(full) : 0;
@@ -651,37 +672,41 @@ ipcMain.handle('app:getDiskUsage', () => {
     // ── TTS：Fish Speech ────────────────────────────────────────────────────
     {
       key: 'fish_speech_engine',
-      label: 'Fish Speech 引擎',
+      label: _engLabel('fish_speech', '引擎'),
       sub: path.join(resRoot, 'runtime/fish_speech/engine'),
       size: measureRes('runtime/fish_speech/engine'),
       deletable: false,
     },
     {
       key: 'fish_speech_ckpt',
-      label: 'Fish Speech 模型权重',
+      label: _ckptLabel('fish_speech', '模型权重'),
+      version: _fmtVer(_ver('fish_speech')),
       sub: path.join(ckptRoot, 'fish_speech'),
       size: measureCkpt('fish_speech'),
       engineKey: 'fish_speech',
       ready: measureCkpt('fish_speech') > 0,
       estimatedSizeMb: 1004,
+      default_install: _ui('fish_speech').default_install,
       deletable: false,
     },
     // ── VC：Seed-VC + RVC ───────────────────────────────────────────────────
     {
       key: 'seed_vc_engine',
-      label: 'Seed-VC 引擎',
+      label: _engLabel('seed_vc', '引擎'),
       sub: path.join(resRoot, 'runtime/seed_vc/engine'),
       size: measureRes('runtime/seed_vc/engine'),
       deletable: false,
     },
     {
       key: 'seed_vc_ckpt',
-      label: 'Seed-VC 模型权重',
+      label: _ckptLabel('seed_vc', '模型权重'),
+      version: _fmtVer(_ver('seed_vc')),
       sub: path.join(ckptRoot, 'seed_vc'),
       size: measureCkpt('seed_vc'),
       engineKey: 'seed_vc',
       ready: measureCkpt('seed_vc') > 0,
       estimatedSizeMb: 2676,
+      default_install: _ui('seed_vc').default_install,
       deletable: false,
     },
     ...(() => {
@@ -704,19 +729,22 @@ ipcMain.handle('app:getDiskUsage', () => {
       const totalRvcSize = rvcSize + rvcCkptSize;
       return [{
         key: 'rvc_ckpt',
-        label: 'RVC 预训练模型',
+        label: _ckptLabel('rvc', '预训练模型'),
+        version: _fmtVer(_ver('rvc')),
         sub: found[0] || path.join(ckptRoot, 'rvc'),
         size: totalRvcSize,
         engineKey: 'rvc',
         ready: totalRvcSize > 0,
         estimatedSizeMb: 1360,
+        default_install: _ui('rvc').default_install,
         deletable: false,
       }];
     })(),
     // ── STT：Faster Whisper ──────────────────────────────────────────────────
     {
       key: 'faster_whisper_ckpt',
-      label: 'Faster Whisper 模型（STT 推荐 · ~150 MB）',
+      label: _ckptLabel('faster_whisper', '模型'),
+      version: _fmtVer(_ver('faster_whisper')),
       sub: path.join(ckptRoot, 'faster_whisper'),
       size: measureCkpt('faster_whisper'),
       engineKey: 'faster_whisper',
@@ -725,17 +753,20 @@ ipcMain.handle('app:getDiskUsage', () => {
         try { return fs.statSync(modelBin).size > 50 * 1024 * 1024; } catch { return false; }
       })(),
       estimatedSizeMb: 150,
+      default_install: _ui('faster_whisper').default_install,
       deletable: false,
     },
     // ── 图像生成：SD-Turbo ─────────────────────────────────────────────────
     {
       key: 'sd_ckpt',
-      label: 'SD-Turbo（本地图像生成 · ~2.3 GB）',
+      label: _ckptLabel('sd', '模型'),
+      version: _fmtVer(_ver('sd')),
       sub: path.join(ckptRoot, 'sd'),
       size: (() => measureCkpt('sd') + measureHfCache('stabilityai/sd-turbo'))(),
       engineKey: 'sd',
       ready: measureHfCache('stabilityai/sd-turbo') > 200 * 1024 * 1024,
       estimatedSizeMb: 2300,
+      default_install: _ui('sd').default_install,
       deletable: false,
     },
     // ── 图像生成：Flux（已禁用，保留入口方便手动安装）─────────────────────
@@ -756,29 +787,34 @@ ipcMain.handle('app:getDiskUsage', () => {
     // ── OCR：GOT-OCR ────────────────────────────────────────────────────────
     {
       key: 'got_ocr_ckpt',
-      label: 'GOT-OCR2.0（本地文字识别）',
+      label: _ckptLabel('got_ocr', '模型'),
+      version: _fmtVer(_ver('got_ocr')),
       sub: path.join(ckptRoot, 'hf_cache', 'models--stepfun-ai--GOT-OCR-2.0-hf'),
       size: (() => measureHfCache('stepfun-ai/GOT-OCR-2.0-hf'))(),
       engineKey: 'got_ocr',
       ready: measureHfCache('stepfun-ai/GOT-OCR-2.0-hf') > 0,
       estimatedSizeMb: 1500,
+      default_install: _ui('got_ocr').default_install,
       deletable: false,
     },
     // ── 口型同步：LivePortrait ──────────────────────────────────────────────
     {
       key: 'liveportrait_ckpt',
-      label: 'LivePortrait FP16（口型同步 · 动作驱动）',
+      label: _ckptLabel('liveportrait', '模型'),
+      version: _fmtVer(_ver('liveportrait')),
       sub: path.join(ckptRoot, 'hf_cache', 'models--KwaiVGI--LivePortrait'),
       size: measureHfCache('KwaiVGI/LivePortrait'),
       engineKey: 'liveportrait',
       ready: measureHfCache('KwaiVGI/LivePortrait') > 0,
       estimatedSizeMb: 1800,
+      default_install: _ui('liveportrait').default_install,
       deletable: false,
     },
     // ── 换脸：FaceFusion ────────────────────────────────────────────────────
     {
       key: 'facefusion_ckpt',
-      label: 'FaceFusion 3.x（换脸）',
+      label: _ckptLabel('facefusion', ''),
+      version: _fmtVer(_ver('facefusion')),
       sub: path.join(resRoot, 'runtime', 'facefusion', 'engine'),
       size: measureRes(path.join('runtime', 'facefusion', 'engine')),
       engineKey: 'facefusion',
@@ -789,6 +825,7 @@ ipcMain.handle('app:getDiskUsage', () => {
         try { return sourceOk && fs.statSync(swapper).size > 50 * 1024 * 1024; } catch { return false; }
       })(),
       estimatedSizeMb: 350,  // 源码 ~20 MB + 模型 ~330 MB（人脸检测/识别/关键点/换脸）
+      default_install: _ui('facefusion').default_install,
       deletable: false,
     },
     // ── seed_vc 附属 HF cache（checkpoints/ 根目录下，非 hf_cache 子目录）───────
@@ -831,10 +868,11 @@ ipcMain.handle('app:getDiskUsage', () => {
     },
     // ── 用户数据 ────────────────────────────────────────────────────────────
     {
-      key: 'models',
+      key: 'voices',
       label: '音色包',
-      sub: path.join(__dirname, 'models'),
-      size: measureApp('models'),
+      sub: path.join(__dirname, 'models', 'voices', 'user'),
+      size: (() => { const d = path.join(__dirname, 'models', 'voices', 'user'); return dirExists(d) ? getDirSize(d) : 0; })(),
+      clearable: true,
       deletable: false,
     },
     // ── 临时文件 ────────────────────────────────────────────────────────────
@@ -984,7 +1022,7 @@ const CLEARABLE_DIRS = () => {
   const ckptRoot = getCheckpointsDir();
   return {
     hf_cache:    path.join(ckptRoot, 'hf_cache'),
-    models:      path.join(__dirname, 'models'),
+    voices:      path.join(__dirname, 'models', 'voices', 'user'),
     audio_cache: path.join(require('os').tmpdir(), 'ai-workshop-temp', 'download'),
   };
 };

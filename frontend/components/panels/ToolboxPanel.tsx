@@ -1,5 +1,6 @@
 import type { ToolboxSubPage } from '../../types';
 import OutputDirRow from '../shared/OutputDirRow';
+import FileDrop from '../shared/FileDrop';
 
 const IMG_OUTPUT_FORMATS = ['png', 'jpg', 'webp', 'bmp'];
 const TEXT_ENCODINGS = ['utf-8', 'gbk', 'gb2312', 'latin-1', 'utf-16', 'big5'];
@@ -71,12 +72,18 @@ export default function ToolboxPanel({
       {/* ── 图片处理 ── */}
       {toolSubPage === 'image' && (
         <>
-          <label className="block">
+          <div>
             <span className={labelCls}>输入图片</span>
-            <input className={fileCls} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
-              onChange={e => setImgFile(e.target.files?.[0] || null)} />
-            {imgFile && <p className="text-xs text-slate-400 mt-1.5">{imgFile.name}（{Math.round(imgFile.size / 1024)} KB）</p>}
-          </label>
+            <FileDrop
+              files={imgFile ? [imgFile] : []}
+              onAdd={fs => setImgFile(fs[0])}
+              onRemove={() => setImgFile(null)}
+              accept="image/*,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
+              compact
+              iconType="image"
+              emptyLabel="点击或拖拽图片"
+            />
+          </div>
 
           <div>
             <span className={labelCls}>输出格式</span>
@@ -132,12 +139,18 @@ export default function ToolboxPanel({
                 value={qrText} onChange={e => setQrText(e.target.value)} />
             </div>
           ) : (
-            <label className="block">
+            <div>
               <span className={labelCls}>包含二维码的图片</span>
-              <input className={fileCls} type="file" accept="image/*"
-                onChange={e => setQrFile(e.target.files?.[0] || null)} />
-              {qrFile && <p className="text-xs text-slate-400 mt-1.5">{qrFile.name}</p>}
-            </label>
+              <FileDrop
+                files={qrFile ? [qrFile] : []}
+                onAdd={fs => setQrFile(fs[0])}
+                onRemove={() => setQrFile(null)}
+                accept="image/*"
+                compact
+                iconType="image"
+                emptyLabel="点击或拖拽图片"
+              />
+            </div>
           )}
         </>
       )}
@@ -145,12 +158,18 @@ export default function ToolboxPanel({
       {/* ── 文本编码 ── */}
       {toolSubPage === 'text_encoding' && (
         <>
-          <label className="block">
+          <div>
             <span className={labelCls}>输入文件（自动检测原始编码）</span>
-            <input className={fileCls} type="file" accept=".txt,.csv,.srt,.vtt,.json,.xml,.html,.md,.log"
-              onChange={e => setEncFile(e.target.files?.[0] || null)} />
-            {encFile && <p className="text-xs text-slate-400 mt-1.5">{encFile.name}（{Math.round(encFile.size / 1024)} KB）</p>}
-          </label>
+            <FileDrop
+              files={encFile ? [encFile] : []}
+              onAdd={fs => setEncFile(fs[0])}
+              onRemove={() => setEncFile(null)}
+              accept=".txt,.csv,.srt,.vtt,.json,.xml,.html,.md,.log"
+              compact
+              iconType="file"
+              emptyLabel="点击或拖拽文本文件"
+            />
+          </div>
 
           <div>
             <span className={labelCls}>目标编码</span>

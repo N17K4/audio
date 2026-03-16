@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from config import BACKEND_HOST, BACKEND_PORT, DOWNLOAD_DIR, RUNTIME_ROOT
 from logging_setup import logger
 from utils.engine import get_embedded_python, build_engine_env
+from utils.audit import log_ai_call, log_ai_error
 
 
 def _get_got_ocr_script() -> str:
@@ -55,6 +56,7 @@ async def run_got_ocr(
             "--model", model,
         ]
         logger.info("[got_ocr] 识别文件: %s (model=%s)", filename, model)
+        log_ai_call("got_ocr", {"input": tmp_in_path, "model": model}, command=cmd)
         try:
             completed = await asyncio.to_thread(
                 subprocess.run,
@@ -68,6 +70,7 @@ async def run_got_ocr(
             stderr = (completed.stderr or "").strip()
             stdout = (completed.stdout or "").strip()
             logger.error("[got_ocr] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+            log_ai_error("got_ocr", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
             tail = (stderr or stdout)[-3000:]
             raise HTTPException(status_code=500, detail=f"GOT-OCR 失败 (code={completed.returncode}): {tail}")
 

@@ -16,7 +16,6 @@ interface UseASRParams {
     type: string, label: string, provider: string, isLocal: boolean,
     result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
   ) => void;
-  onNavigateTasks: () => void;
 }
 
 export function useASR({
@@ -30,7 +29,6 @@ export function useASR({
   setProcessingStartTime,
   setError,
   addInstantJobResult,
-  onNavigateTasks,
 }: UseASRParams) {
   const [asrFile, setAsrFile] = useState<File | null>(null);
   const [asrModel, setAsrModel] = useState('');
@@ -98,7 +96,6 @@ export function useASR({
     const t0 = Date.now();
     setProcessingStartTime(t0);
     setStatus('processing');
-    onNavigateTasks();
     const ctrl = new AbortController();
     abortCtrlRef.current = ctrl;
     const label = `STT · ${asrFile.name}`;

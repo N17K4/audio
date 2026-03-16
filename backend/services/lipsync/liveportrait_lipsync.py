@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from config import BACKEND_HOST, BACKEND_PORT, DOWNLOAD_DIR, RUNTIME_ROOT
 from logging_setup import logger
 from utils.engine import get_embedded_python, build_engine_env
+from utils.audit import log_ai_call, log_ai_error
 
 
 def _get_liveportrait_script() -> str:
@@ -56,6 +57,7 @@ async def run_liveportrait_lipsync(
         cmd += ["--model", model]
 
     logger.info("[liveportrait] 执行口型同步: source=%s, audio=%s", source_path, audio_path)
+    log_ai_call("liveportrait", {"source": source_path, "audio": audio_path, "output": output_path}, command=cmd)
     try:
         completed = await asyncio.to_thread(
             subprocess.run,
@@ -69,6 +71,7 @@ async def run_liveportrait_lipsync(
         stderr = (completed.stderr or "").strip()
         stdout = (completed.stdout or "").strip()
         logger.error("[liveportrait] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+        log_ai_error("liveportrait", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
         tail = (stderr or stdout)[-3000:]
         raise HTTPException(status_code=500, detail=f"LivePortrait 失败 (code={completed.returncode}): {tail}")
 

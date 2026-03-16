@@ -11,6 +11,18 @@ export async function waitForBackend(baseUrl: string): Promise<boolean> {
   return false;
 }
 
+// ─── 多文件打包为 ZIP ─────────────────────────────────────────────────────────
+export async function packFilesToZip(files: File[]): Promise<Blob> {
+  const { zipSync } = await import('fflate');
+  const entries: Record<string, Uint8Array> = {};
+  for (const file of files) {
+    const buf = await file.arrayBuffer();
+    entries[file.name] = new Uint8Array(buf);
+  }
+  const zipped = zipSync(entries, { level: 0 });
+  return new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' });
+}
+
 // ─── 前端日志（写入 logs/frontend.log，仅 production）───────────────────────
 export function rlog(level: 'INFO' | 'WARN' | 'ERROR', ...args: unknown[]): void {
   const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');

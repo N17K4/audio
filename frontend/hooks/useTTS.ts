@@ -17,7 +17,6 @@ interface UseTTSParams {
     type: string, label: string, provider: string, isLocal: boolean,
     result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
   ) => void;
-  onNavigateTasks: () => void;
 }
 
 export function useTTS({
@@ -32,12 +31,11 @@ export function useTTS({
   setError,
   setJobs,
   addInstantJobResult,
-  onNavigateTasks,
 }: UseTTSParams) {
   const [ttsText, setTtsText] = useState('你好，这是一段测试语音。');
   const [ttsModel, setTtsModel] = useState('');
   const [ttsVoice, setTtsVoice] = useState('');
-  const [ttsRefAudio, setTtsRefAudio] = useState<File | null>(null);
+  const [ttsRefAudios, setTtsRefAudios] = useState<File[]>([]);
   const [ttsRefInputMode, setTtsRefInputMode] = useState<VcInputMode>('upload');
   const [ttsRefRecordedObjectUrl, setTtsRefRecordedObjectUrl] = useState<string | null>(null);
   const [ttsRecordingDir, setTtsRecordingDir] = useState<string | null>(null);
@@ -66,7 +64,7 @@ export function useTTS({
         if (ttsRefRecordedObjectUrl) URL.revokeObjectURL(ttsRefRecordedObjectUrl);
         const url = URL.createObjectURL(blob);
         setTtsRefRecordedObjectUrl(url);
-        setTtsRefAudio(new File([blob], 'recording.webm', { type: 'audio/webm' }));
+        setTtsRefAudios([new File([blob], 'recording.webm', { type: 'audio/webm' })]);
         if (api.saveRecording) {
           const fname = `tts_ref_recording_${Date.now()}.webm`;
           const dir = await api.saveRecording(fname, await blob.arrayBuffer());
@@ -90,7 +88,7 @@ export function useTTS({
   function clearTtsRefRecording() {
     if (ttsRefRecordedObjectUrl) URL.revokeObjectURL(ttsRefRecordedObjectUrl);
     setTtsRefRecordedObjectUrl(null);
-    setTtsRefAudio(null);
+    setTtsRefAudios([]);
     setTtsRecordingDir(null);
   }
 
@@ -112,14 +110,15 @@ export function useTTS({
       fd.append('api_key', apiKey);
       fd.append('cloud_endpoint', cloudEndpoint);
       fd.append('output_dir', outputDir);
-      if (selectedProvider === 'fish_speech' && ttsRefAudio) fd.append('reference_audio', ttsRefAudio);
+      if (selectedProvider === 'fish_speech') {
+        ttsRefAudios.forEach(f => fd.append('reference_audio', f));
+      }
       const res = await fetch(`${backendBaseUrl}/tasks/tts`, { method: 'POST', body: fd });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(`任务失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
       if (data?.job_id) {
         const pending: Job = { id: data.job_id, type: 'tts', label, provider: selectedProvider, is_local: true, status: 'queued', created_at: Date.now() / 1000, started_at: null, completed_at: null, result_url: null, result_text: null, error: null };
         setJobs(prev => [pending, ...prev]);
-        onNavigateTasks();
       } else {
         addInstantJobResult('tts', label, selectedProvider, false, { status: 'completed', result_url: data?.result_url || undefined });
       }
@@ -135,7 +134,7 @@ export function useTTS({
     ttsText, setTtsText,
     ttsModel, setTtsModel,
     ttsVoice, setTtsVoice,
-    ttsRefAudio, setTtsRefAudio,
+    ttsRefAudios, setTtsRefAudios,
     ttsRefInputMode, setTtsRefInputMode,
     ttsRefRecordedObjectUrl,
     ttsRecordingDir,

@@ -1,6 +1,14 @@
 import type { Status, CapabilityMap, VcInputMode } from '../../types';
 import ProviderRow from '../shared/ProviderRow';
 import ModelInput from '../shared/ModelInput';
+import HowToSteps from '../shared/HowToSteps';
+import FileDrop from '../shared/FileDrop';
+
+const ASR_STEPS = [
+  { title: '上传音频', desc: '支持 MP3 / WAV / FLAC 等格式，拖拽即可' },
+  { title: '选择引擎', desc: '本地 Whisper 或 Deepgram / Groq 等云端 STT' },
+  { title: '获取文稿', desc: '转录完成后文字显示在任务列表' },
+];
 
 interface AsrPanelProps {
   taskType: 'asr';
@@ -99,17 +107,20 @@ export default function AsrPanel({
         </div>
 
         {asrInputMode === 'upload' ? (
-          <div>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 transition-all" type="file" accept="audio/*"
-              onChange={e => setAsrFile(e.target.files?.[0] || null)} />
-            {asrFile && <span className="text-xs text-slate-400 mt-1.5 block">{asrFile.name}（{Math.round(asrFile.size / 1024)} KB）</span>}
-          </div>
+          <FileDrop
+            files={asrFile ? [asrFile] : []}
+            onAdd={fs => setAsrFile(fs[0])}
+            onRemove={() => setAsrFile(null)}
+            accept="audio/*"
+            iconType="audio"
+            formatHint="支持 MP3、WAV、FLAC、M4A、OGG"
+          />
         ) : (
           <div className="space-y-3">
             {/* 录音控制按钮 */}
             <div className="flex gap-2">
               {status === 'idle' && !asrRecordedObjectUrl && (
-                <button className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartAsrRecording}>开始录音</button>
+                <button className="flex-1 rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartAsrRecording}>开始录音</button>
               )}
               {status === 'recording' && (
                 <button className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 text-sm font-semibold text-white shadow-sm animate-pulse transition-all" onClick={onStopAsrRecording}>停止录音</button>
@@ -118,7 +129,7 @@ export default function AsrPanel({
                 <span className="flex-1 text-center text-sm text-slate-400 py-2.5">处理中...</span>
               )}
               {status === 'idle' && asrRecordedObjectUrl && (
-                <button className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartAsrRecording}>重新录音</button>
+                <button className="flex-1 rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartAsrRecording}>重新录音</button>
               )}
             </div>
 
@@ -142,9 +153,11 @@ export default function AsrPanel({
         )}
       </div>
 
-      <button className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-button-primary transition-all duration-150 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed" onClick={onRunAsr} disabled={status === 'processing' || status === 'recording' || !asrFile}>
+      <button className="w-full rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] active:bg-[#1472bc] py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed" onClick={onRunAsr} disabled={status === 'processing' || status === 'recording' || !asrFile}>
         {status === 'processing' ? '处理中...' : '转文本'}
       </button>
+
+      <HowToSteps steps={ASR_STEPS} />
     </section>
   );
 }

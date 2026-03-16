@@ -15,7 +15,6 @@ interface UseImageExtProps {
   setError: (e: string) => void;
   addInstantJobResult: (type: string, label: string, provider: string, isLocal: boolean, result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string }) => void;
   fetchJobs: () => Promise<void>;
-  onNavigateTasks: () => void;
 }
 
 export function useImageExt({
@@ -27,7 +26,6 @@ export function useImageExt({
   setError,
   addInstantJobResult,
   fetchJobs,
-  onNavigateTasks,
 }: UseImageExtProps) {
 
   // ── 图像生成状态 ──
@@ -100,7 +98,6 @@ export function useImageExt({
       if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
       if (data.job_id) {
         await fetchJobs();
-        onNavigateTasks();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '图像生成失败');
@@ -131,12 +128,10 @@ export function useImageExt({
       if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
       if (data.job_id) {
         await fetchJobs();
-        onNavigateTasks();
       } else if (data.result_url || data.image_url) {
         addInstantJobResult('image_i2i', `换脸换图 · ${imgI2iSourceFile.name}`, imgI2iProvider, imgI2iProvider === 'comfyui', {
           status: 'completed', result_url: data.result_url || data.image_url,
         });
-        onNavigateTasks();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '换脸换图失败');
@@ -168,7 +163,6 @@ export function useImageExt({
       if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
       if (data.job_id) {
         await fetchJobs();
-        onNavigateTasks();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '视频生成失败');
@@ -207,7 +201,6 @@ export function useImageExt({
       if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
       if (data.job_id) {
         await fetchJobs();
-        onNavigateTasks();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'OCR 识别失败');
@@ -250,7 +243,6 @@ export function useImageExt({
       if (!res.ok) throw new Error(data?.detail || `请求失败 (${res.status})`);
       if (data.job_id) {
         await fetchJobs();
-        onNavigateTasks();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '口型同步失败');

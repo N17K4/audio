@@ -12,7 +12,6 @@ interface UseMediaConvertParams {
   setError: (e: string) => void;
   addPendingJob: (type: string, label: string, provider: string, isLocal: boolean) => string;
   resolveJob: (id: string, result: JobResult) => void;
-  onNavigateTasks: () => void;
 }
 
 export type ClipEndMode = 'duration' | 'endtime';
@@ -25,7 +24,6 @@ export function useMediaConvert({
   setError,
   addPendingJob,
   resolveJob,
-  onNavigateTasks,
 }: UseMediaConvertParams) {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaAction, setMediaAction] = useState<MediaAction>('convert');
@@ -58,7 +56,6 @@ export function useMediaConvert({
     abortCtrlRef.current = ctrl;
     const label = `格式转换 · ${mediaFile.name}`;
     const jobId = addPendingJob('media', label, 'ffmpeg', false);
-    onNavigateTasks();
     try {
       const fd = new FormData();
       fd.append('file', mediaFile);
@@ -110,7 +107,6 @@ export function useMediaConvert({
     const actionLabel = mediaAction === 'subtitle_extract' ? '提取字幕' : '字幕互转';
     const label = `${actionLabel} · ${mediaFile.name}`;
     const jobId = addPendingJob('media', label, 'ffmpeg', false);
-    onNavigateTasks();
     try {
       const fd = new FormData();
       fd.append('file', mediaFile);

@@ -12,7 +12,7 @@ export default function OutputDirRow({ required, outputDir, setOutputDir, fieldC
   return (
     <label className="block">
       <span className={labelCls}>输出目录{required ? '' : '（可选）'}</span>
-      <div className="flex w-full rounded-xl border border-slate-200 bg-slate-50/50 text-sm overflow-hidden transition-all focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-500/15 dark:border-slate-700 dark:bg-slate-800/50">
+      <div className="flex w-full rounded-xl border border-slate-200 bg-slate-50/50 text-sm overflow-hidden transition-all focus-within:border-[#1A8FE3] focus-within:ring-2 focus-within:ring-[#1A8FE3]/15 dark:border-slate-700 dark:bg-slate-800/50">
         <button
           type="button"
           className="shrink-0 ml-2 my-1.5 rounded-lg border-0 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-800/40"

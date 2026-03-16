@@ -3,6 +3,7 @@ import type { VoiceChatMsg, VoiceChatStatus, CapabilityMap } from '../../types';
 import { PROVIDER_LABELS, LOCAL_PROVIDERS, PROVIDER_TO_ENGINE, DEFAULT_CAPS } from '../../constants';
 import ModelInput from '../shared/ModelInput';
 import ComboSelect from '../shared/ComboSelect';
+import FileDrop from '../shared/FileDrop';
 
 interface VoiceChatPanelProps {
   vchatMsgs: VoiceChatMsg[];
@@ -20,8 +21,8 @@ interface VoiceChatPanelProps {
   setVchatTtsProvider: (v: string) => void;
   vchatTtsModel: string;
   setVchatTtsModel: (v: string) => void;
-  vchatTtsRefAudio: File | null;
-  setVchatTtsRefAudio: (v: File | null) => void;
+  vchatTtsRefAudios: File[];
+  setVchatTtsRefAudios: (v: File[]) => void;
   vchatApiKey: string;
   setVchatApiKey: (v: string) => void;
   vchatEndpoint: string;
@@ -53,8 +54,8 @@ export default function VoiceChatPanel({
   setVchatTtsProvider,
   vchatTtsModel,
   setVchatTtsModel,
-  vchatTtsRefAudio,
-  setVchatTtsRefAudio,
+  vchatTtsRefAudios,
+  setVchatTtsRefAudios,
   vchatApiKey,
   setVchatApiKey,
   vchatEndpoint,
@@ -69,9 +70,9 @@ export default function VoiceChatPanel({
   labelCls,
   btnSec,
 }: VoiceChatPanelProps) {
-  const [configOpen, setConfigOpen] = useState(true);
+  const [configOpen, setConfigOpen] = useState(false);
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: '660px' }}>
+    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: 'calc(100vh - 200px)', minHeight: '520px' }}>
       {/* 顶部配置区（可折叠） */}
       <div className="border-b border-slate-100 dark:border-slate-800">
         <button
@@ -146,21 +147,25 @@ export default function VoiceChatPanel({
 
         {/* TTS 参考音频（Fish Speech 声音克隆必填） */}
         {vchatTtsProvider === 'fish_speech' && (
-          <label className="block">
-            <span className={labelCls}>参考音频（Fish Speech 声音克隆必填）</span>
-            <input className={`block w-full text-sm text-slate-700 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-900/40 dark:file:text-indigo-300`}
-              type="file" accept="audio/*"
-              onChange={e => setVchatTtsRefAudio(e.target.files?.[0] || null)} />
-            {vchatTtsRefAudio && (
-              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">{vchatTtsRefAudio.name}</p>
-            )}
-          </label>
+          <div>
+            <span className={labelCls}>参考音频（Fish Speech 声音克隆必填，可多选）</span>
+            <FileDrop
+              files={vchatTtsRefAudios}
+              onAdd={fs => setVchatTtsRefAudios([...vchatTtsRefAudios, ...fs])}
+              onRemove={i => setVchatTtsRefAudios(vchatTtsRefAudios.filter((_, j) => j !== i))}
+              accept="audio/*"
+              multiple
+              iconType="audio"
+              emptyLabel="点击或拖拽参考音频（可多选）"
+              formatHint="3–30 秒每段效果最佳"
+            />
+          </div>
         )}
         </div>}
       </div>
 
       {/* 对话记录 */}
-      <div ref={vchatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4">
+      <div ref={vchatScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}>
         {vchatMsgs.length === 0 && (
           <p className="text-center text-sm text-slate-400 dark:text-slate-600 mt-10">点击下方麦克风开始语音对话</p>
         )}

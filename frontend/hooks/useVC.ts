@@ -12,7 +12,7 @@ interface UseVCParams {
   outputDir: string;
   needsAuth: boolean;
   selectedVoiceId: string;
-  vcRefAudio: File | null;
+  vcRefAudios: File[];
   status: Status;
   setStatus: (s: Status) => void;
   setProcessingStartTime: (t: number | null) => void;
@@ -23,7 +23,6 @@ interface UseVCParams {
     type: string, label: string, provider: string, isLocal: boolean,
     result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string },
   ) => void;
-  onNavigateTasks: () => void;
   // Seed-VC settings
   seedVcDiffusionSteps: number;
   seedVcPitchShift: number;
@@ -48,7 +47,7 @@ export function useVC({
   outputDir,
   needsAuth,
   selectedVoiceId,
-  vcRefAudio,
+  vcRefAudios,
   status,
   setStatus,
   setProcessingStartTime,
@@ -56,7 +55,6 @@ export function useVC({
   setSuccessMsg,
   setJobs,
   addInstantJobResult,
-  onNavigateTasks,
   seedVcDiffusionSteps,
   seedVcPitchShift,
   seedVcF0Condition,
@@ -79,7 +77,7 @@ export function useVC({
   async function handleVoiceConvert(audio: Blob | File) {
     const isSeedVc = selectedProvider === 'seed_vc';
     if (!isSeedVc && !selectedVoiceId) { setStatus('idle'); setError('请选择目标音色'); return; }
-    if (isSeedVc && !vcRefAudio) { setStatus('idle'); setError('请上传 Seed-VC 参考音频'); return; }
+    if (isSeedVc && vcRefAudios.length === 0) { setStatus('idle'); setError('请上传 Seed-VC 参考音频'); return; }
     if (!outputDir.trim()) { setStatus('idle'); setError('请填写输出目录'); return; }
     if (needsAuth && !apiKey.trim()) { setStatus('idle'); setError('该服务商需要 API 密钥'); return; }
     setError('');
@@ -96,7 +94,7 @@ export function useVC({
     fd.append('api_key', apiKey);
     fd.append('cloud_endpoint', cloudEndpoint);
     fd.append('output_dir', outputDir);
-    if (isSeedVc && vcRefAudio) fd.append('reference_audio', vcRefAudio);
+    if (isSeedVc) vcRefAudios.forEach(f => fd.append('reference_audio', f));
     if (isSeedVc) {
       fd.append('diffusion_steps', String(seedVcDiffusionSteps));
       fd.append('pitch_shift', String(seedVcPitchShift));
@@ -119,7 +117,6 @@ export function useVC({
       if (data?.job_id) {
         const pending: Job = { id: data.job_id, type: 'vc', label: vcLabel, provider: selectedProvider, is_local: true, status: 'queued', created_at: Date.now() / 1000, started_at: null, completed_at: null, result_url: null, result_text: null, error: null };
         setJobs(prev => [pending, ...prev]);
-        onNavigateTasks();
       } else {
         const url = data?.result_url;
         if (!url) throw new Error('响应中无结果链接');

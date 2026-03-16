@@ -128,7 +128,6 @@ def handle_request(conn: socket.socket, engine) -> None:
 
         req_dict = json.loads(buf.decode().strip())
         text = req_dict["text"]
-        voice_ref = req_dict.get("voice_ref", "")
         output_path = req_dict["output"]
 
         # 延迟 import — 只在模型加载完成后进来才 import
@@ -136,9 +135,15 @@ def handle_request(conn: socket.socket, engine) -> None:
         import soundfile as sf
         import numpy as np
 
-        references = []
-        if voice_ref and Path(voice_ref).exists() and Path(voice_ref).stat().st_size > 0:
-            references = [ServeReferenceAudio(audio=Path(voice_ref).read_bytes(), text="")]
+        # 支持多参考音频：voice_refs（列表）优先，向后兼容 voice_ref（单字符串）
+        voice_refs = req_dict.get("voice_refs") or (
+            [req_dict["voice_ref"]] if req_dict.get("voice_ref") else []
+        )
+        references = [
+            ServeReferenceAudio(audio=Path(vr).read_bytes(), text="")
+            for vr in voice_refs
+            if vr and Path(vr).exists() and Path(vr).stat().st_size > 0
+        ]
 
         req = ServeTTSRequest(text=text, references=references, streaming=False, format="wav")
 

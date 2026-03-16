@@ -94,13 +94,17 @@ async def _run_vc_job(job_id: str, fn, *fn_args) -> None:
             job["error"] = getattr(exc, "detail", None) or str(exc) or repr(exc)
         finally:
             job["completed_at"] = _t.time()
-            # 清理临时参考音频
-            ref_tmp = job.pop("_ref_audio_tmp", None)
-            if ref_tmp and Path(ref_tmp).exists():
-                try:
-                    Path(ref_tmp).unlink()
-                except Exception:
-                    pass
+            # 清理临时参考音频（支持新版列表和旧版单路径）
+            ref_tmps = job.pop("_ref_audio_tmps", None)
+            if ref_tmps is None:
+                legacy = job.pop("_ref_audio_tmp", None)
+                ref_tmps = [legacy] if legacy else []
+            for ref_tmp in ref_tmps:
+                if ref_tmp and Path(ref_tmp).exists():
+                    try:
+                        Path(ref_tmp).unlink()
+                    except Exception:
+                        pass
             # 清理输入文件
             input_tmp = job.pop("_input_tmp", None)
             if input_tmp and Path(input_tmp).exists():
@@ -138,9 +142,13 @@ async def _run_tts_job(job_id: str, fn, *fn_args) -> None:
             job["error"] = getattr(exc, "detail", None) or str(exc) or repr(exc)
         finally:
             job["completed_at"] = _t.time()
-            ref_tmp = job.pop("_ref_audio_tmp", None)
-            if ref_tmp and Path(ref_tmp).exists():
-                try:
-                    Path(ref_tmp).unlink()
-                except Exception:
-                    pass
+            ref_tmps = job.pop("_ref_audio_tmps", None)
+            if ref_tmps is None:
+                legacy = job.pop("_ref_audio_tmp", None)
+                ref_tmps = [legacy] if legacy else []
+            for ref_tmp in ref_tmps:
+                if ref_tmp and Path(ref_tmp).exists():
+                    try:
+                        Path(ref_tmp).unlink()
+                    except Exception:
+                        pass

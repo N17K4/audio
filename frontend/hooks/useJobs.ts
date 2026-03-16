@@ -39,7 +39,6 @@ function mergeJobs(prev: Job[], backendJobs: Job[]): Job[] {
 export function useJobs(
   backendBaseUrl: string,
   backendReady: boolean,
-  onNavigateTasks: () => void,
 ) {
   const [jobs, setJobsRaw] = useState<Job[]>(() => loadStoredJobs());
 
@@ -109,7 +108,6 @@ export function useJobs(
   ) {
     const id = addPendingJob(type, label, provider, isLocal);
     resolveJob(id, result);
-    onNavigateTasks();
   }
 
   async function pollJobResult(jobId: string, timeoutMs = 180000): Promise<Job> {

@@ -16,12 +16,14 @@ export type VoiceChatMsg = { role: 'user' | 'assistant'; text: string; audioUrl?
 export type DiskRow = {
   key: string;
   label: string;
+  version?: string;          // 版本号（如 "v1.5"），由前端 badge 展示
   sub?: string;
   size: number;
   engineKey?: string;        // 对应 download_checkpoints.py --engine 参数，有值才显示安装/卸载按钮
   ready?: boolean;           // 模型是否已就绪（size > 0 作为代理）
   clearable?: boolean;       // 可直接清空目录，显示「清空」按钮
   estimatedSizeMb?: number;  // 预估体积，始终显示在标签旁
+  default_install?: boolean; // true=pnpm run checkpoints 默认安装；false=需手动 --engine 指定
 };
 export type Job = {
   id: string;

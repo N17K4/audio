@@ -1,5 +1,6 @@
 import type { DocSubPage } from '../../types';
 import OutputDirRow from '../shared/OutputDirRow';
+import FileDrop from '../shared/FileDrop';
 
 const PANDOC_OUTPUT_FORMATS = [
   { value: 'docx',     label: 'DOCX'     },
@@ -99,16 +100,22 @@ export default function DocPanel({
 
       {/* ── 文档：输入文件 ── */}
       {isDocPage(docSubPage) && (
-        <label className="block">
+        <div>
           <span className={labelCls}>
             {docSubPage === 'pdf_to_word' && '输入 PDF 文件'}
             {docSubPage === 'doc_convert' && '输入文档'}
             {docSubPage === 'pdf_extract' && '输入 PDF 文件'}
           </span>
-          <input className={fileCls} type="file" accept={ACCEPT[docSubPage]}
-            onChange={e => setDocFile(e.target.files?.[0] || null)} />
-          {docFile && <p className="text-xs text-slate-400 mt-1.5">{docFile.name}（{Math.round(docFile.size / 1024)} KB）</p>}
-        </label>
+          <FileDrop
+            files={docFile ? [docFile] : []}
+            onAdd={fs => setDocFile(fs[0])}
+            onRemove={() => setDocFile(null)}
+            accept={ACCEPT[docSubPage]}
+            compact
+            iconType="file"
+            emptyLabel="点击或拖拽文件"
+          />
+        </div>
       )}
 
       {docSubPage === 'pdf_to_word' && (
@@ -153,12 +160,18 @@ export default function DocPanel({
       {/* ── 图片处理 ── */}
       {docSubPage === 'image' && (
         <>
-          <label className="block">
+          <div>
             <span className={labelCls}>输入图片</span>
-            <input className={fileCls} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
-              onChange={e => setImgFile(e.target.files?.[0] || null)} />
-            {imgFile && <p className="text-xs text-slate-400 mt-1.5">{imgFile.name}（{Math.round(imgFile.size / 1024)} KB）</p>}
-          </label>
+            <FileDrop
+              files={imgFile ? [imgFile] : []}
+              onAdd={fs => setImgFile(fs[0])}
+              onRemove={() => setImgFile(null)}
+              accept="image/*,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
+              compact
+              iconType="image"
+              emptyLabel="点击或拖拽图片"
+            />
+          </div>
           <div>
             <span className={labelCls}>输出格式</span>
             <div className="flex flex-wrap gap-2">
@@ -210,12 +223,18 @@ export default function DocPanel({
                 value={qrText} onChange={e => setQrText(e.target.value)} />
             </div>
           ) : (
-            <label className="block">
+            <div>
               <span className={labelCls}>包含二维码的图片</span>
-              <input className={fileCls} type="file" accept="image/*"
-                onChange={e => setQrFile(e.target.files?.[0] || null)} />
-              {qrFile && <p className="text-xs text-slate-400 mt-1.5">{qrFile.name}</p>}
-            </label>
+              <FileDrop
+                files={qrFile ? [qrFile] : []}
+                onAdd={fs => setQrFile(fs[0])}
+                onRemove={() => setQrFile(null)}
+                accept="image/*"
+                compact
+                iconType="image"
+                emptyLabel="点击或拖拽图片"
+              />
+            </div>
           )}
         </>
       )}
@@ -223,12 +242,18 @@ export default function DocPanel({
       {/* ── 文本编码 ── */}
       {docSubPage === 'text_encoding' && (
         <>
-          <label className="block">
+          <div>
             <span className={labelCls}>输入文件（自动检测原始编码）</span>
-            <input className={fileCls} type="file" accept=".txt,.csv,.srt,.vtt,.json,.xml,.html,.md,.log"
-              onChange={e => setEncFile(e.target.files?.[0] || null)} />
-            {encFile && <p className="text-xs text-slate-400 mt-1.5">{encFile.name}（{Math.round(encFile.size / 1024)} KB）</p>}
-          </label>
+            <FileDrop
+              files={encFile ? [encFile] : []}
+              onAdd={fs => setEncFile(fs[0])}
+              onRemove={() => setEncFile(null)}
+              accept=".txt,.csv,.srt,.vtt,.json,.xml,.html,.md,.log"
+              compact
+              iconType="file"
+              emptyLabel="点击或拖拽文本文件"
+            />
+          </div>
           <div>
             <span className={labelCls}>目标编码</span>
             <div className="flex flex-wrap gap-2">

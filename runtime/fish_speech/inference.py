@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fish Speech TTS 适配器")
     parser.add_argument("--text", required=True, help="要合成的文本")
     parser.add_argument("--output", required=True, help="输出音频路径")
-    parser.add_argument("--voice_ref", default="", help="参考音频路径（可选）")
+    parser.add_argument("--voice_ref", nargs="*", default=[], help="参考音频路径（可选，可多个）")
     parser.add_argument("--checkpoint_dir", default="", help="模型权重目录（覆盖 manifest 默认值）")
     return parser.parse_args()
 
@@ -193,9 +193,9 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
     sys.exit(1)
 
 
-def _send_request(socket_path: str, text: str, voice_ref: str, output: str) -> dict:
+def _send_request(socket_path: str, text: str, voice_refs: list, output: str) -> dict:
     """通过 socket 发送推理请求，返回响应 dict。"""
-    payload = json.dumps({"text": text, "voice_ref": voice_ref, "output": output}, ensure_ascii=False)
+    payload = json.dumps({"text": text, "voice_refs": voice_refs, "output": output}, ensure_ascii=False)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(300.0)  # 推理本身的超时
     s.connect(socket_path)
@@ -229,11 +229,13 @@ def main() -> int:
     legacy_cmd = (os.getenv("FISH_SPEECH_CMD_TEMPLATE") or "").strip()
     if legacy_cmd:
         import shlex
+        voice_refs_legacy = args.voice_ref or []
+        refs_arg = " ".join(shlex.quote(r) for r in voice_refs_legacy if r) if voice_refs_legacy else '""'
         cmd = (
             legacy_cmd
             .replace("{text}", shlex.quote(args.text))
             .replace("{output}", f'"{output_path}"')
-            .replace("{voice_ref}", f'"{args.voice_ref}"' if args.voice_ref else "")
+            .replace("{voice_ref}", refs_arg)
             .replace("{checkpoint_dir}", f'"{checkpoint_dir}"')
         )
         completed = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
@@ -276,7 +278,7 @@ def main() -> int:
         result = _send_request(
             socket_path=socket_path,
             text=args.text,
-            voice_ref=args.voice_ref or "",
+            voice_refs=args.voice_ref or [],
             output=str(output_path),
         )
         print(f"[fish_speech] 收到推理响应，耗时 {_time.monotonic()-_req_t0:.1f}s", file=sys.stderr, flush=True)

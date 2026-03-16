@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT, ELEVENLABS_BASE_URL, ELEVENLABS_STS_PATH_TEMPLATE
 from logging_setup import logger
+from utils.audit import log_ai_call, log_ai_error
 from utils.auth import parse_cloud_auth_header, require_httpx
 from utils.engine import build_engine_env, get_default_rvc_command_template, get_seed_vc_command_template
 
@@ -64,7 +65,7 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
         .replace("{voice_dir}", _q(str(voice_dir.resolve())))
     )
 
-    logger.debug("RVC 推理命令: %s", cmd)
+    log_ai_call("rvc", {"input": str(input_path), "output": str(output_path), "model": model_path, "index": index_path}, command=cmd)
     merged_env = build_engine_env("rvc")
     if extra_env:
         merged_env.update(extra_env)
@@ -80,13 +81,13 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
             cwd=str(APP_ROOT),  # fairseq/HuBERT 在 backend/ 目录下会 SIGSEGV，需从项目根目录启动
         )
     except Exception as exc:
-        logger.error("RVC 推理命令执行异常: %s", exc)
+        log_ai_error("rvc", exc)
         raise HTTPException(status_code=500, detail=f"Inference command execution failed: {exc}") from exc
 
     if completed.returncode != 0:
         stdout = (completed.stdout or "").strip()[:10000]
         stderr = (completed.stderr or "").strip()[:10000]
-        logger.error("RVC 推理失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+        log_ai_error("rvc", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
         raise HTTPException(
             status_code=500,
             detail=f"Inference command failed (code={completed.returncode}). stdout={stdout} stderr={stderr}",
@@ -208,8 +209,11 @@ def run_seed_vc_cmd(
     # 仅在模板无对应占位符时才追加（避免双重传递）
     if "{diffusion_steps}" not in cmd_tpl:
         cmd += extra_args
-    logger.info("[Seed-VC] 启动子进程 (diffusion_steps=%s pitch_shift=%s f0=%s)", diffusion_steps, pitch_shift, f0_condition)
-    logger.info("[Seed-VC] 输入: %s  参考: %s", input_path.name, Path(voice_ref).name if voice_ref else "(空)")
+    log_ai_call("seed_vc", {
+        "input": str(input_path), "output": str(output_path), "voice_ref": voice_ref,
+        "diffusion_steps": diffusion_steps, "pitch_shift": pitch_shift,
+        "f0_condition": f0_condition, "cfg_rate": cfg_rate,
+    }, command=cmd)
     try:
         completed = subprocess.run(
             cmd, shell=True, check=False, capture_output=True, text=True, timeout=1800,
@@ -218,14 +222,14 @@ def run_seed_vc_cmd(
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or b"").decode(errors="replace").strip()[:5000] if isinstance(exc.stdout, bytes) else (exc.stdout or "")[:5000]
         stderr = (exc.stderr or b"").decode(errors="replace").strip()[:5000] if isinstance(exc.stderr, bytes) else (exc.stderr or "")[:5000]
-        logger.error("[Seed-VC] 超时 (1800s)\nstderr: %s\nstdout: %s", stderr, stdout)
+        log_ai_error("seed_vc", exc, stdout=stdout, stderr=stderr)
         raise HTTPException(status_code=500, detail=f"Seed-VC 超时（1800s），请检查日志。stderr={stderr[:500]}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Seed-VC command failed: {exc}") from exc
     if completed.returncode != 0:
         stdout = (completed.stdout or "").strip()
         stderr = (completed.stderr or "").strip()
-        logger.error("[Seed-VC] 失败 (code=%s)\nstderr (last 8000):\n%s\nstdout: %s", completed.returncode, stderr[-8000:], stdout[-2000:])
+        log_ai_error("seed_vc", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
         raise HTTPException(status_code=500, detail=f"Seed-VC failed (code={completed.returncode}): {stderr}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
         logger.error("[Seed-VC] 完成但输出文件缺失: %s", output_path)

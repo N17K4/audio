@@ -363,3 +363,27 @@ export const LIPSYNC_MODELS: Record<string, string[]> = {
   heygen:       ['video_translate_v2', 'video_v2.2'],
   did:          ['microsoft/kognitiv-arc/arc2face'],
 };
+
+// ─── 首页工具卡片 ────────────────────────────────────────────────────────────
+export type ToolCategory = 'all' | 'audio' | 'image' | 'video' | 'convert';
+
+export const TOOL_CARDS = [
+  // 音频（5个）
+  { id: 'audio_tools',    label: '文本转语音', desc: '多引擎 TTS，支持本地与云端',        category: ['audio']   as const, iconBg: '#E9E6F9', iconColor: '#624BD8', iconType: 'tts',              subPage: 'tts' },
+  { id: 'audio_tools',    label: '音色转换',   desc: '零样本或训练模型音色迁移',          category: ['audio']   as const, iconBg: '#F3E8FF', iconColor: '#9333ea', iconType: 'vc',               subPage: 'vc' },
+  { id: 'audio_tools',    label: '语音转文字', desc: 'Whisper 及多云端 STT',             category: ['audio']   as const, iconBg: '#E2F0FE', iconColor: '#3D99F5', iconType: 'asr',              subPage: 'asr' },
+  { id: 'audio_tools',    label: 'AI 聊天',    desc: '接入多种大语言模型',               category: ['audio']   as const, iconBg: '#ECFAE5', iconColor: '#22c55e', iconType: 'llm',              subPage: 'llm' },
+  { id: 'audio_tools',    label: '语音对话',   desc: '实时 STT+LLM+TTS 全链路',         category: ['audio']   as const, iconBg: '#FEF9E2', iconColor: '#D97706', iconType: 'voice_chat',       subPage: 'voice_chat' },
+  // 图像（4个）
+  { id: 'misc',           label: '图像生成',   desc: 'DALL-E / Imagen / SD 本地生成',   category: ['image']   as const, iconBg: '#FBE6E5', iconColor: '#E24841', iconType: 'image_gen',        subPage: 'img_gen' },
+  { id: 'misc',           label: '图像转图像', desc: 'FaceFusion 换脸 / 风格迁移',      category: ['image']   as const, iconBg: '#FFEDE0', iconColor: '#FF7919', iconType: 'img_i2i',          subPage: 'img_i2i' },
+  { id: 'misc',           label: '图像理解',   desc: 'GPT-4o / Gemini Vision 分析',     category: ['image']   as const, iconBg: '#E9E6F9', iconColor: '#7c3aed', iconType: 'image_understand', subPage: 'image_understand' },
+  { id: 'misc',           label: 'OCR 识别',   desc: '文档 / 公式 / 表格智能识别',      category: ['image']   as const, iconBg: '#E2F0FE', iconColor: '#0369a1', iconType: 'ocr',              subPage: 'ocr' },
+  // 视频（2个）
+  { id: 'misc',           label: '视频生成',   desc: '文生视频（可灵 / Wan 2.1 本地）', category: ['video']   as const, iconBg: '#E3FCFD', iconColor: '#10D0D5', iconType: 'video_gen',        subPage: 'video_gen' },
+  { id: 'misc',           label: '口型同步',   desc: 'LivePortrait 图片驱动动画',       category: ['video']   as const, iconBg: '#FBE6E5', iconColor: '#be185d', iconType: 'lipsync',          subPage: 'lipsync' },
+  // 转换（3个）
+  { id: 'format_convert', label: '音视频转换', desc: 'FFmpeg 格式转换 / 截取片段',       category: ['convert'] as const, iconBg: '#E3FCFD', iconColor: '#0f766e', iconType: 'media' },
+  { id: 'format_convert', label: '文档工具',   desc: 'PDF / Word / 编码 / 二维码',      category: ['convert'] as const, iconBg: '#FFEDE0', iconColor: '#b45309', iconType: 'doc' },
+  { id: 'misc',           label: '智能翻译',   desc: '多语言 LLM 翻译',                 category: ['convert'] as const, iconBg: '#E2F0FE', iconColor: '#0284c7', iconType: 'translate',        subPage: 'translate' },
+];

@@ -3,7 +3,7 @@ import subprocess
 import traceback
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 try:
     import httpx
@@ -105,26 +105,35 @@ async def task_tts(
     voice_ref: str = Form(""),
     voice_id: str = Form(""),
     output_dir: str = Form(""),
-    reference_audio: Optional[UploadFile] = File(None),
+    reference_audio: List[UploadFile] = File([]),
 ):
     if not text.strip():
         raise HTTPException(status_code=400, detail="text is required")
     p = provider.strip().lower()
 
-    ref_audio_tmp: Optional[Path] = None
-    if reference_audio and reference_audio.filename:
-        ref_ext = Path(reference_audio.filename).suffix or ".wav"
-        ref_audio_tmp = DOWNLOAD_DIR / f"{uuid.uuid4()}_tts_ref{ref_ext}"
-        ref_audio_tmp.write_bytes(await reference_audio.read())
+    ref_audio_tmps: List[Path] = []
+    for raf in reference_audio:
+        if raf and raf.filename:
+            ref_ext = Path(raf.filename).suffix or ".wav"
+            tmp = DOWNLOAD_DIR / f"{uuid.uuid4()}_tts_ref{ref_ext}"
+            tmp.write_bytes(await raf.read())
+            ref_audio_tmps.append(tmp)
 
-    ref = str(ref_audio_tmp) if ref_audio_tmp else (voice_ref.strip() or voice.strip())
+    voice_refs_list = [str(p_) for p_ in ref_audio_tmps]
+    if not voice_refs_list:
+        fallback = voice_ref.strip() or voice.strip()
+        if fallback:
+            voice_refs_list = [fallback]
+
     voice_id_str = voice_id.strip()
-    if voice_id_str and p == "fish_speech" and not ref:
+    if voice_id_str and p == "fish_speech" and not voice_refs_list:
         try:
             v = get_voice_or_404(voice_id_str)
-            ref = v.get("reference_audio", "")
+            ref_path = v.get("reference_audio", "")
+            if ref_path:
+                voice_refs_list = [ref_path]
         except Exception:
-            ref = ""
+            pass
 
     is_local = p == "fish_speech" and not cloud_endpoint.strip()
 
@@ -134,8 +143,9 @@ async def task_tts(
             1 for j in JOBS.values() if j.get("is_local") and j["status"] in ("queued", "running")
         )
         if local_active >= MAX_LOCAL_QUEUE:
-            if ref_audio_tmp and ref_audio_tmp.exists():
-                ref_audio_tmp.unlink()
+            for tmp in ref_audio_tmps:
+                if tmp.exists():
+                    tmp.unlink()
             raise HTTPException(
                 status_code=429,
                 detail=f"本地推理队列已满（{MAX_LOCAL_QUEUE} 个），请等待当前任务完成后再提交。",
@@ -144,11 +154,11 @@ async def task_tts(
     label = (text[:30] + "…") if len(text) > 30 else text
     job = _make_job("tts", f"TTS · {label}", p, is_local=is_local)
     job_id = job["id"]
-    job["_ref_audio_tmp"] = str(ref_audio_tmp) if ref_audio_tmp else None
+    job["_ref_audio_tmps"] = [str(t) for t in ref_audio_tmps]
 
     async def _do_tts():
         if p == "fish_speech":
-            return await run_fish_speech_tts(text=text, voice=ref, api_key=api_key, endpoint=cloud_endpoint)
+            return await run_fish_speech_tts(text=text, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint)
         elif p == "openai":
             return await run_openai_tts(text=text, api_key=api_key, model=model or "gpt-4o-mini-tts", voice=voice or "alloy")
         elif p == "gemini":

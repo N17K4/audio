@@ -5,9 +5,8 @@
   "scripts": {
     "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
-    "setup": "pnpm install && cd frontend && pnpm install && cd .. && node scripts/setup-runtime.js",
+    "setup": "mise install && pnpm install && cd frontend && pnpm install && cd ../backend && (poetry install || (poetry lock && poetry install)) && cd .. && node scripts/setup-runtime.js",
     "setup:runtime": "node scripts/setup-runtime.js",
-    "setup:dev": "cd backend && (poetry install || (poetry lock && poetry install))",
     "checkpoints": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py",
     "checkpoints:check": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py --check-only",
     "checkpoints:force": "runtime/mac/python/bin/python3 scripts/download_checkpoints.py --force",

@@ -3,7 +3,7 @@ import os
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
@@ -11,6 +11,7 @@ from config import DOWNLOAD_DIR, MAX_LOCAL_QUEUE, BACKEND_HOST, BACKEND_PORT
 from job_queue import JOBS, _make_job, _run_vc_job
 from logging_setup import logger
 from services.vc.local_vc import run_cloud_convert, run_local_inference_or_raise, run_seed_vc_cmd
+from utils.audio import concat_audio_files
 from utils.engine import get_ffmpeg_binary
 from utils.voices import copy_to_output_dir, get_voice_or_404
 
@@ -26,7 +27,7 @@ async def convert(
     api_key: str = Form(""),
     cloud_endpoint: str = Form(""),
     output_dir: str = Form(""),
-    reference_audio: Optional[UploadFile] = File(None),
+    reference_audio: List[UploadFile] = File([]),
     # 通用
     pitch_shift: int = Form(0),
     # SeedVC 专属
@@ -45,11 +46,29 @@ async def convert(
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    ref_audio_tmp: Optional[Path] = None
-    if reference_audio and reference_audio.filename:
-        ref_ext = Path(reference_audio.filename).suffix or ".wav"
-        ref_audio_tmp = DOWNLOAD_DIR / f"{uuid.uuid4()}_ref{ref_ext}"
-        ref_audio_tmp.write_bytes(await reference_audio.read())
+    ref_audio_tmps: List[Path] = []
+    for raf in reference_audio:
+        if raf and raf.filename:
+            ref_ext = Path(raf.filename).suffix or ".wav"
+            tmp = DOWNLOAD_DIR / f"{uuid.uuid4()}_ref{ref_ext}"
+            tmp.write_bytes(await raf.read())
+            ref_audio_tmps.append(tmp)
+
+    # 多文件时 concat 为单文件，供 Seed-VC 使用
+    concat_ref_tmp: Optional[Path] = None
+    if len(ref_audio_tmps) > 1:
+        concat_ref_tmp = DOWNLOAD_DIR / f"{uuid.uuid4()}_ref_concat.wav"
+        try:
+            concat_audio_files([str(p) for p in ref_audio_tmps], concat_ref_tmp)
+        except Exception as e:
+            for t in ref_audio_tmps:
+                t.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=f"参考音频拼接失败: {e}")
+        effective_ref_tmp: Optional[Path] = concat_ref_tmp
+    elif len(ref_audio_tmps) == 1:
+        effective_ref_tmp = ref_audio_tmps[0]
+    else:
+        effective_ref_tmp = None
 
     # 云端模式：同步执行，直接返回结果（不走 job 队列）
     if mode.strip().lower() == "cloud":
@@ -64,11 +83,10 @@ async def convert(
                 cloud_endpoint=cloud_endpoint,
             )
         finally:
-            if ref_audio_tmp and ref_audio_tmp.exists():
-                try:
-                    ref_audio_tmp.unlink()
-                except Exception:
-                    pass
+            for t in ref_audio_tmps:
+                t.unlink(missing_ok=True)
+            if concat_ref_tmp:
+                concat_ref_tmp.unlink(missing_ok=True)
         if result.get("result_url") and output_dir.strip():
             url_name = Path(result["result_url"]).name
             copy_to_output_dir(DOWNLOAD_DIR / url_name, output_dir)
@@ -79,8 +97,10 @@ async def convert(
         1 for j in JOBS.values() if j.get("is_local") and j["status"] in ("queued", "running")
     )
     if local_active >= MAX_LOCAL_QUEUE:
-        if ref_audio_tmp and ref_audio_tmp.exists():
-            ref_audio_tmp.unlink()
+        for t in ref_audio_tmps:
+            t.unlink(missing_ok=True)
+        if concat_ref_tmp:
+            concat_ref_tmp.unlink(missing_ok=True)
         raise HTTPException(
             status_code=429,
             detail=f"本地推理队列已满（{MAX_LOCAL_QUEUE} 个），请等待当前任务完成后再提交。",
@@ -141,7 +161,7 @@ async def convert(
     # 构建推理函数（同步，供后台线程调用）
     def _run_vc_sync() -> str:
         if prov == "seed_vc":
-            voice_ref = str(ref_audio_tmp) if ref_audio_tmp else ""
+            voice_ref = str(effective_ref_tmp) if effective_ref_tmp else ""
             if not voice_ref:
                 try:
                     v = get_voice_or_404(voice_id)
@@ -155,7 +175,7 @@ async def convert(
             engine = voice.get("engine", "rvc").lower()
             logger.info("local engine=%s inference_mode=%s", engine, voice.get("inference_mode", "copy"))
             if engine == "seed_vc":
-                voice_ref = str(ref_audio_tmp) if ref_audio_tmp else voice.get("reference_audio", "")
+                voice_ref = str(effective_ref_tmp) if effective_ref_tmp else voice.get("reference_audio", "")
                 run_seed_vc_cmd(input_path, output_path, voice_ref, diffusion_steps, pitch_shift, f0_condition, cfg_rate, enable_postprocess)
             else:
                 rvc_extra_env = {
@@ -173,7 +193,10 @@ async def convert(
 
     job = _make_job("vc", f"音色转换 · {filename_label}", prov, is_local=True)
     job_id = job["id"]
-    job["_ref_audio_tmp"] = str(ref_audio_tmp) if ref_audio_tmp else None
+    all_ref_tmps = [str(t) for t in ref_audio_tmps]
+    if concat_ref_tmp:
+        all_ref_tmps.append(str(concat_ref_tmp))
+    job["_ref_audio_tmps"] = all_ref_tmps
     job["_input_tmp"] = str(input_path)
 
     task = asyncio.create_task(_run_vc_job(job_id, _run_vc_sync))

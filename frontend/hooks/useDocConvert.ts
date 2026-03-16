@@ -12,7 +12,6 @@ interface UseDocConvertParams {
   setError: (e: string) => void;
   addPendingJob: (type: string, label: string, provider: string, isLocal: boolean) => string;
   resolveJob: (id: string, result: JobResult) => void;
-  onNavigateTasks: () => void;
 }
 
 export function useDocConvert({
@@ -23,7 +22,6 @@ export function useDocConvert({
   setError,
   addPendingJob,
   resolveJob,
-  onNavigateTasks,
 }: UseDocConvertParams) {
   const [docSubPage, setDocSubPage] = useState<DocSubPage>('pdf_to_word');
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -48,7 +46,6 @@ export function useDocConvert({
     };
     const label = `${actionLabel[docSubPage] ?? docSubPage} · ${docFile.name}`;
     const jobId = addPendingJob('doc', label, 'local', true);
-    onNavigateTasks();
 
     try {
       const fd = new FormData();

@@ -8,7 +8,7 @@ interface SystemPanelProps {
 
 const NAV_ITEMS = [
   { id: 'models',  label: '模型管理',   electronOnly: true,  keywords: ['模型', '磁盘', '安装', '卸载', '下载', '体积'] },
-  { id: 'perf',    label: '性能设置',   electronOnly: false, keywords: ['并发', '性能', '推理', '并行'] },
+  { id: 'perf',    label: '性能',       electronOnly: false, keywords: ['并发', '性能', '推理', '并行'] },
   { id: 'health',  label: '健康检查',   electronOnly: false, keywords: ['健康', '状态', '连接', '后端'] },
   { id: 'logs',    label: '日志',       electronOnly: true,  keywords: ['日志', 'log', '错误', '前端'] },
   { id: 'reset',   label: '重置',       electronOnly: true,  keywords: ['清除', '重置', '重新下载', '数据'] },
@@ -34,12 +34,6 @@ function fmtSize(b: number) {
   return `${(b / 1073741824).toFixed(2)} GB`;
 }
 
-function fmtEstimate(mb: number) {
-  if (!mb) return '';
-  if (mb < 1024) return `~${mb} MB`;
-  return `~${(mb / 1024).toFixed(1)} GB`;
-}
-
 function fmtTime(d: Date) {
   const mm = d.getMonth() + 1, dd = d.getDate();
   const hh = String(d.getHours()).padStart(2, '0');
@@ -48,10 +42,44 @@ function fmtTime(d: Date) {
   return `${mm}/${dd} ${hh}:${min}:${ss}`;
 }
 
+const SPRING_GREEN = '#6db33f';
+const SPRING_GREEN_DARK = '#4d8027';
+
+// ── Card component ────────────────────────────────────────────────────────────
+function Card({
+  title,
+  desc,
+  action,
+  accent = false,
+  accentColor = SPRING_GREEN,
+  children,
+}: {
+  title: string;
+  desc?: string;
+  action?: React.ReactNode;
+  accent?: boolean;
+  accentColor?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-start gap-3">
+        {accent && (
+          <div className="w-1 self-stretch rounded-full shrink-0 mt-0.5" style={{ backgroundColor: accentColor }} />
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{title}</h3>
+          {desc && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{desc}</p>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      <div className="px-5 py-4">{children}</div>
+    </div>
+  );
+}
+
 export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelProps) {
-  // ── layout ─────────────────────────────────────────────────────────────────
   const [activeSection, setActiveSection] = useState<SectionId>(isElectron ? 'models' : 'health');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // ── 并发数 ─────────────────────────────────────────────────────────────────
   const [concurrency, setConcurrency] = useState(1);
@@ -72,6 +100,13 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthRefreshedAt, setHealthRefreshedAt] = useState<Date | null>(null);
 
+  // ── 网络依赖 ────────────────────────────────────────────────────────────────
+  const [networkDeps, setNetworkDeps] = useState<Array<{
+    name: string; category: string; user_facing: boolean;
+    url: string; size_display: string; phase: string;
+    mirror_support: boolean; note: string;
+  }>>([]);
+
   // ── 磁盘占用 ────────────────────────────────────────────────────────────────
   const [diskRows, setDiskRows] = useState<DiskRow[] | null>(null);
   const [diskLoading, setDiskLoading] = useState(false);
@@ -82,7 +117,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
   const [installLogKey, setInstallLogKey] = useState<string>('');
   const installLogRef = useRef<HTMLPreElement>(null);
 
-  // 安装日志自动滚到底
   useEffect(() => {
     const el = installLogRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -100,19 +134,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
   const [redownloading, setRedownloading] = useState(false);
   const [redownloadMsg, setRedownloadMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // ── nav 过滤 ────────────────────────────────────────────────────────────────
-  const filteredNav = NAV_ITEMS.filter(item => {
-    if (item.electronOnly && !isElectron) return false;
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return item.label.includes(q) || item.keywords.some(k => k.includes(q));
-  });
-
-  useEffect(() => {
-    if (searchQuery && filteredNav.length > 0 && !filteredNav.find(i => i.id === activeSection)) {
-      setActiveSection(filteredNav[0].id);
-    }
-  }, [searchQuery]);
+  const visibleNav = NAV_ITEMS.filter(item => !item.electronOnly || isElectron);
 
   // ── 切换 section 时自动刷新 ──────────────────────────────────────────────────
   useEffect(() => {
@@ -120,12 +142,20 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
     if (activeSection === 'health') { doCheckHealth(); }
   }, [activeSection]);
 
-  // ── 磁盘操作 helpers ─────────────────────────────────────────────────────────
   async function doRefreshDisk() {
     setDiskLoading(true);
     try { setDiskRows(await window.electronAPI?.getDiskUsage() ?? null); } catch { /**/ }
     setDiskRefreshedAt(new Date());
     setDiskLoading(false);
+    if (backendBaseUrl && networkDeps.length === 0) {
+      try {
+        const r = await fetch(`${backendBaseUrl}/runtime/info`);
+        if (r.ok) {
+          const d = await r.json();
+          if (Array.isArray(d.network_deps)) setNetworkDeps(d.network_deps);
+        }
+      } catch { /**/ }
+    }
   }
 
   async function doCheckHealth() {
@@ -196,34 +226,31 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
     setEngineStatus(s => ({ ...s, [engineKey]: 'idle' }));
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // Sections
-  // ────────────────────────────────────────────────────────────────────────────
+  // ── sections ─────────────────────────────────────────────────────────────────
 
   function SectionPerf() {
     return (
-      <div className="space-y-5">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20 px-4 py-3 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-          <span className="font-semibold">注意：</span>并行运行多个本地推理会同时占用 GPU/CPU 内存。内存不足（如 Mac Air 8GB、核显笔记本）时可能导致崩溃或严重卡顿。<span className="font-semibold">非高配电脑请保持默认值 1。</span>
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs text-slate-500 dark:text-slate-400">本地推理并发数</p>
-          <div className="flex items-center gap-3">
+      <Card title="本地推理并发数" desc="控制同时运行的本地推理任务数量，请根据硬件配置合理设置。">
+        <div className="space-y-4">
+          <div className="rounded border-l-4 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 leading-relaxed border-amber-400">
+            <span className="font-semibold">注意：</span>并行运行多个本地推理会同时占用 GPU/CPU 内存。内存不足（如 Mac Air 8GB、核显笔记本）时可能导致崩溃或严重卡顿。<span className="font-semibold">非高配电脑请保持默认值 1。</span>
+          </div>
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               {[1, 2, 3, 4].map(n => (
                 <button key={n}
-                  className={`w-9 h-9 rounded-lg border text-sm font-semibold transition-colors ${
-                    concurrencyInput === String(n)
-                      ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300'
-                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400'
-                  }`}
+                  className="w-10 h-10 rounded border text-sm font-bold transition-all"
+                  style={concurrencyInput === String(n)
+                    ? { backgroundColor: SPRING_GREEN, borderColor: SPRING_GREEN, color: '#fff' }
+                    : { backgroundColor: '#fff', borderColor: '#e2e8f0', color: '#475569' }}
                   onClick={() => setConcurrencyInput(String(n))}>
                   {n}
                 </button>
               ))}
             </div>
             <button
-              className="rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 transition-colors disabled:opacity-50"
+              className="rounded border px-4 py-2 text-sm font-medium transition-all disabled:opacity-40"
+              style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
               disabled={concurrencySaving || !backendBaseUrl || concurrencyInput === String(concurrency)}
               onClick={async () => {
                 const n = Math.max(1, Math.min(4, parseInt(concurrencyInput) || 1));
@@ -243,62 +270,63 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
               {concurrencySaving ? '保存中…' : '保存'}
             </button>
             {concurrencyMsg && (
-              <span className={`text-xs ${concurrencyMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+              <span className={`text-sm ${concurrencyMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
                 {concurrencyMsg.text}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">当前生效值：{concurrency}</p>
+          <p className="text-xs text-slate-400">当前生效值：{concurrency}</p>
         </div>
-      </div>
+      </Card>
     );
   }
 
   function SectionHealth() {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-          {healthLoading
-            ? <><Spinner /><span>检查中…</span></>
-            : healthRefreshedAt
-            ? <span>刷新时间：{fmtTime(healthRefreshedAt)}</span>
-            : <span>加载中…</span>
-          }
+      <Card title="后端状态" desc="检查后端服务的运行状态与组件健康度。">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <button
+              className="rounded px-4 py-2 text-sm font-medium text-white transition-all hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+              style={{ backgroundColor: SPRING_GREEN }}
+              disabled={healthLoading}
+              onClick={doCheckHealth}>
+              {healthLoading ? <><Spinner />检查中…</> : '重新检查'}
+            </button>
+            {healthRefreshedAt && !healthLoading && (
+              <span className="text-xs text-slate-400">更新于 {fmtTime(healthRefreshedAt)}</span>
+            )}
+          </div>
+          {healthResult && (() => {
+            const s = healthResult.status;
+            const isOk = s === 'ok';
+            return (
+              <div className="space-y-3">
+                <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${
+                  isOk ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                  : s === 'degraded' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+                  : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${isOk ? 'bg-green-500' : s === 'degraded' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                  {isOk ? '运行正常' : s === 'degraded' ? '部分降级' : '异常'}
+                </div>
+                <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">{healthResult.raw}</pre>
+              </div>
+            );
+          })()}
         </div>
-        {healthResult && (() => {
-          const s = healthResult.status;
-          const isOk = s === 'ok';
-          const badgeCls = isOk
-            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
-            : s === 'degraded'
-            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
-            : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400';
-          return (
-            <div className="space-y-2">
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${badgeCls}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isOk ? 'bg-emerald-500' : s === 'degraded' ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                {s}
-              </span>
-              <pre className="rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-xs text-slate-700 dark:text-slate-300 overflow-x-auto whitespace-pre-wrap">{healthResult.raw}</pre>
-            </div>
-          );
-        })()}
-      </div>
+      </Card>
     );
   }
 
   function SectionModels() {
-    const refreshLabel = diskLoading
-      ? <><Spinner /><span>计算中…</span></>
-      : diskRefreshedAt
-      ? <span>刷新时间：{fmtTime(diskRefreshedAt)}</span>
-      : <span>加载中…</span>;
-
     if (!diskRows) {
       return (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">{refreshLabel}</div>
-        </div>
+        <Card title="引擎与模型" desc="管理本地已安装的推理引擎和模型文件。">
+          <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
+            <Spinner /><span>正在加载…</span>
+          </div>
+        </Card>
       );
     }
 
@@ -306,244 +334,332 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
     const total = diskRows.reduce((s, r) => s + Math.max(0, r.size), 0);
 
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">{refreshLabel}</div>
+      <div className="space-y-5">
+        <Card
+          title="引擎与模型"
+          desc="管理本地已安装的推理引擎和模型文件。点击名称可打开目录。"
+          action={
+            <div className="flex items-center gap-3">
+              {Object.entries(engineStatus).map(([key, st]) => st !== 'idle' && (
+                <span key={key} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: SPRING_GREEN }}>
+                  <Spinner />{st === 'installing' ? `正在安装 ${key}…` : `正在卸载 ${key}…`}
+                </span>
+              ))}
+              {diskRefreshedAt && (
+                <span className="text-xs text-slate-400">
+                  {diskLoading ? <span className="flex items-center gap-1"><Spinner />计算中</span> : `更新于 ${fmtTime(diskRefreshedAt)}`}
+                </span>
+              )}
+              <button
+                className="rounded border px-3 py-1 text-xs font-medium transition-all disabled:opacity-50"
+                style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
+                disabled={diskLoading}
+                onClick={doRefreshDisk}>
+                刷新
+              </button>
+            </div>
+          }
+        >
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 -mx-5 -mb-4">
+            {diskRows.map(r => {
+              const estatus = r.engineKey ? (engineStatus[r.engineKey] ?? 'idle') : 'idle';
+              const isBusy = estatus !== 'idle';
+              const isInstalled = r.ready === true
+                || (r.size > 0 && r.estimatedSizeMb != null && r.size >= r.estimatedSizeMb * 1024 * 1024 * 0.05);
+              const isPartialInstall = r.engineKey && !isInstalled && r.size > 0 && r.estimatedSizeMb != null;
+              const showInstallBtn = r.engineKey && !isInstalled;
 
-        <div className="text-xs">
-          {diskRows.map(r => {
-            const estatus = r.engineKey ? (engineStatus[r.engineKey] ?? 'idle') : 'idle';
-            const isBusy = estatus !== 'idle';
-            // ready===true 时直接认为已安装（如 FaceFusion 只有源码几 MB，Flux GGUF 已验证存在）
-            // 否则：实际大小 < 预估的 5% 视为未完成安装（残留元数据）
-            const isInstalled = r.ready === true
-              || (r.size > 0 && r.estimatedSizeMb != null && r.size >= r.estimatedSizeMb * 1024 * 1024 * 0.05);
-            const isPartialInstall = r.engineKey && !isInstalled && r.size > 0 && r.estimatedSizeMb != null;
-            const showInstallBtn = r.engineKey && !isInstalled;
-            const estimate = r.estimatedSizeMb ? fmtEstimate(r.estimatedSizeMb) : '';
-
-            return (
-              <div key={r.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/60 last:border-0 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                {/* 标签 + 路径 */}
-                <button className="flex-1 min-w-0 text-left" title="点击打开目录"
-                  onClick={() => r.sub && window.electronAPI?.openDir?.(r.sub)}>
-                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-medium">
-                    {r.label}
-                    {estimate && (
-                      <span className="text-slate-400 dark:text-slate-500 font-normal">{estimate}</span>
-                    )}
-                  </div>
-                  {r.sub && <div className="text-slate-400 dark:text-slate-500 mt-0.5 font-mono break-all leading-relaxed">{r.sub}</div>}
-                </button>
-
-                {/* 进度条 */}
-                <div className="w-20 shrink-0">
-                  <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                    <div className="h-full rounded-full bg-indigo-400 dark:bg-indigo-500"
-                      style={{ width: `${r.size > 0 ? Math.max(2, Math.round(r.size / max * 100)) : 0}%` }} />
-                  </div>
-                </div>
-
-                {/* 大小 */}
-                <div className="w-16 text-right text-slate-600 dark:text-slate-400 tabular-nums shrink-0 font-medium">
-                  {fmtSize(r.size)}
-                </div>
-
-                {/* 操作按钮 */}
-                {r.engineKey && (
-                  showInstallBtn ? (
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <button
-                        className="rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 min-w-[60px] justify-center"
-                        disabled={isBusy}
-                        onClick={() => installEngine(r.engineKey!)}>
-                        {estatus === 'installing'
-                          ? <><Spinner />安装中</>
-                          : isPartialInstall ? '重新安装' : '安装'}
-                      </button>
-                      {isPartialInstall && (
-                        <button
-                          className="rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 px-2.5 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 min-w-[60px] justify-center"
-                          disabled={isBusy}
-                          onClick={() => deleteEngine(r.engineKey!)}>
-                          {estatus === 'deleting' ? <><Spinner />卸载中</> : '清除残留'}
-                        </button>
+              return (
+                <div key={r.key} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                  {/* 标签 */}
+                  <button className="flex-1 min-w-0 text-left group" title="点击打开目录"
+                    onClick={() => r.sub && window.electronAPI?.openDir?.(r.sub)}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:underline decoration-dotted underline-offset-2">
+                        {r.label}
+                      </span>
+                      {r.version && (
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono leading-none bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 dark:text-indigo-400">
+                          {r.version}
+                        </span>
+                      )}
+                      {r.engineKey && r.default_install === true && (
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none"
+                          style={{ backgroundColor: '#d4edda', color: SPRING_GREEN_DARK }}>默认安装</span>
+                      )}
+                      {r.engineKey && r.default_install === false && (
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">手动安装</span>
                       )}
                     </div>
-                  ) : r.size > 0 ? (
-                    <button
-                      className="shrink-0 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 px-2.5 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 min-w-[52px] justify-center"
-                      disabled={isBusy}
-                      onClick={() => deleteEngine(r.engineKey!)}>
-                      {estatus === 'deleting' ? <><Spinner />卸载中</> : '卸载'}
-                    </button>
-                  ) : null
-                )}
-                {!r.engineKey && r.clearable && (
-                  <button
-                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 min-w-[52px] justify-center"
-                    disabled={clearingRow[r.key] || r.size === 0}
-                    onClick={async () => {
-                      setClearingRow(s => ({ ...s, [r.key]: true }));
-                      await window.electronAPI?.clearDiskRow?.(r.key);
-                      try { setDiskRows(await window.electronAPI?.getDiskUsage() ?? null); } catch { /**/ }
-                      setClearingRow(s => ({ ...s, [r.key]: false }));
-                    }}>
-                    {clearingRow[r.key] ? <><Spinner />清空中</> : '清空'}
+                    {r.sub && (
+                      <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-mono break-all">{r.sub}</div>
+                    )}
                   </button>
-                )}
-                {!r.engineKey && !r.clearable && <div className="shrink-0 w-[52px]" />}
-              </div>
-            );
-          })}
 
-          {/* 合计 */}
-          <div className="flex justify-between px-4 py-2.5 font-semibold text-slate-700 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 text-xs">
-            <span>合计</span><span className="tabular-nums">{fmtSize(total)}</span>
+                  {/* 进度条 */}
+                  <div className="w-20 shrink-0">
+                    <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${r.size > 0 ? Math.max(2, Math.round(r.size / max * 100)) : 0}%`,
+                          backgroundColor: SPRING_GREEN,
+                        }} />
+                    </div>
+                  </div>
+
+                  {/* 大小 */}
+                  <div className="w-16 text-right text-sm text-slate-600 dark:text-slate-400 tabular-nums shrink-0 font-medium">
+                    {fmtSize(r.size)}
+                  </div>
+
+                  {/* 操作 */}
+                  <div className="shrink-0 w-20 flex flex-col items-end gap-1">
+                    {r.engineKey && showInstallBtn && (
+                      <>
+                        <button
+                          className="rounded px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1 w-full justify-center text-white"
+                          style={{ backgroundColor: SPRING_GREEN }}
+                          disabled={isBusy}
+                          onClick={() => installEngine(r.engineKey!)}>
+                          {estatus === 'installing' ? <><Spinner />安装中</> : isPartialInstall ? '重新安装' : '安装'}
+                        </button>
+                        {isPartialInstall && (
+                          <button
+                            className="rounded border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 transition-all disabled:opacity-50 flex items-center gap-1 w-full justify-center"
+                            disabled={isBusy}
+                            onClick={() => deleteEngine(r.engineKey!)}>
+                            {estatus === 'deleting' ? <><Spinner />卸载中</> : '清除残留'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {r.engineKey && !showInstallBtn && r.size > 0 && (
+                      <button
+                        className="rounded border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 transition-all disabled:opacity-50 flex items-center gap-1 w-full justify-center"
+                        disabled={isBusy}
+                        onClick={() => deleteEngine(r.engineKey!)}>
+                        {estatus === 'deleting' ? <><Spinner />卸载中</> : '卸载'}
+                      </button>
+                    )}
+                    {!r.engineKey && r.clearable && (
+                      <button
+                        className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-all disabled:opacity-50 flex items-center gap-1 w-full justify-center"
+                        disabled={clearingRow[r.key] || r.size === 0}
+                        onClick={async () => {
+                          setClearingRow(s => ({ ...s, [r.key]: true }));
+                          await window.electronAPI?.clearDiskRow?.(r.key);
+                          try { setDiskRows(await window.electronAPI?.getDiskUsage() ?? null); } catch { /**/ }
+                          setClearingRow(s => ({ ...s, [r.key]: false }));
+                        }}>
+                        {clearingRow[r.key] ? <><Spinner />清空中</> : '清空'}
+                      </button>
+                    )}
+                    {!r.engineKey && !r.clearable && <div className="w-full" />}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* 合计 */}
+            <div className="flex justify-between px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50">
+              <span>合计</span>
+              <span className="tabular-nums">{fmtSize(total)}</span>
+            </div>
           </div>
-        </div>
+        </Card>
 
         {/* 安装日志 */}
         {installLog.length > 0 && (
-          <div className="mt-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                安装日志{installLogKey ? ` · ${installLogKey}` : ''}
-              </p>
-              <button
-                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                onClick={() => { setInstallLog([]); setInstallLogKey(''); }}>
-                清除
-              </button>
-            </div>
+          <Card
+            title={`安装日志${installLogKey ? ` · ${installLogKey}` : ''}`}
+            action={
+              <button className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                onClick={() => { setInstallLog([]); setInstallLogKey(''); }}>清除</button>
+            }
+          >
             <pre
               ref={installLogRef}
-              className="rounded-xl border border-slate-800 bg-slate-950 text-slate-300 p-3 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
+              className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
               style={{ maxHeight: '14rem' }}>
               {installLog.join('\n')}
             </pre>
-          </div>
+          </Card>
         )}
+
+        {/* 网络依赖 */}
+        {networkDeps.length > 0 && (() => {
+          const catColors: Record<string, { bg: string; text: string }> = {
+            github_clone:    { bg: '#ede9fe', text: '#7c3aed' },
+            huggingface:     { bg: '#fef3c7', text: '#b45309' },
+            pypi:            { bg: '#e0f2fe', text: '#0369a1' },
+            evermeet:        { bg: '#cffafe', text: '#0e7490' },
+            github_releases: { bg: '#d1fae5', text: SPRING_GREEN_DARK },
+          };
+          const catLabel: Record<string, string> = {
+            github_clone:    'GitHub Clone',
+            huggingface:     'HuggingFace',
+            pypi:            'PyPI',
+            evermeet:        'evermeet.cx',
+            github_releases: 'GitHub Releases',
+          };
+          const DepList = ({ deps }: { deps: typeof networkDeps }) => (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 -mx-5 -mb-4">
+              {deps.map((dep, i) => {
+                const clr = catColors[dep.category] ?? { bg: '#f1f5f9', text: '#64748b' };
+                return (
+                  <div key={i} className="px-5 py-3 space-y-1.5 text-xs hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{dep.name}</span>
+                      <span className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold leading-none"
+                        style={{ backgroundColor: clr.bg, color: clr.text }}>
+                        {catLabel[dep.category] ?? dep.category}
+                      </span>
+                      {dep.mirror_support && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold leading-none bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">支持镜像</span>
+                      )}
+                      <span className="text-slate-400">{dep.size_display}</span>
+                      <span className="ml-auto rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-medium text-slate-500 leading-none shrink-0">{dep.phase}</span>
+                    </div>
+                    <div className="font-mono text-slate-400 dark:text-slate-500 break-all">{dep.url}</div>
+                    <div className="text-slate-500 dark:text-slate-400 leading-relaxed">{dep.note}</div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+          const userDeps = networkDeps.filter(d => d.user_facing);
+          const devDeps  = networkDeps.filter(d => !d.user_facing);
+          return (
+            <>
+              {userDeps.length > 0 && (
+                <Card title="用户侧网络依赖" desc="首次启动或安装引擎时访问。引导页可配置 PyPI 镜像和 HuggingFace 镜像，中国大陆用户建议使用镜像。">
+                  <DepList deps={userDeps} />
+                </Card>
+              )}
+              {devDeps.length > 0 && (
+                <Card title="开发者构建期依赖" desc="仅在 pnpm run setup / pnpm run checkpoints 阶段访问，已打包进成品。终端用户无感知，无需处理。">
+                  <DepList deps={devDeps} />
+                </Card>
+              )}
+            </>
+          );
+        })()}
       </div>
     );
   }
 
   function SectionLogs() {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          {['electron.log', 'backend.log', 'frontend.log'].map(name => (
-            <button key={name}
-              className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                logContent?.name === name
-                  ? 'border-indigo-300/80 bg-indigo-50 dark:bg-indigo-900/40 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
-                  : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400'
-              }`}
-              disabled={logLoading}
-              onClick={async () => {
-                if (logContent?.name === name) { setLogContent(null); return; }
-                setLogLoading(true);
-                const res = await window.electronAPI?.readLogFile(name) ?? { ok: false, content: '' };
-                setLogContent({ name, content: res.content });
-                setLogLoading(false);
-              }}>
-              {name}
+      <Card title="运行日志" desc="查看各进程的运行日志，用于排查问题。">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            {['electron.log', 'backend.log', 'frontend.log'].map(name => (
+              <button key={name}
+                className="rounded border px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50"
+                style={logContent?.name === name
+                  ? { backgroundColor: SPRING_GREEN, borderColor: SPRING_GREEN, color: '#fff' }
+                  : { backgroundColor: '#fff', borderColor: '#e2e8f0', color: '#475569' }}
+                disabled={logLoading}
+                onClick={async () => {
+                  if (logContent?.name === name) { setLogContent(null); return; }
+                  setLogLoading(true);
+                  const res = await window.electronAPI?.readLogFile(name) ?? { ok: false, content: '' };
+                  setLogContent({ name, content: res.content });
+                  setLogLoading(false);
+                }}>
+                {name}
+              </button>
+            ))}
+            <button
+              className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 transition-all"
+              onClick={() => window.electronAPI?.openLogsDir?.()}>
+              打开目录
             </button>
-          ))}
-          <button
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-colors"
-            onClick={() => window.electronAPI?.openLogsDir?.()}>
-            打开目录
-          </button>
+          </div>
+          {logContent && (
+            <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap max-h-96 leading-relaxed">
+              {logContent.content || '（空）'}
+            </pre>
+          )}
         </div>
-        {logContent && (
-          <pre className="rounded-xl border border-slate-800 bg-slate-950 text-slate-300 p-4 text-xs overflow-x-auto whitespace-pre-wrap max-h-96 font-mono leading-relaxed">
-            {logContent.content || '（空）'}
-          </pre>
-        )}
-      </div>
+      </Card>
     );
   }
 
   function SectionReset() {
     return (
-      <div className="space-y-5">
-
-        <div className="divide-y divide-slate-200 dark:divide-slate-700">
-          {/* 清除用户数据 */}
-          <div className="flex items-center justify-between py-3.5">
-            <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">清除用户数据</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">删除已下载的模型和运行库，下次启动重新引导下载</p>
+      <Card title="重置与恢复" desc="清除本地数据或重新引导安装流程。此操作不可撤销，请谨慎操作。">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 -mx-5 -mb-4">
+          <div className="flex items-start justify-between px-5 py-4 gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">清除用户数据</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">删除已下载的模型和运行库，下次启动重新引导下载</p>
+              {clearMsg && (
+                <p className={`text-xs mt-1 ${clearMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>{clearMsg.text}</p>
+              )}
             </div>
             <button
-              className="rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 transition-colors"
+              className="shrink-0 rounded border border-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 transition-all"
               onClick={() => { setClearMsg(null); setShowClearConfirm(true); }}>
               清除数据
             </button>
           </div>
-          {clearMsg && (
-            <p className={`text-xs py-2 ${clearMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>{clearMsg.text}</p>
-          )}
 
-          {/* 重新下载模型 */}
-          <div className="flex items-center justify-between py-3.5">
-            <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">重新下载模型</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">清除现有模型数据，立即打开下载引导重新安装</p>
+          <div className="flex items-start justify-between px-5 py-4 gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">重新下载模型</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">清除现有模型数据，立即打开下载引导重新安装</p>
+              {redownloadMsg && (
+                <p className={`text-xs mt-1 ${redownloadMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>{redownloadMsg.text}</p>
+              )}
             </div>
             <button
-              className="rounded-lg border border-amber-200 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 transition-colors"
+              className="shrink-0 rounded border border-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 transition-all"
               onClick={() => { setRedownloadMsg(null); setRedownloadStep(1); }}>
               重新下载
             </button>
           </div>
-          {redownloadMsg && (
-            <p className={`text-xs py-2 ${redownloadMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>{redownloadMsg.text}</p>
-          )}
         </div>
-      </div>
+      </Card>
     );
   }
 
   function SectionAbout() {
     const Table = ({ children }: { children: React.ReactNode }) => (
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+      <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
         <table className="text-xs w-full table-fixed">{children}</table>
       </div>
     );
-    const Thead = ({ cols }: { cols: { label: string; w: string }[] }) => (
+    const Thead = ({ cols, color = SPRING_GREEN }: { cols: { label: string; w: string }[]; color?: string }) => (
       <thead>
-        <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-          {cols.map(c => <th key={c.label} className={`text-left px-3 py-2 font-medium ${c.w}`}>{c.label}</th>)}
+        <tr className="text-xs font-bold text-white" style={{ backgroundColor: color }}>
+          {cols.map(c => <th key={c.label} className={`text-left px-3 py-2.5 ${c.w}`}>{c.label}</th>)}
         </tr>
       </thead>
     );
     const Row3 = ({ row }: { row: string[] }) => (
-      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
-        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[1]}</td>
-        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[2]}</td>
+      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0">
+        <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
+        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[1]}</td>
+        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[2]}</td>
       </tr>
     );
     const Row5 = ({ row }: { row: string[] }) => (
-      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
-        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[1]}</td>
-        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[2]}</td>
-        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">{row[3]}</td>
-        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">{row[4]}</td>
+      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0">
+        <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
+        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[1]}</td>
+        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[2]}</td>
+        <td className="px-3 py-2.5 text-slate-400 dark:text-slate-500">{row[3]}</td>
+        <td className="px-3 py-2.5 text-slate-400 dark:text-slate-500">{row[4]}</td>
       </tr>
     );
 
     return (
-      <div className="space-y-6">
-
-        {/* 基本功能 */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">基本功能</h3>
+      <div className="space-y-5">
+        <Card title="基本功能" accent accentColor={SPRING_GREEN}>
           <Table>
             <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} />
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody>
               {[
                 ['TTS 文本转语音', 'Fish Speech', 'OpenAI · Gemini · ElevenLabs · Cartesia · DashScope'],
                 ['VC 音色转换', 'RVC · Seed-VC', 'ElevenLabs'],
@@ -555,14 +671,12 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
               ].map(row => <Row3 key={row[0]} row={row} />)}
             </tbody>
           </Table>
-        </div>
+        </Card>
 
-        {/* 扩展功能 */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">扩展功能</h3>
+        <Card title="扩展功能" accent accentColor="#8b5cf6">
           <Table>
-            <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} />
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} color="#8b5cf6" />
+            <tbody>
               {[
                 ['图像生成', 'SD-Turbo · Flux.1-Schnell GGUF · ComfyUI', 'OpenAI DALL-E 3 · Gemini Imagen 3 · Stability AI · DashScope'],
                 ['图像理解', 'Ollama（LLaVA · moondream）', 'OpenAI GPT-4o · Gemini Vision · Claude Vision'],
@@ -571,11 +685,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
               ].map(row => <Row3 key={row[0]} row={row} />)}
             </tbody>
           </Table>
-        </div>
+        </Card>
 
-        {/* 进阶功能 */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">进阶功能</h3>
+        <Card title="进阶功能参考" accent accentColor="#d97706">
           <Table>
             <Thead cols={[
               { label: '功能领域',              w: 'w-[14%]' },
@@ -583,8 +695,8 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
               { label: '推荐云端（生产环境）',   w: 'w-[18%]' },
               { label: '4050 优化方向',          w: 'w-[28%]' },
               { label: 'MBP 32GB 表现',          w: 'w-[20%]' },
-            ]} />
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            ]} color="#d97706" />
+            <tbody>
               {[
                 ['图像生成',  'Flux.1-Schnell GGUF Q4', 'Midjourney',                  'Schnell 是 6GB 显存下的速度之王',          '优（可跑 Dev 版 FP8 高质模型）'],
                 ['换脸/动作', 'FaceFusion 3.x',         'Replicate（InsightFace）',    '4050 跑实时推理极稳，无需云端',            '良（MPS 加速下兼容性较好）'],
@@ -594,39 +706,29 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
               ].map(row => <Row5 key={row[0]} row={row} />)}
             </tbody>
           </Table>
-        </div>
-
+        </Card>
       </div>
     );
   }
 
-  const SECTION_TITLES: Record<SectionId, string> = {
-    models: '模型管理',
-    perf:   '性能设置',
-    health: '健康检查',
-    logs:   '日志',
-    reset:  '重置',
-    about:  '功能说明',
-  };
-
-  // ────────────────────────────────────────────────────────────────────────────
-  // Render
-  // ────────────────────────────────────────────────────────────────────────────
+  // ── render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── 清除确认弹窗 ─────────────────────────────────────────────────────── */}
+      {/* 确认弹窗 */}
       {showClearConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-80 rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-6 space-y-4">
-            <div className="space-y-1.5">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">确认清除用户数据？</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-[360px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">确认清除用户数据？</h3>
+            </div>
+            <div className="px-6 py-4">
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">将删除已下载的全部模型文件和运行库，下次启动时需要重新下载。此操作不可撤销。</p>
             </div>
-            <div className="flex gap-2 justify-end">
-              <button className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
+            <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
+              <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
                 onClick={() => setShowClearConfirm(false)}>取消</button>
-              <button className="rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
+              <button className="rounded bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
                 disabled={clearingData}
                 onClick={async () => {
                   setClearingData(true);
@@ -643,36 +745,38 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
         </div>
       )}
 
-      {/* ── 重新下载第一步 ───────────────────────────────────────────────────── */}
       {redownloadStep === 1 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-80 rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-6 space-y-4">
-            <div className="space-y-1.5">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">重新下载全部模型？</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-[360px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">重新下载全部模型？</h3>
+            </div>
+            <div className="px-6 py-4">
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">将清除已下载的所有模型文件和运行库，并立即打开下载引导窗口重新安装。</p>
             </div>
-            <div className="flex gap-2 justify-end">
-              <button className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
+            <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
+              <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
                 onClick={() => setRedownloadStep(0)}>取消</button>
-              <button className="rounded-lg bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors"
+              <button className="rounded bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors"
                 onClick={() => setRedownloadStep(2)}>继续</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── 重新下载第二步 ───────────────────────────────────────────────────── */}
       {redownloadStep === 2 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-80 rounded-2xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-xl p-6 space-y-4">
-            <div className="space-y-1.5">
-              <h3 className="text-base font-semibold text-rose-700 dark:text-rose-400">再次确认</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">此操作将<span className="font-semibold text-rose-600 dark:text-rose-400">删除全部已下载的模型与运行库</span>，不可撤销。确认后立即打开下载引导。</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-[360px] rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
+              <h3 className="text-base font-bold text-red-700 dark:text-red-400">再次确认</h3>
             </div>
-            <div className="flex gap-2 justify-end">
-              <button className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
+            <div className="px-6 py-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">此操作将<span className="font-bold text-red-600 dark:text-red-400">删除全部已下载的模型与运行库</span>，不可撤销。确认后立即打开下载引导。</p>
+            </div>
+            <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
+              <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
                 onClick={() => setRedownloadStep(0)}>取消</button>
-              <button className="rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
+              <button className="rounded bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
                 disabled={redownloading}
                 onClick={async () => {
                   setRedownloading(true);
@@ -689,73 +793,52 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
         </div>
       )}
 
-      {/* ── 主体：侧边栏 + 内容 ──────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* 侧边栏 — 对齐主侧边栏蓝色风格 */}
-        <nav className="w-36 shrink-0 bg-gradient-to-b from-blue-50 to-blue-100 dark:from-slate-900 dark:to-slate-900 border-r border-blue-100 dark:border-slate-800 py-3 px-2 space-y-0.5 overflow-hidden">
-          {/* 搜索框 */}
-          <div className="flex items-center gap-1.5 px-2 py-1.5 mb-2 rounded-xl bg-white dark:bg-slate-800 border border-blue-100 dark:border-slate-700">
-            <svg className="w-3 h-3 text-blue-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd"/>
+      {/* Hero header — Spring Boot dark style */}
+      <div className="shrink-0" style={{ backgroundColor: '#1d1d1d' }}>
+        <div className="px-8 pt-6 pb-0">
+          <div className="flex items-center gap-3 mb-1">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill={SPRING_GREEN} opacity="0.15"/>
+              <path d="M16 7c-2 0-4 1.2-5.2 2.8S9 14 9 14s2-.8 3.6-2.4S15.2 8.2 16 7c.24-.4.16-.8-.4-.4C15.2 7 16 7 16 7z" fill={SPRING_GREEN}/>
+              <path d="M9 14s.8 2.4 3.6 3.2" stroke={SPRING_GREEN} strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
-            <input
-              className="flex-1 min-w-0 bg-transparent text-xs outline-none placeholder:text-blue-300 dark:placeholder:text-slate-500 text-slate-700 dark:text-slate-300"
-              placeholder="搜索…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button className="text-blue-300 hover:text-blue-500 transition-colors" onClick={() => setSearchQuery('')}>
-                <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-                </svg>
-              </button>
-            )}
+            <h1 className="text-lg font-bold tracking-tight" style={{ color: '#f9fafb' }}>设置</h1>
           </div>
+          <p className="text-xs mb-4 leading-relaxed" style={{ color: '#6b7280' }}>
+            管理引擎模型、系统配置与诊断工具
+          </p>
 
-          {filteredNav.map(item => (
-            <button key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`w-full flex items-center px-2.5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
-                activeSection === item.id
-                  ? 'bg-blue-500 text-white shadow-sm dark:bg-blue-600 dark:text-white'
-                  : 'text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-              }`}>
-              {item.label}
-            </button>
-          ))}
-          {filteredNav.length === 0 && (
-            <p className="px-2.5 py-2 text-xs text-blue-400 dark:text-slate-500">无匹配项</p>
-          )}
-        </nav>
+          {/* Tab bar */}
+          <nav className="flex">
+            {visibleNav.map(item => {
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id)}
+                  className="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+                  style={{
+                    color: isActive ? SPRING_GREEN : '#9ca3af',
+                    borderBottomColor: isActive ? SPRING_GREEN : 'transparent',
+                    backgroundColor: 'transparent',
+                  }}>
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
 
-        {/* 右侧：固定标题 + 可滚内容 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* 固定标题栏 */}
-          <div className="shrink-0 px-6 py-4 border-b border-blue-100 dark:border-slate-800">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-blue-700 dark:text-slate-200 tracking-tight flex-1">
-                {SECTION_TITLES[activeSection]}
-              </h2>
-              {/* 全局安装状态指示器（不依赖内联子组件，避免频繁 unmount 导致闪烁） */}
-              {Object.entries(engineStatus).map(([key, st]) => st !== 'idle' && (
-                <span key={key} className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-                  <Spinner />
-                  {st === 'installing' ? `正在安装 ${key}…` : `正在卸载 ${key}…`}
-                </span>
-              ))}
-            </div>
-          </div>
-          {/* 可滚动内容区 */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {activeSection === 'perf'   && <SectionPerf />}
-            {activeSection === 'health' && <SectionHealth />}
-            {activeSection === 'models' && isElectron && <SectionModels />}
-            {activeSection === 'logs'   && isElectron && <SectionLogs />}
-            {activeSection === 'reset'  && isElectron && <SectionReset />}
-            {activeSection === 'about'  && <SectionAbout />}
-          </div>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-[#111]">
+        <div className="max-w-4xl px-8 py-6">
+          {activeSection === 'perf'   && <SectionPerf />}
+          {activeSection === 'health' && <SectionHealth />}
+          {activeSection === 'models' && isElectron && <SectionModels />}
+          {activeSection === 'logs'   && isElectron && <SectionLogs />}
+          {activeSection === 'reset'  && isElectron && <SectionReset />}
+          {activeSection === 'about'  && <SectionAbout />}
         </div>
       </div>
     </div>

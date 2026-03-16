@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import ComboSelect from '../shared/ComboSelect';
-import ModelInput from '../shared/ModelInput';
+import ModelInput, { INPUT_CLS } from '../shared/ModelInput';
+import FileDrop from '../shared/FileDrop';
 import type { MiscSubPage, Status, ChatMessage } from '../../types';
 import {
   IMAGE_UNDERSTAND_PROVIDERS, IMAGE_UNDERSTAND_PROVIDER_LABELS, IMAGE_UNDERSTAND_MODELS,
@@ -138,6 +139,8 @@ interface MiscPanelProps {
   fileCls: string;
   labelCls: string;
   btnSec: string;
+  // optional: restrict visible sub-pages
+  allowedSubPages?: readonly MiscSubPage[];
 }
 
 type MiscTab = { key: MiscSubPage; label: string; abbr: string; bg: string };
@@ -244,9 +247,15 @@ export default function MiscPanel({
   lipsyncLocalUrl, setLipsyncLocalUrl,
   onRunLipsync,
   fieldCls, fileCls, labelCls, btnSec,
+  allowedSubPages,
 }: MiscPanelProps) {
   const busy = status === 'processing';
   const codeScrollRef = useRef<HTMLDivElement>(null);
+
+  const ALL_ROWS: MiscTab[][] = [ROW1_TABS, ROW2_TABS, ROW3_TABS];
+  const visibleRows = allowedSubPages
+    ? ALL_ROWS.map(row => row.filter(tab => allowedSubPages.includes(tab.key))).filter(row => row.length > 0)
+    : ALL_ROWS;
 
   useEffect(() => {
     if (codeScrollRef.current) {
@@ -279,26 +288,28 @@ export default function MiscPanel({
 
   return (
     <div className="space-y-5">
-      {/* 子页签 - 第一行 */}
-      <div className="space-y-1.5">
-        {[ROW1_TABS, ROW2_TABS, ROW3_TABS].map((row, i) => (
-          <div key={i} className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-            {row.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setMiscSubPage(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
-                  miscSubPage === tab.key
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}>
-                <MiscTabIcon abbr={tab.abbr} bg={tab.bg} />
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
+      {/* 子页签（单子页时隐藏，由外部页面负责导航） */}
+      {visibleRows.flat().length > 1 && (
+        <div className="space-y-1.5">
+          {visibleRows.map((row, i) => (
+            <div key={i} className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+              {row.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setMiscSubPage(tab.key)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition-all ${
+                    miscSubPage === tab.key
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}>
+                  <MiscTabIcon abbr={tab.abbr} bg={tab.bg} />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── 图像理解 ── */}
       {miscSubPage === 'image_understand' && (
@@ -335,8 +346,15 @@ export default function MiscPanel({
 
           <div>
             <label className={labelCls}>上传图片</label>
-            <input type="file" accept="image/*" className={fileCls}
-              onChange={e => setImageUnderstandFile(e.target.files?.[0] ?? null)} />
+            <FileDrop
+              files={imageUnderstandFile ? [imageUnderstandFile] : []}
+              onAdd={fs => setImageUnderstandFile(fs[0])}
+              onRemove={() => setImageUnderstandFile(null)}
+              accept="image/*"
+              compact
+              iconType="image"
+              emptyLabel="点击或拖拽图片"
+            />
           </div>
 
           <div>
@@ -355,31 +373,33 @@ export default function MiscPanel({
       {/* ── 文字翻译 ── */}
       {miscSubPage === 'translate' && (
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
-          <div>
-            <label className={labelCls}>服务商</label>
-            <div className="grid grid-cols-3 gap-2">
-              {TRANSLATE_PROVIDERS.map(p => (
-                <button key={p}
-                  onClick={() => {
-                    setTranslateProvider(p);
-                    setTranslateModel((DEFAULT_MODELS.llm?.[p]) || '');
-                  }}
-                  className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all text-center ${
-                    translateProvider === p
-                      ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-                  }`}>
-                  {PROVIDER_LABELS[p] || p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <ApiKeyRow forOllama={isOllamaTranslate} />
-
-          <div>
-            <label className={labelCls}>模型</label>
-            <ModelInput value={translateModel} onChange={setTranslateModel} task="llm" provider={translateProvider} />
+          <div className="flex flex-wrap gap-3 items-end">
+            <label className="flex flex-col gap-1 min-w-[140px] flex-1">
+              <span className={labelCls}>服务商</span>
+              <select
+                className={INPUT_CLS}
+                value={translateProvider}
+                onChange={e => { setTranslateProvider(e.target.value); setTranslateModel(DEFAULT_MODELS.llm?.[e.target.value] || ''); }}>
+                {TRANSLATE_PROVIDERS.map(p => (
+                  <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+              <span className={labelCls}>模型（可选）</span>
+              <ModelInput value={translateModel} onChange={setTranslateModel} task="llm" provider={translateProvider} />
+            </label>
+            {isOllamaTranslate ? (
+              <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+                <span className={labelCls}>服务地址</span>
+                <input className={INPUT_CLS} value={cloudEndpoint} onChange={e => setCloudEndpoint(e.target.value)} placeholder="http://localhost:11434" />
+              </label>
+            ) : (
+              <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+                <span className={labelCls}>API 密钥</span>
+                <input className={INPUT_CLS} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / AIza..." />
+              </label>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -420,44 +440,38 @@ export default function MiscPanel({
       {miscSubPage === 'code_assist' && (
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel overflow-hidden flex flex-col" style={{ minHeight: '520px' }}>
           {/* 配置栏 */}
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3">
-            <div>
-              <label className={labelCls}>服务商</label>
-              <div className="grid grid-cols-3 gap-1.5">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-3 items-end">
+            <label className="flex flex-col gap-1 min-w-[140px] flex-1">
+              <span className={labelCls}>服务商</span>
+              <select
+                className={INPUT_CLS}
+                value={codeProvider}
+                onChange={e => { setCodeProvider(e.target.value); setCodeModel(DEFAULT_MODELS.llm?.[e.target.value] || ''); }}>
                 {CODE_PROVIDERS.map(p => (
-                  <button key={p}
-                    onClick={() => {
-                      setCodeProvider(p);
-                      setCodeModel(DEFAULT_MODELS.llm?.[p] || '');
-                    }}
-                    className={`rounded-xl border px-2 py-1.5 text-xs font-medium transition-all text-center ${
-                      codeProvider === p
-                        ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-                    }`}>
-                    {PROVIDER_LABELS[p] || p}
-                  </button>
+                  <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>
                 ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>API Key / 服务地址</label>
-                {codeProvider === 'ollama'
-                  ? <input className={fieldCls} value={cloudEndpoint} onChange={e => setCloudEndpoint(e.target.value)} placeholder="http://localhost:11434" />
-                  : <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
-                }
-              </div>
-              <div>
-                <label className={labelCls}>模型</label>
-                <ModelInput value={codeModel} onChange={setCodeModel} task="llm" provider={codeProvider} />
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>语言/框架（可选）</label>
-              <input className={fieldCls} value={codeLang} onChange={e => setCodeLang(e.target.value)}
-                placeholder="Python / TypeScript / React / SQL ..." />
-            </div>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+              <span className={labelCls}>模型（可选）</span>
+              <ModelInput value={codeModel} onChange={setCodeModel} task="llm" provider={codeProvider} />
+            </label>
+            {codeProvider === 'ollama' ? (
+              <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+                <span className={labelCls}>服务地址</span>
+                <input className={INPUT_CLS} value={cloudEndpoint} onChange={e => setCloudEndpoint(e.target.value)} placeholder="http://localhost:11434" />
+              </label>
+            ) : (
+              <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+                <span className={labelCls}>API 密钥</span>
+                <input className={INPUT_CLS} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
+              </label>
+            )}
+          </div>
+          <div className="px-4 pb-3">
+            <label className={labelCls}>语言/框架（可选）</label>
+            <input className={INPUT_CLS} value={codeLang} onChange={e => setCodeLang(e.target.value)}
+              placeholder="Python / TypeScript / React / SQL ..." />
           </div>
 
           {/* 消息区 */}
@@ -640,11 +654,27 @@ export default function MiscPanel({
             )}
             <div>
               <label className={labelCls}>源图片（待处理）</label>
-              <input type="file" accept="image/*" className={fileCls} onChange={e => setImgI2iSourceFile(e.target.files?.[0] ?? null)} />
+              <FileDrop
+                files={imgI2iSourceFile ? [imgI2iSourceFile] : []}
+                onAdd={fs => setImgI2iSourceFile(fs[0])}
+                onRemove={() => setImgI2iSourceFile(null)}
+                accept="image/*"
+                compact
+                iconType="image"
+                emptyLabel="点击或拖拽源图片"
+              />
             </div>
             <div>
               <label className={labelCls}>参考图片（换脸 / 风格参考，可选）</label>
-              <input type="file" accept="image/*" className={fileCls} onChange={e => setImgI2iRefFile(e.target.files?.[0] ?? null)} />
+              <FileDrop
+                files={imgI2iRefFile ? [imgI2iRefFile] : []}
+                onAdd={fs => setImgI2iRefFile(fs[0])}
+                onRemove={() => setImgI2iRefFile(null)}
+                accept="image/*"
+                compact
+                iconType="image"
+                emptyLabel="点击或拖拽参考图片（可选）"
+              />
             </div>
             <div>
               <label className={labelCls}>提示词（描述目标效果，可选）</label>
@@ -724,7 +754,15 @@ export default function MiscPanel({
             {videoGenMode === 'i2v' && (
               <div>
                 <label className={labelCls}>参考图片</label>
-                <input type="file" accept="image/*" className={fileCls} onChange={e => setVideoGenImageFile(e.target.files?.[0] ?? null)} />
+                <FileDrop
+                  files={videoGenImageFile ? [videoGenImageFile] : []}
+                  onAdd={fs => setVideoGenImageFile(fs[0])}
+                  onRemove={() => setVideoGenImageFile(null)}
+                  accept="image/*"
+                  compact
+                  iconType="image"
+                  emptyLabel="点击或拖拽参考图片"
+                />
               </div>
             )}
             <div>
@@ -793,7 +831,15 @@ export default function MiscPanel({
             </div>
             <div>
               <label className={labelCls}>上传图片 / 文档（PDF、PNG、JPG 等）</label>
-              <input type="file" accept="image/*,.pdf" className={fileCls} onChange={e => setOcrFile(e.target.files?.[0] ?? null)} />
+              <FileDrop
+                files={ocrFile ? [ocrFile] : []}
+                onAdd={fs => setOcrFile(fs[0])}
+                onRemove={() => setOcrFile(null)}
+                accept="image/*,.pdf"
+                compact
+                iconType="image"
+                emptyLabel="点击或拖拽图片/PDF"
+              />
             </div>
             <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !ocrFile || isUnsupported} onClick={onRunOcr}>
               {busy ? '识别中...' : isUnsupported ? '暂不支持' : '开始 OCR 识别'}
@@ -843,22 +889,28 @@ export default function MiscPanel({
               <label className={labelCls}>
                 {lipsyncProvider === 'liveportrait' ? '人物图片（源人脸）' : '视频 / 人物图片（驱动源）'}
               </label>
-              <input
-                type="file"
+              <FileDrop
+                files={lipsyncVideoFile ? [lipsyncVideoFile] : []}
+                onAdd={fs => setLipsyncVideoFile(fs[0])}
+                onRemove={() => setLipsyncVideoFile(null)}
                 accept={lipsyncProvider === 'liveportrait' ? 'image/*' : 'video/*,image/*'}
-                className={fileCls}
-                onChange={e => setLipsyncVideoFile(e.target.files?.[0] ?? null)}
+                compact
+                iconType={lipsyncProvider === 'liveportrait' ? 'image' : 'file'}
+                emptyLabel={lipsyncProvider === 'liveportrait' ? '点击或拖拽人物图片' : '点击或拖拽视频/图片'}
               />
             </div>
             <div>
               <label className={labelCls}>
                 {lipsyncProvider === 'liveportrait' ? '驱动视频（提供动作/表情）' : '音频文件（目标口型音频）'}
               </label>
-              <input
-                type="file"
+              <FileDrop
+                files={lipsyncAudioFile ? [lipsyncAudioFile] : []}
+                onAdd={fs => setLipsyncAudioFile(fs[0])}
+                onRemove={() => setLipsyncAudioFile(null)}
                 accept={lipsyncProvider === 'liveportrait' ? 'video/*' : 'audio/*'}
-                className={fileCls}
-                onChange={e => setLipsyncAudioFile(e.target.files?.[0] ?? null)}
+                compact
+                iconType={lipsyncProvider === 'liveportrait' ? 'file' : 'audio'}
+                emptyLabel={lipsyncProvider === 'liveportrait' ? '点击或拖拽驱动视频' : '点击或拖拽音频文件'}
               />
             </div>
             <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile || isUnsupported} onClick={onRunLipsync}>

@@ -1,6 +1,7 @@
 import type { Status } from '../../types';
 import { IMG_I2I_PROVIDERS, IMG_I2I_PROVIDER_LABELS, IMG_I2I_MODELS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
 import ComboSelect from '../shared/ComboSelect';
+import FileDrop from '../shared/FileDrop';
 
 interface ImageI2IPanelProps {
   status: Status;
@@ -93,15 +94,29 @@ export default function ImageI2IPanel({
       {/* 源图片 */}
       <div>
         <label className={labelCls}>源图片（待处理）</label>
-        <input type="file" accept="image/*" className={fileCls}
-          onChange={e => setImgI2iSourceFile(e.target.files?.[0] ?? null)} />
+        <FileDrop
+          files={imgI2iSourceFile ? [imgI2iSourceFile] : []}
+          onAdd={fs => setImgI2iSourceFile(fs[0])}
+          onRemove={() => setImgI2iSourceFile(null)}
+          accept="image/*"
+          compact
+          iconType="image"
+          emptyLabel="点击或拖拽源图片"
+        />
       </div>
 
       {/* 参考图片（换脸用） */}
       <div>
         <label className={labelCls}>参考图片（换脸 / 风格参考，可选）</label>
-        <input type="file" accept="image/*" className={fileCls}
-          onChange={e => setImgI2iRefFile(e.target.files?.[0] ?? null)} />
+        <FileDrop
+          files={imgI2iRefFile ? [imgI2iRefFile] : []}
+          onAdd={fs => setImgI2iRefFile(fs[0])}
+          onRemove={() => setImgI2iRefFile(null)}
+          accept="image/*"
+          compact
+          iconType="image"
+          emptyLabel="点击或拖拽参考图片（可选）"
+        />
       </div>
 
       {/* 提示词 */}

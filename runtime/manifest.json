@@ -1,9 +1,112 @@
 {
   "_comment": "产物固化清单（Artifact Pinning Manifest）。pip_packages 在构建期装入 embedded Python；runtime_pip_packages 在首次启动时装入 userData/python-packages/。",
   "manifest_version": "1",
+  "network_deps": [
+    {
+      "name": "PyPI — 运行时 ML 依赖",
+      "category": "pypi",
+      "user_facing": true,
+      "url": "https://pypi.org/simple",
+      "size_display": "~2–4 GB（torch / torchaudio 等）",
+      "phase": "用户首次启动",
+      "mirror_support": true,
+      "note": "runtime_pip_packages（torch、torchaudio、hydra 等 ML 包）在用户首次启动时安装，包含 LivePortrait 模型权重（~800 MB）。引导页支持配置清华/阿里云等 PyPI 镜像，中国大陆用户建议使用镜像。"
+    },
+    {
+      "name": "HuggingFace — 模型 Checkpoint",
+      "category": "huggingface",
+      "user_facing": true,
+      "url": "https://huggingface.co",
+      "size_display": "~1–5 GB（按引擎，Fish Speech ~500 MB，Seed-VC ~1 GB，RVC/Whisper 按需）",
+      "phase": "用户安装引擎",
+      "mirror_support": true,
+      "note": "各 checkpoint_files 固定到 commit SHA 保证版本一致。引导页支持配置 HF_ENDPOINT 镜像（如 hf-mirror.com / ModelScope）。部分门控模型需 HF Token。"
+    },
+    {
+      "name": "Fish Speech 引擎源码",
+      "category": "github_clone",
+      "user_facing": false,
+      "url": "https://github.com/fishaudio/fish-speech",
+      "size_display": "~50 MB（源码）",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": false,
+      "note": "git clone tag v1.5.0，不写死代码仓是为了保留官方 commit 历史和 patch 应用。无镜像支持。"
+    },
+    {
+      "name": "Seed-VC 引擎源码",
+      "category": "github_clone",
+      "user_facing": false,
+      "url": "https://github.com/Plachtaa/seed-vc",
+      "size_display": "~30 MB（源码）",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": false,
+      "note": "git clone 固定 commit 51383efd（无官方 tag）。无镜像支持。"
+    },
+    {
+      "name": "LivePortrait 引擎源码",
+      "category": "github_clone",
+      "user_facing": false,
+      "url": "https://github.com/KlingAIResearch/LivePortrait",
+      "size_display": "~30 MB（源码）",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": false,
+      "note": "git clone main 分支。模型权重通过 pip install liveportrait（PyPI）分发，不走 HuggingFace。无镜像支持。"
+    },
+    {
+      "name": "FaceFusion 引擎源码",
+      "category": "github_clone",
+      "user_facing": false,
+      "url": "https://github.com/facefusion/facefusion",
+      "size_display": "~20 MB（源码）",
+      "phase": "开发者 pnpm checkpoints",
+      "mirror_support": false,
+      "note": "git clone，在 checkpoints 阶段克隆。无镜像支持。"
+    },
+    {
+      "name": "PyPI — 构建期轻量依赖",
+      "category": "pypi",
+      "user_facing": false,
+      "url": "https://pypi.org/simple",
+      "size_display": "~200 MB（loguru、soundfile、pydantic 等非 ML 包）",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": true,
+      "note": "pip_packages 在构建期安装进 embedded Python，不含 ML 框架（torch 等在 runtime_pip_packages）。"
+    },
+    {
+      "name": "FFmpeg 二进制（macOS）",
+      "category": "evermeet",
+      "user_facing": false,
+      "url": "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip",
+      "size_display": "~70 MB",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": false,
+      "note": "仅 macOS 使用，evermeet.cx 托管的静态编译版。已打包进 dist 产物，终端用户无需下载。"
+    },
+    {
+      "name": "FFmpeg 二进制（Windows）",
+      "category": "github_releases",
+      "user_facing": false,
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+      "size_display": "~90 MB",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": false,
+      "note": "仅 Windows 使用，已打包进 dist 产物，终端用户无需下载。"
+    },
+    {
+      "name": "Pandoc（文档处理工具）",
+      "category": "github_releases",
+      "user_facing": false,
+      "url": "https://github.com/jgm/pandoc/releases",
+      "size_display": "~25 MB",
+      "phase": "开发者 pnpm setup",
+      "mirror_support": false,
+      "note": "macOS / Windows 均从 GitHub Releases 下载固定版本，已打包进 dist 产物。"
+    }
+  ],
   "engines": {
     "fish_speech": {
       "version": "1.5",
+      "ui": { "label": "Fish Speech", "size_display": "~1 GB", "default_install": true },
       "code_dir": "runtime/fish_speech/engine",
       "checkpoint_dir": "checkpoints/fish_speech",
       "pip_packages": [
@@ -70,6 +173,7 @@
     },
     "seed_vc": {
       "version": "2.0",
+      "ui": { "label": "Seed-VC", "size_display": "~2.7 GB", "default_install": true },
       "code_dir": "runtime/seed_vc/engine",
       "checkpoint_dir": "checkpoints/seed_vc",
       "pip_packages": [
@@ -152,6 +256,7 @@
     },
     "rvc": {
       "version": "2.0",
+      "ui": { "label": "RVC", "size_display": "~760 MB", "default_install": true },
       "code_dir": "runtime/rvc/engine",
       "checkpoint_dir": "checkpoints/rvc",
       "checkpoint_files": [
@@ -189,6 +294,7 @@
     },
     "faster_whisper": {
       "version": "1.x",
+      "ui": { "label": "Faster Whisper", "size_display": "base · ~150 MB", "default_install": true },
       "code_dir": "runtime/faster_whisper",
       "checkpoint_dir": "checkpoints/faster_whisper",
       "pip_packages": [
@@ -201,6 +307,7 @@
     },
     "whisper": {
       "version": "large-v3",
+      "ui": { "label": "Whisper", "size_display": "~1.5 GB", "default_install": false },
       "code_dir": "runtime/whisper/engine",
       "checkpoint_dir": "checkpoints/whisper",
       "_pip_packages_disabled": [
@@ -220,6 +327,7 @@
     },
     "got_ocr": {
       "version": "2.0",
+      "ui": { "label": "GOT-OCR", "size_display": "~1.5 GB", "default_install": false },
       "code_dir": "runtime/got_ocr",
       "checkpoint_dir": "checkpoints/got_ocr",
       "pip_packages": [
@@ -248,6 +356,7 @@
     },
     "liveportrait": {
       "version": "3.x-fp16",
+      "ui": { "label": "LivePortrait", "size_display": "~1.8 GB", "default_install": false },
       "code_dir": "runtime/liveportrait",
       "checkpoint_dir": "checkpoints/liveportrait",
       "pip_packages": [
@@ -283,6 +392,7 @@
     },
     "facefusion": {
       "version": "3.5.4",
+      "ui": { "label": "FaceFusion", "size_display": "~540 MB", "default_install": true },
       "code_dir": "runtime/facefusion/engine",
       "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
       "pip_packages": [
@@ -328,6 +438,7 @@
     },
     "wan": {
       "version": "2.1",
+      "ui": { "label": "Wan 2.1", "size_display": "~15.6 GB", "default_install": false },
       "code_dir": "runtime/wan",
       "checkpoint_dir": "checkpoints/wan",
       "pip_packages": [
@@ -358,6 +469,7 @@
     },
     "flux": {
       "version": "1.0-schnell-Q4_K_M",
+      "ui": { "label": "Stable Diffusion Flux", "size_display": "~24 GB", "default_install": false },
       "code_dir": "runtime/flux",
       "checkpoint_dir": "checkpoints/flux",
       "pip_packages": [
@@ -400,7 +512,8 @@
       "env_key": "FLUX_CHECKPOINT_DIR"
     },
     "sd": {
-      "version": "1.0-sd-turbo",
+      "version": "sd-turbo",
+      "ui": { "label": "Stable Diffusion Turbo", "size_display": "~2.3 GB", "default_install": false },
       "description": "Stable Diffusion Turbo 本地图像生成（~2.3 GB，无需 HF 账号，1-4 步，512px）",
       "code_dir": "runtime/sd",
       "checkpoint_dir": "checkpoints/sd",

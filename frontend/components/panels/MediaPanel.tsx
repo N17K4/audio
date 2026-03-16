@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { MediaAction } from '../../types';
 import type { ClipEndMode } from '../../hooks/useMediaConvert';
 import OutputDirRow from '../shared/OutputDirRow';
+import FileDrop from '../shared/FileDrop';
 
 const AUDIO_FORMATS = [
   { value: 'mp3',  label: 'MP3'  },
@@ -118,19 +119,23 @@ export default function MediaPanel({
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
 
       {/* 输入文件 */}
-      <label className="block">
+      <div>
         <span className={labelCls}>
           {mediaAction === 'subtitle_extract' ? '输入视频（必须内嵌字幕轨道）' : '输入文件'}
         </span>
-        <input className={fileCls} type="file"
+        <FileDrop
+          files={mediaFile ? [mediaFile] : []}
+          onAdd={fs => setMediaFile(fs[0])}
+          onRemove={() => setMediaFile(null)}
           accept={
             mediaAction === 'subtitle_convert' ? '.srt,.vtt,.ass,.ssa' :
             mediaAction === 'subtitle_extract' ? 'video/*,.mp4,.mov,.avi,.mkv,.webm' :
             'audio/*,video/*,.mp3,.wav,.m4a,.mp4,.mov,.avi,.mkv,.flac,.ogg,.aac,.opus'
           }
-          onChange={e => setMediaFile(e.target.files?.[0] || null)} />
-        {mediaFile && <p className="text-xs text-slate-400 mt-1.5">{mediaFile.name}（{Math.round(mediaFile.size / 1024)} KB）</p>}
-      </label>
+          iconType="file"
+          formatHint="支持 MP3/WAV/MP4/MKV 等"
+        />
+      </div>
 
       {/* 输出格式（仅音视频模式） */}
       {!isSubtitleAction(mediaAction) && <div>

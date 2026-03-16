@@ -3,6 +3,7 @@ import { LOCAL_PROVIDERS } from '../../constants';
 import ProviderRow from '../shared/ProviderRow';
 import OutputDirRow from '../shared/OutputDirRow';
 import ModelInput from '../shared/ModelInput';
+import FileDrop from '../shared/FileDrop';
 
 interface TtsPanelProps {
   taskType: 'tts';
@@ -22,8 +23,8 @@ interface TtsPanelProps {
   setTtsModel: (v: string) => void;
   ttsVoice: string;
   setTtsVoice: (v: string) => void;
-  ttsRefAudio: File | null;
-  setTtsRefAudio: (v: File | null) => void;
+  ttsRefAudios: File[];
+  setTtsRefAudios: (v: File[]) => void;
   ttsRefInputMode: VcInputMode;
   setTtsRefInputMode: (v: VcInputMode) => void;
   ttsRefRecordedObjectUrl: string | null;
@@ -59,8 +60,8 @@ export default function TtsPanel({
   setTtsModel,
   ttsVoice,
   setTtsVoice,
-  ttsRefAudio,
-  setTtsRefAudio,
+  ttsRefAudios,
+  setTtsRefAudios,
   ttsRefInputMode,
   setTtsRefInputMode,
   ttsRefRecordedObjectUrl,
@@ -111,11 +112,16 @@ export default function TtsPanel({
           </div>
 
           {ttsRefInputMode === 'upload' ? (
-            <div>
-              <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 transition-all" type="file" accept="audio/*"
-                onChange={e => setTtsRefAudio(e.target.files?.[0] || null)} />
-              {ttsRefAudio && <p className="text-xs text-slate-400 mt-1.5">{ttsRefAudio.name}（{Math.round(ttsRefAudio.size / 1024)} KB）</p>}
-            </div>
+            <FileDrop
+              files={ttsRefAudios}
+              onAdd={fs => setTtsRefAudios([...ttsRefAudios, ...fs])}
+              onRemove={i => setTtsRefAudios(ttsRefAudios.filter((_, j) => j !== i))}
+              accept="audio/*"
+              multiple
+              iconType="audio"
+              emptyLabel="点击或拖拽参考音频（可多选）"
+              formatHint="3–30 秒每段效果最佳"
+            />
           ) : (
             <div className="space-y-3">
               {/* 录音控制按钮 */}

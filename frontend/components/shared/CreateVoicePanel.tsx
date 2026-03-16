@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import FileDrop from './FileDrop';
 
 interface CreateVoicePanelProps {
   engine?: string;
@@ -29,11 +31,18 @@ export default function CreateVoicePanel({
   setShowCreateVoice,
   onCreateVoice,
   fieldCls,
-  fileCls,
+  // fileCls is kept in props for backward compatibility but not used in template
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  fileCls: _fileCls,
   labelCls,
 }: CreateVoicePanelProps) {
   const eng = engine || newVoiceEngine;
   const isRvc = eng === 'rvc';
+
+  const [modelFile, setModelFile] = useState<File | null>(null);
+  const [indexFile, setIndexFile] = useState<File | null>(null);
+  const [refAudioFile, setRefAudioFile] = useState<File | null>(null);
+
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-5 space-y-4 dark:border-slate-600 dark:bg-slate-800/40">
       <div className="flex items-center justify-between">
@@ -60,25 +69,52 @@ export default function CreateVoicePanel({
       </div>
       {isRvc && (
         <>
-          <label className="block">
+          {/* 模型文件 */}
+          <div>
             <span className={labelCls}>模型文件 .pth（必填）</span>
-            <input className={fileCls} type="file" accept=".pth,.onnx,.pt,.safetensors"
-              onChange={e => setNewVoiceModel(e.target.files?.[0] || null)} />
-          </label>
-          <label className="block">
+            <FileDrop
+              files={modelFile ? [modelFile] : []}
+              onAdd={fs => { setModelFile(fs[0]); setNewVoiceModel(fs[0]); }}
+              onRemove={() => { setModelFile(null); setNewVoiceModel(null); }}
+              accept=".pth,.onnx,.pt,.safetensors"
+              compact
+              iconType="file"
+              emptyLabel="点击选择模型文件 (.pth)"
+            />
+          </div>
+
+          {/* 索引文件 */}
+          <div>
             <span className={labelCls}>索引文件 .index（可选）</span>
-            <input className={fileCls} type="file" accept=".index"
-              onChange={e => setNewVoiceIndex(e.target.files?.[0] || null)} />
-          </label>
+            <FileDrop
+              files={indexFile ? [indexFile] : []}
+              onAdd={fs => { setIndexFile(fs[0]); setNewVoiceIndex(fs[0]); }}
+              onRemove={() => { setIndexFile(null); setNewVoiceIndex(null); }}
+              accept=".index"
+              compact
+              iconType="file"
+              emptyLabel="点击选择索引文件 (.index)（可选）"
+            />
+          </div>
         </>
       )}
-      <label className="block">
+
+      {/* 参考音频 */}
+      <div>
         <span className={labelCls}>
           {isRvc ? '参考音频（可选，用于音色预览）' : '参考音频（必填，用于声音克隆）'}
         </span>
-        <input className={fileCls} type="file" accept="audio/*"
-          onChange={e => setNewVoiceRef(e.target.files?.[0] || null)} />
-      </label>
+        <FileDrop
+          files={refAudioFile ? [refAudioFile] : []}
+          onAdd={fs => { setRefAudioFile(fs[0]); setNewVoiceRef(fs[0]); }}
+          onRemove={() => { setRefAudioFile(null); setNewVoiceRef(null); }}
+          accept="audio/*"
+          compact
+          iconType="audio"
+          emptyLabel="点击选择参考音频"
+        />
+      </div>
+
       <button className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
         onClick={onCreateVoice} disabled={creatingVoice}>
         {creatingVoice ? '创建中...' : '确认创建'}

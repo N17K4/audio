@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from config import BACKEND_HOST, BACKEND_PORT, DOWNLOAD_DIR, RUNTIME_ROOT
 from logging_setup import logger
 from utils.engine import get_embedded_python, build_engine_env
+from utils.audit import log_ai_call, log_ai_error
 
 
 def _get_sd_script() -> str:
@@ -50,7 +51,7 @@ async def run_sd_image_gen(
         "--steps",  str(steps),
     ]
 
-    logger.info("[sd] 生成图像: %dx%d steps=%d", width, height, steps)
+    log_ai_call("sd", {"prompt": prompt, "model": model, "width": width, "height": height, "steps": steps, "output": output_path}, command=cmd)
     try:
         completed = await asyncio.to_thread(
             subprocess.run,
@@ -64,6 +65,7 @@ async def run_sd_image_gen(
         stderr = (completed.stderr or "").strip()[:5000]
         stdout = (completed.stdout or "").strip()[:5000]
         logger.error("[sd] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+        log_ai_error("sd", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
         raise HTTPException(status_code=500, detail=f"SD 推理失败 (code={completed.returncode}): {stderr or stdout}")
 
     if not Path(output_path).exists():

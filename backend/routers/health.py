@@ -44,6 +44,7 @@ async def runtime_info():
     return {
         "manifest_version": _MANIFEST.get("manifest_version", "1"),
         "engines": engines_out,
+        "network_deps": _MANIFEST.get("network_deps", []),
     }
 
 

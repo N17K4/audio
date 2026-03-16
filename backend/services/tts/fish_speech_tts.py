@@ -15,9 +15,10 @@ from config import DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT
 from logging_setup import logger
 from utils.auth import require_httpx
 from utils.engine import get_fish_speech_command_template, build_engine_env
+from utils.audit import log_ai_call, log_ai_error
 
 
-def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str = "") -> None:
+def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_refs: list = []) -> None:
     cmd_tpl = get_fish_speech_command_template()
     if not cmd_tpl:
         raise HTTPException(
@@ -30,12 +31,14 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str =
             ),
         )
     import shlex
+    refs_arg = " ".join(shlex.quote(r) for r in voice_refs if r) if voice_refs else '""'
     cmd = (
         cmd_tpl
         .replace("{text}", shlex.quote(text))
         .replace("{output}", str(output_path.resolve()))
-        .replace("{voice_ref}", shlex.quote(voice_ref) if voice_ref else '""')
+        .replace("{voice_ref}", refs_arg)
     )
+    log_ai_call("fish_speech", {"text": text, "output": str(output_path), "voice_refs": voice_refs}, command=cmd)
     try:
         completed = subprocess.run(
             cmd, shell=True, check=False, capture_output=True, text=True, timeout=1200,
@@ -45,6 +48,7 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str =
         stdout = (exc.stdout or b"").decode(errors="replace").strip()[:10000] if exc.stdout else ""
         stderr = (exc.stderr or b"").decode(errors="replace").strip()[:10000] if exc.stderr else ""
         logger.error("Fish Speech 超时（1200s）\ncmd: %s\nstdout: %s\nstderr: %s", cmd, stdout, stderr)
+        log_ai_error("fish_speech", exc, stdout=stdout, stderr=stderr)
         raise HTTPException(status_code=500, detail=f"Fish Speech command timed out after 1200s. stdout={stdout} stderr={stderr}") from exc
     except Exception as exc:
         logger.error("Fish Speech 启动失败: %s\ncmd: %s", exc, cmd)
@@ -53,19 +57,21 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_ref: str =
         stdout = (completed.stdout or "").strip()[:10000]
         stderr = (completed.stderr or "").strip()[:10000]
         logger.error("Fish Speech 失败 (code=%s)\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
+        log_ai_error("fish_speech", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
         raise HTTPException(status_code=500, detail=f"Fish Speech failed (code={completed.returncode}): {stderr}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
         logger.error("Fish Speech 完成但输出文件缺失: %s", output_path)
         raise HTTPException(status_code=500, detail="Fish Speech finished but output file is missing/empty")
 
 
-async def run_fish_speech_tts(text: str, voice: str = "default", api_key: str = "", endpoint: str = "") -> Dict:
+async def run_fish_speech_tts(text: str, voice: str = "", voice_refs: list = [], api_key: str = "", endpoint: str = "") -> Dict:
     # Try local Fish Speech CLI first
     local_cmd = get_fish_speech_command_template()
     if local_cmd:
         task_id = str(uuid.uuid4())
         output_path = DOWNLOAD_DIR / f"{task_id}_tts_fish_speech.wav"
-        await asyncio.to_thread(run_local_fish_speech_tts_cmd, text, output_path, voice or "")
+        effective_refs = voice_refs if voice_refs else ([voice] if voice else [])
+        await asyncio.to_thread(run_local_fish_speech_tts_cmd, text, output_path, effective_refs)
         return {
             "status": "success",
             "task": "tts",

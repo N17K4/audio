@@ -6,6 +6,26 @@ import ProviderRow from '../shared/ProviderRow';
 import OutputDirRow from '../shared/OutputDirRow';
 import VoiceSelector from '../shared/VoiceSelector';
 import CreateVoicePanel from '../shared/CreateVoicePanel';
+import HowToSteps from '../shared/HowToSteps';
+import FileDrop from '../shared/FileDrop';
+
+const VC_STEPS_SEED_VC = [
+  { title: '上传参考音频', desc: '上传目标音色的参考录音（3–30 秒效果最佳）' },
+  { title: '上传原始音频', desc: '拖拽或选择需要转换音色的音频文件' },
+  { title: '开始转换', desc: '本地 Seed-VC 推理，结果在任务列表查看' },
+];
+
+const VC_STEPS_RVC = [
+  { title: '选择音色模型', desc: '选择或导入 RVC .pth 音色文件' },
+  { title: '上传原始音频', desc: '拖拽或选择需要转换音色的音频文件' },
+  { title: '开始转换', desc: '本地 RVC 推理，结果在任务列表查看' },
+];
+
+const VC_STEPS = [
+  { title: '上传参考音频', desc: '上传目标音色的参考录音（3–30 秒效果最佳）' },
+  { title: '上传原始音频', desc: '拖拽或选择需要转换音色的音频文件' },
+  { title: '开始转换', desc: '本地 Seed-VC / RVC 推理，结果在任务列表查看' },
+];
 
 interface VcPanelProps {
   taskType: 'vc';
@@ -28,8 +48,8 @@ interface VcPanelProps {
   setVcInputMode: (v: VcInputMode) => void;
   vcFile: File | null;
   setVcFile: (v: File | null) => void;
-  vcRefAudio: File | null;
-  setVcRefAudio: (v: File | null) => void;
+  vcRefAudios: File[];
+  setVcRefAudios: (v: File[]) => void;
   showCreateVoice: boolean;
   setShowCreateVoice: (v: boolean) => void;
   newVoiceEngine: string;
@@ -79,8 +99,8 @@ interface VcPanelProps {
   // Training
   trainVoiceName: string;
   setTrainVoiceName: (v: string) => void;
-  trainFile: File | null;
-  setTrainFile: (v: File | null) => void;
+  trainFiles: File[];
+  setTrainFiles: (v: File[]) => void;
   // Training advanced
   trainEpochs: number;
   setTrainEpochs: (v: number) => void;
@@ -116,8 +136,8 @@ export default function VcPanel({
   setVcInputMode,
   vcFile,
   setVcFile,
-  vcRefAudio,
-  setVcRefAudio,
+  vcRefAudios,
+  setVcRefAudios,
   showCreateVoice,
   setShowCreateVoice,
   newVoiceEngine,
@@ -165,8 +185,8 @@ export default function VcPanel({
   setRvcProtect,
   trainVoiceName,
   setTrainVoiceName,
-  trainFile,
-  setTrainFile,
+  trainFiles,
+  setTrainFiles,
   trainEpochs,
   setTrainEpochs,
   trainF0Method,
@@ -204,15 +224,25 @@ export default function VcPanel({
 
       {/* 目标音色 */}
       <div className="space-y-3">
-        <span className="block text-xs font-medium text-slate-400 uppercase tracking-wide">目标音色</span>
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0" style={{ backgroundColor: '#1A8FE3' }}>1</span>
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">目标音色</span>
+        </div>
 
         {selectedProvider === 'seed_vc' ? (
-          <label className="block">
-            <span className="block text-xs text-slate-400 mb-1.5">参考音频样本</span>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 transition-all" type="file" accept="audio/*"
-              onChange={e => setVcRefAudio(e.target.files?.[0] || null)} />
-            {vcRefAudio && <p className="text-xs text-slate-400 mt-1.5">{vcRefAudio.name}（{Math.round(vcRefAudio.size / 1024)} KB）</p>}
-          </label>
+          <div>
+            <span className="block text-xs text-slate-400 mb-1.5">参考音频样本（可选多个，3–30 秒每段效果最佳）</span>
+            <FileDrop
+              files={vcRefAudios}
+              onAdd={fs => setVcRefAudios([...vcRefAudios, ...fs])}
+              onRemove={i => setVcRefAudios(vcRefAudios.filter((_, j) => j !== i))}
+              accept="audio/*"
+              multiple
+              iconType="audio"
+              emptyLabel="点击或拖拽参考音频（可多选）"
+              formatHint="3–30 秒每段效果最佳"
+            />
+          </div>
         ) : isLocal ? (
           <>
             {/* Tab 栏 */}
@@ -238,7 +268,7 @@ export default function VcPanel({
                     {renamingId === selectedVoiceId ? (
                       <div className="flex gap-2">
                         <input
-                          className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                          className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-[#1A8FE3] focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all"
                           value={renameValue}
                           onChange={e => setRenameValue(e.target.value)}
                           onKeyDown={e => {
@@ -253,7 +283,7 @@ export default function VcPanel({
                           placeholder="输入新名称"
                         />
                         <button
-                          className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-2 text-xs font-medium text-white transition-colors disabled:opacity-50"
+                          className="rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] px-3 py-2 text-xs font-medium text-white transition-colors disabled:opacity-50"
                           disabled={!renameValue.trim()}
                           onClick={() => { onRenameVoice(selectedVoiceId, renameValue.trim()); setRenamingId(null); }}>
                           确认
@@ -312,12 +342,19 @@ export default function VcPanel({
                   <span className={labelCls}>音色名称</span>
                   <input className={fieldCls} value={trainVoiceName} onChange={e => setTrainVoiceName(e.target.value)} placeholder="我的音色" />
                 </label>
-                <label className="block">
-                  <span className={labelCls}>训练数据集（ZIP 压缩包或单个音频文件）</span>
-                  <input className={`${fileCls} w-full`} type="file" accept=".zip,.wav,.mp3,.flac,.ogg,.m4a"
-                    onChange={e => setTrainFile(e.target.files?.[0] || null)} />
-                  <span className="text-xs text-slate-400 mt-1 block">建议提供 5–30 分钟本人语音，打包成 ZIP 上传效果最佳</span>
-                </label>
+                <div>
+                  <span className={labelCls}>训练数据集（ZIP 压缩包或多个音频文件）</span>
+                  <FileDrop
+                    files={trainFiles}
+                    onAdd={fs => setTrainFiles([...trainFiles, ...fs])}
+                    onRemove={i => setTrainFiles(trainFiles.filter((_, j) => j !== i))}
+                    accept=".zip,.wav,.mp3,.flac,.ogg,.m4a"
+                    multiple
+                    iconType="file"
+                    emptyLabel="点击或拖拽训练数据"
+                    formatHint="ZIP 或多个音频文件"
+                  />
+                </div>
 
                 <details className="border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
                   <summary className="text-xs font-medium text-slate-400 cursor-pointer px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 list-none flex items-center justify-between">
@@ -363,7 +400,7 @@ export default function VcPanel({
         ) : (
           <label className="block">
             <span className="block text-xs text-slate-400 mb-1.5">音色 ID</span>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all"
+            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#1A8FE3] focus:bg-white focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all"
               value={selectedVoiceId} onChange={e => setSelectedVoiceId(e.target.value)} placeholder="ElevenLabs Voice ID" />
           </label>
         )}
@@ -371,7 +408,10 @@ export default function VcPanel({
 
       {/* 输入音频 */}
       {(!isLocal || voiceTab === 'select') && <div className="space-y-3">
-        <span className="block text-xs font-medium text-slate-400 uppercase tracking-wide">输入音频</span>
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0" style={{ backgroundColor: '#1A8FE3' }}>2</span>
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">输入音频</span>
+        </div>
         <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
           {(['upload', 'record'] as VcInputMode[]).map(m => (
             <button key={m}
@@ -382,21 +422,24 @@ export default function VcPanel({
           ))}
         </div>
         {vcInputMode === 'upload' ? (
-          <div className="space-y-3">
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 transition-all" type="file" accept="audio/*"
-              onChange={e => setVcFile(e.target.files?.[0] || null)} />
-            {vcFile && <p className="text-xs text-slate-400">{vcFile.name}（{Math.round(vcFile.size / 1024)} KB）</p>}
-          </div>
+          <FileDrop
+            files={vcFile ? [vcFile] : []}
+            onAdd={fs => setVcFile(fs[0])}
+            onRemove={() => setVcFile(null)}
+            accept="audio/*"
+            iconType="audio"
+            formatHint="支持 MP3、WAV、FLAC、M4A、OGG"
+          />
         ) : (
           <div className="flex gap-2">
             {status === 'idle' && !vcRecordedFile && (
-              <button className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartVcRecording}>开始录音</button>
+              <button className="flex-1 rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartVcRecording}>开始录音</button>
             )}
             {status === 'recording' && (
               <button className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 text-sm font-semibold text-white shadow-sm animate-pulse transition-all" onClick={onStopVcRecording}>停止录音</button>
             )}
             {status === 'idle' && vcRecordedFile && (
-              <button className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartVcRecording}>重新录音</button>
+              <button className="flex-1 rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartVcRecording}>重新录音</button>
             )}
             {status === 'processing' && <span className="text-sm text-slate-400 py-2">处理中...</span>}
           </div>
@@ -447,18 +490,19 @@ export default function VcPanel({
                 <div className="flex items-center justify-between">
                   <span className={labelCls + ' mb-0'}>F0 条件化</span>
                   <button
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${seedVcF0Condition ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${seedVcF0Condition ? 'bg-[#1A8FE3]' : 'bg-slate-300 dark:bg-slate-600'}`}
                     onClick={() => setSeedVcF0Condition(!seedVcF0Condition)}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${seedVcF0Condition ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
                 <p className="text-xs text-slate-400">开启后模型会保留原始音频的音调走势（语调起伏）。适合说话/朗读场景；转换歌声时建议关闭，避免音调被锁死</p>
+                <p className="text-xs text-amber-500 font-medium">⚠ Mac / Apple Silicon：F0 条件化每次重新加载模型，耗时可能超过 20 分钟，建议保持关闭</p>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <span className={labelCls + ' mb-0'}>音频美化</span>
                   <button
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${seedVcEnablePostprocess ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${seedVcEnablePostprocess ? 'bg-[#1A8FE3]' : 'bg-slate-300 dark:bg-slate-600'}`}
                     onClick={() => setSeedVcEnablePostprocess(!seedVcEnablePostprocess)}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${seedVcEnablePostprocess ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
@@ -527,7 +571,7 @@ export default function VcPanel({
       </details>}
 
       {(!isLocal || voiceTab === 'select') && (
-        <button className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-button-primary transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+        <button className="w-full rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] active:bg-[#1472bc] py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => {
             const audio = vcInputMode === 'upload' ? vcFile : vcRecordedFile;
             if (audio) onHandleVoiceConvert(audio);
@@ -535,6 +579,14 @@ export default function VcPanel({
           disabled={status === 'processing' || status === 'recording' || (vcInputMode === 'upload' ? !vcFile : !vcRecordedFile)}>
           {status === 'processing' ? '处理中...' : '开始转换'}
         </button>
+      )}
+
+      {(!isLocal || voiceTab === 'select') && (
+        <HowToSteps steps={
+          selectedProvider === 'seed_vc' ? VC_STEPS_SEED_VC :
+          selectedProvider === 'local_rvc' ? VC_STEPS_RVC :
+          VC_STEPS
+        } />
       )}
 
     </section>

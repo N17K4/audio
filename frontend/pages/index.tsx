@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { Status, TaskType, VcInputMode, ToolboxSubPage, MediaAction, DocSubPage } from '../types';
+import { useEffect, useState } from 'react';
+import type { Status, TaskType, VcInputMode, ToolboxSubPage, MediaAction, DocSubPage, MiscSubPage } from '../types';
 import { TASK_LABELS, TASK_PHASES, TASK_ICON_CFG, LS, LOCAL_PROVIDERS, URL_ONLY_PROVIDERS } from '../constants';
 import { rlog } from '../utils';
 
@@ -18,7 +18,7 @@ import { useMisc } from '../hooks/useMisc';
 import { useImageExt } from '../hooks/useImageExt';
 
 // Components
-import Sidebar from '../components/layout/Sidebar';
+import TopNav from '../components/layout/TopNav';
 import type { Page } from '../components/layout/Sidebar';
 import HomePanel from '../components/HomePanel';
 import TaskList from '../components/TaskList';
@@ -41,25 +41,36 @@ export default function Home() {
   const [showSystem, setShowSystem] = useState(false);
   const [showAudioTools, setShowAudioTools] = useState(false);
   const [showFormatConvert, setShowFormatConvert] = useState(false);
+  const [showImageTools, setShowImageTools] = useState(false);
+  const [showVideoTools, setShowVideoTools] = useState(false);
+  const [showTextTools, setShowTextTools] = useState(false);
+  const [textSubPage, setTextSubPage] = useState<'llm' | 'translate' | 'code_assist'>('llm');
   const [formatGroup, setFormatGroup] = useState<'media' | 'doc'>('media');
   const [hwAccelDetected, setHwAccelDetected] = useState('');
 
-  const AUDIO_TASK_TYPES: TaskType[] = ['tts', 'vc', 'asr', 'llm', 'voice_chat'];
+  const AUDIO_TASK_TYPES: TaskType[] = ['tts', 'vc', 'asr', 'voice_chat'];
 
-  const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' : showAudioTools ? 'audio_tools' : showFormatConvert ? 'format_convert' : taskType;
+  const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' :
+    showAudioTools ? 'audio_tools' : showFormatConvert ? 'format_convert' :
+    showImageTools ? 'image_tools' : showVideoTools ? 'video_tools' :
+    showTextTools ? 'text_tools' : taskType;
 
-  function navigate(page: Page) {
-    if (page === 'home') { setShowHome(true); setShowTasks(false); setShowSystem(false); setShowAudioTools(false); setShowFormatConvert(false); }
-    else if (page === 'tasks') { setShowHome(false); setShowTasks(true); setShowSystem(false); setShowAudioTools(false); setShowFormatConvert(false); fetchJobs(); }
-    else if (page === 'system') { setShowHome(false); setShowTasks(false); setShowSystem(true); setShowAudioTools(false); setShowFormatConvert(false); }
+  function navigate(page: Page, subPage?: string) {
+    const resetAll = () => {
+      setShowHome(false); setShowTasks(false); setShowSystem(false);
+      setShowAudioTools(false); setShowFormatConvert(false);
+      setShowImageTools(false); setShowVideoTools(false); setShowTextTools(false);
+    };
+    if (page === 'home') { resetAll(); setShowHome(true); }
+    else if (page === 'tasks') { resetAll(); setShowTasks(true); fetchJobs(); }
+    else if (page === 'system') { resetAll(); setShowSystem(true); }
     else if (page === 'audio_tools') {
-      setShowHome(false); setShowTasks(false); setShowSystem(false); setShowFormatConvert(false);
-      setShowAudioTools(true);
-      if (!AUDIO_TASK_TYPES.includes(taskType)) setTaskType('tts');
+      resetAll(); setShowAudioTools(true);
+      if (subPage && ['tts', 'vc', 'asr', 'voice_chat'].includes(subPage)) setTaskType(subPage as TaskType);
+      else if (!AUDIO_TASK_TYPES.includes(taskType)) setTaskType('tts');
     }
     else if (page === 'format_convert') {
-      setShowHome(false); setShowTasks(false); setShowSystem(false); setShowAudioTools(false);
-      setShowFormatConvert(true);
+      resetAll(); setShowFormatConvert(true);
       if (!hwAccelDetected) {
         fetch(`${backend.backendBaseUrl}/hw-accel`)
           .then(r => r.json())
@@ -67,7 +78,29 @@ export default function Home() {
           .catch(() => {});
       }
     }
-    else { setShowHome(false); setShowTasks(false); setShowSystem(false); setShowAudioTools(false); setShowFormatConvert(false); setTaskType(page as TaskType); }
+    else if (page === 'image_tools') {
+      resetAll(); setShowImageTools(true);
+      if (subPage) misc.setMiscSubPage(subPage as MiscSubPage);
+      else misc.setMiscSubPage('img_gen');
+    }
+    else if (page === 'video_tools') {
+      resetAll(); setShowVideoTools(true);
+      if (subPage) misc.setMiscSubPage(subPage as MiscSubPage);
+      else misc.setMiscSubPage('video_gen');
+    }
+    else if (page === 'text_tools') {
+      resetAll(); setShowTextTools(true);
+      if (subPage === 'llm' || subPage === 'translate' || subPage === 'code_assist') {
+        setTextSubPage(subPage);
+        if (subPage !== 'llm') misc.setMiscSubPage(subPage as MiscSubPage);
+      }
+    }
+    else if (page === 'misc') {
+      // backward compat: misc goes to image_tools
+      resetAll(); setShowImageTools(true);
+      if (subPage) misc.setMiscSubPage(subPage as MiscSubPage);
+    }
+    else { resetAll(); setTaskType(page as TaskType); }
   }
 
   function navigateTasks() {
@@ -91,29 +124,7 @@ export default function Home() {
   const [isElectron, setIsElectron] = useState(false);
   useEffect(() => { setIsElectron(!!window.electronAPI); }, []);
 
-  // ─── 侧边栏 ───────────────────────────────────────────────────────────────
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(180);
-  const isResizingRef = useRef(false);
-  const resizeStartXRef = useRef(0);
-  const resizeStartWidthRef = useRef(0);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const w = Math.max(120, Math.min(320, resizeStartWidthRef.current + e.clientX - resizeStartXRef.current));
-      setSidebarWidth(w);
-    };
-    const onUp = () => {
-      if (!isResizingRef.current) return;
-      isResizingRef.current = false;
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-  }, []);
+  // (侧边栏已移除，改为顶部导航栏)
 
   // ─── 共享设置 ─────────────────────────────────────────────────────────────
   const [providerMap, setProviderMap] = useState<Record<string, string>>({
@@ -186,7 +197,7 @@ export default function Home() {
   // ─── VC 扩展状态 ──────────────────────────────────────────────────────────
   const [vcInputMode, setVcInputMode] = useState<VcInputMode>('upload');
   const [vcFile, setVcFile] = useState<File | null>(null);
-  const [vcRefAudio, setVcRefAudio] = useState<File | null>(null);
+  const [vcRefAudios, setVcRefAudios] = useState<File[]>([]);
   const [seedVcDiffusionSteps, setSeedVcDiffusionSteps] = useState(8);
   const [seedVcPitchShift, setSeedVcPitchShift] = useState(0);
   const [seedVcF0Condition, setSeedVcF0Condition] = useState(false);
@@ -210,14 +221,14 @@ export default function Home() {
 
   // ─── 训练状态 ─────────────────────────────────────────────────────────────
   const [trainVoiceName, setTrainVoiceName] = useState('我的音色');
-  const [trainFile, setTrainFile] = useState<File | null>(null);
+  const [trainFiles, setTrainFiles] = useState<File[]>([]);
   // 训练高级参数
   const [trainEpochs, setTrainEpochs] = useState(0);
   const [trainF0Method, setTrainF0Method] = useState('harvest');
   const [trainSampleRate, setTrainSampleRate] = useState(40000);
 
   // ─── 共享样式常量 ─────────────────────────────────────────────────────────
-  const fieldCls = 'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 transition-all dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-700 dark:focus:border-indigo-400';
+  const fieldCls = 'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#1A8FE3] focus:bg-white focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-700 dark:focus:border-[#1A8FE3]';
   const fileCls  = 'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 transition-all dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:file:bg-indigo-900/50 dark:file:text-indigo-300 dark:hover:file:bg-indigo-900';
   const labelCls = 'block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide dark:text-slate-500';
   const btnSec   = 'rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300';
@@ -230,7 +241,6 @@ export default function Home() {
   const { jobs, setJobs, fetchJobs, addInstantJobResult, addPendingJob, resolveJob, pollJobResult } = useJobs(
     backend.backendBaseUrl,
     backend.backendReady,
-    navigateTasks,
   );
 
   const tts = useTTS({
@@ -245,7 +255,6 @@ export default function Home() {
     setError,
     setJobs,
     addInstantJobResult,
-    onNavigateTasks: navigateTasks,
   });
 
   const vc = useVC({
@@ -257,7 +266,7 @@ export default function Home() {
     outputDir,
     needsAuth,
     selectedVoiceId: backend.selectedVoiceId,
-    vcRefAudio,
+    vcRefAudios,
     status,
     setStatus,
     setProcessingStartTime,
@@ -265,7 +274,6 @@ export default function Home() {
     setSuccessMsg,
     setJobs,
     addInstantJobResult,
-    onNavigateTasks: navigateTasks,
     seedVcDiffusionSteps,
     seedVcPitchShift,
     seedVcF0Condition,
@@ -290,7 +298,6 @@ export default function Home() {
     setProcessingStartTime,
     setError,
     addInstantJobResult,
-    onNavigateTasks: navigateTasks,
   });
 
   const llm = useLLM({
@@ -316,7 +323,6 @@ export default function Home() {
     setError,
     addPendingJob,
     resolveJob,
-    onNavigateTasks: navigateTasks,
   });
 
   const toolbox = useToolbox({
@@ -336,7 +342,6 @@ export default function Home() {
     setError,
     addPendingJob,
     resolveJob,
-    onNavigateTasks: navigateTasks,
   });
 
   const misc = useMisc({
@@ -348,7 +353,6 @@ export default function Home() {
     setError,
     addInstantJobResult,
     fetchJobs,
-    onNavigateTasks: navigateTasks,
   });
 
   const imageExt = useImageExt({
@@ -360,7 +364,6 @@ export default function Home() {
     setError,
     addInstantJobResult,
     fetchJobs,
-    onNavigateTasks: navigateTasks,
   });
 
   // ─── 新建音色 ─────────────────────────────────────────────────────────────
@@ -431,7 +434,7 @@ export default function Home() {
   // ─── 训练 ─────────────────────────────────────────────────────────────────
   async function startTraining() {
     const trimmedName = trainVoiceName.trim();
-    if (!trainFile) { setError('请先选择训练数据集'); return; }
+    if (!trainFiles || trainFiles.length === 0) { setError('请先选择训练数据集'); return; }
     if (!trimmedName) { setError('请输入音色名称'); return; }
     const duplicate = backend.voices.some(v => v.name.toLowerCase() === trimmedName.toLowerCase());
     if (duplicate) { setError(`音色名称「${trimmedName}」已存在，请使用其他名称`); return; }
@@ -439,7 +442,14 @@ export default function Home() {
     const normalized = trimmedName.toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
     const autoVoiceId = `${normalized || 'voice'}_${Date.now().toString().slice(-6)}`;
     const fd = new FormData();
-    fd.append('dataset', trainFile);
+    const isZipOnly = trainFiles.length === 1 && trainFiles[0].name.toLowerCase().endsWith('.zip');
+    if (isZipOnly) {
+      fd.append('dataset', trainFiles[0]);
+    } else {
+      const { packFilesToZip } = await import('../utils');
+      const zipBlob = await packFilesToZip(trainFiles);
+      fd.append('dataset', zipBlob, 'dataset.zip');
+    }
     fd.append('voice_id', autoVoiceId);
     fd.append('voice_name', trimmedName);
     fd.append('epochs', String(trainEpochs));
@@ -465,7 +475,6 @@ export default function Home() {
         error: null,
       };
       setJobs(prev => [pending, ...prev]);
-      navigateTasks();
     } catch (e) {
       setError(e instanceof Error ? e.message : '训练失败');
     }
@@ -481,43 +490,23 @@ export default function Home() {
 
   // ─── 渲染 ─────────────────────────────────────────────────────────────────
   return (
-    <div className={`flex h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 ${isDark ? 'dark' : ''}`}>
+    <div className={`flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 ${isDark ? 'dark' : ''}`}>
 
-      <Sidebar
+      <TopNav
         currentPage={currentPage}
-        sidebarCollapsed={sidebarCollapsed}
-        sidebarWidth={sidebarWidth}
-        isResizing={isResizingRef.current}
         jobs={jobs}
+        isDark={isDark}
+        setIsDark={setIsDark}
         onNavigate={navigate}
-        onToggleCollapse={() => setSidebarCollapsed(v => !v)}
-        onResizeStart={e => {
-          isResizingRef.current = true;
-          resizeStartXRef.current = e.clientX;
-          resizeStartWidthRef.current = sidebarWidth;
-          document.body.style.userSelect = 'none';
-          document.body.style.cursor = 'col-resize';
-        }}
       />
-
-      {/* ── 深色模式切换按钮（固定右上角）── */}
-      <button
-        onClick={() => setIsDark(v => !v)}
-        title={isDark ? '切换到亮色模式' : '切换到暗色模式'}
-        className={`fixed top-4 right-4 z-50 flex items-center w-[52px] h-[28px] rounded-full transition-all duration-300 shadow-md ${isDark ? 'bg-slate-700' : 'bg-sky-200'}`}
-      >
-        <span className={`absolute w-[22px] h-[22px] rounded-full shadow-sm flex items-center justify-center text-[11px] font-bold transition-all duration-300 ${isDark ? 'translate-x-[26px] bg-slate-200 text-slate-700' : 'translate-x-[3px] bg-white text-sky-600'}`}>
-          {isDark ? '晚' : '早'}
-        </span>
-      </button>
 
       {/* ── 主内容区 ── */}
       <div className={`flex-1 overflow-y-auto min-w-0 bg-slate-50 dark:bg-slate-950 ${showSystem ? 'hidden' : ''}`}>
         <div className="p-6 md:p-8">
-          <div className="mx-auto w-full max-w-3xl space-y-5">
+          <div className="mx-auto w-full space-y-5 max-w-5xl">
 
             {/* 首页 */}
-            {showHome && <HomePanel onNavigate={navigate} jobs={jobs} backendBaseUrl={backend.backendBaseUrl} />}
+            {showHome && <HomePanel onNavigate={(page, sub) => navigate(page as Page, sub)} jobs={jobs} backendBaseUrl={backend.backendBaseUrl} />}
 
             {/* 任务列表 */}
             {showTasks && (
@@ -552,7 +541,6 @@ export default function Home() {
                     ['tts',        '文本转语音', 'TTS'  ],
                     ['vc',         '音色转换',   'VC'   ],
                     ['asr',        '语音转文本', 'STT'  ],
-                    ['llm',        '聊天',       'LLM'  ],
                     ['voice_chat', '语音聊天',   'Voice'],
                   ] as [TaskType, string, string][]).map(([key, label, abbr]) => (
                     <button key={key} onClick={() => setTaskType(key)}
@@ -611,8 +599,8 @@ export default function Home() {
                 setTtsModel={tts.setTtsModel}
                 ttsVoice={tts.ttsVoice}
                 setTtsVoice={tts.setTtsVoice}
-                ttsRefAudio={tts.ttsRefAudio}
-                setTtsRefAudio={tts.setTtsRefAudio}
+                ttsRefAudios={tts.ttsRefAudios}
+                setTtsRefAudios={tts.setTtsRefAudios}
                 ttsRefInputMode={tts.ttsRefInputMode}
                 setTtsRefInputMode={tts.setTtsRefInputMode}
                 ttsRefRecordedObjectUrl={tts.ttsRefRecordedObjectUrl}
@@ -654,8 +642,8 @@ export default function Home() {
                 setVcInputMode={setVcInputMode}
                 vcFile={vcFile}
                 setVcFile={setVcFile}
-                vcRefAudio={vcRefAudio}
-                setVcRefAudio={setVcRefAudio}
+                vcRefAudios={vcRefAudios}
+                setVcRefAudios={setVcRefAudios}
                 showCreateVoice={showCreateVoice}
                 setShowCreateVoice={setShowCreateVoice}
                 newVoiceEngine={newVoiceEngine}
@@ -703,8 +691,8 @@ export default function Home() {
                 setRvcProtect={setRvcProtect}
                 trainVoiceName={trainVoiceName}
                 setTrainVoiceName={setTrainVoiceName}
-                trainFile={trainFile}
-                setTrainFile={setTrainFile}
+                trainFiles={trainFiles}
+                setTrainFiles={setTrainFiles}
                 trainEpochs={trainEpochs}
                 setTrainEpochs={setTrainEpochs}
                 trainF0Method={trainF0Method}
@@ -798,8 +786,8 @@ export default function Home() {
                 setVchatTtsProvider={voiceChat.setVchatTtsProvider}
                 vchatTtsModel={voiceChat.vchatTtsModel}
                 setVchatTtsModel={voiceChat.setVchatTtsModel}
-                vchatTtsRefAudio={voiceChat.vchatTtsRefAudio}
-                setVchatTtsRefAudio={voiceChat.setVchatTtsRefAudio}
+                vchatTtsRefAudios={voiceChat.vchatTtsRefAudios}
+                setVchatTtsRefAudios={voiceChat.setVchatTtsRefAudios}
                 vchatApiKey={voiceChat.vchatApiKey}
                 setVchatApiKey={voiceChat.setVchatApiKey}
                 vchatEndpoint={voiceChat.vchatEndpoint}
@@ -892,8 +880,8 @@ export default function Home() {
                     outputDir={outputDir}
                     setOutputDir={setOutputDir}
                     status={status}
-                    onRunMediaConvert={() => { navigateTasks(); media.runMediaConvert(); }}
-                    onRunSubtitleConvert={() => { navigateTasks(); media.runSubtitleConvert(); }}
+                    onRunMediaConvert={() => { media.runMediaConvert(); }}
+                    onRunSubtitleConvert={() => { media.runSubtitleConvert(); }}
                     fieldCls={fieldCls}
                     fileCls={fileCls}
                     labelCls={labelCls}
@@ -1052,6 +1040,447 @@ export default function Home() {
               />
             )}
 
+            {/* 图像工具 */}
+            {showImageTools && (
+              <>
+                <header className="flex items-center gap-3.5 pb-1">
+                  <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+                    <rect width="28" height="28" rx="7" fill="#db2777"/>
+                    <rect x="5" y="7" width="18" height="14" rx="3" fill="none" stroke="#fce7f3" strokeWidth="1.5"/>
+                    <circle cx="10" cy="12" r="2" fill="#fbcfe8"/>
+                    <path d="M5 18l5-5 4 4 3-3 6 4" stroke="#f9a8d4" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">图像工具</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">图像生成 · 换脸换图 · OCR · 图像理解</p>
+                  </div>
+                </header>
+                <MiscPanel
+                  miscSubPage={misc.miscSubPage}
+                  setMiscSubPage={misc.setMiscSubPage}
+                  apiKey={apiKey}
+                  setApiKey={setApiKey}
+                  cloudEndpoint={cloudEndpoint}
+                  setCloudEndpoint={setCloudEndpoint}
+                  status={status}
+                  imageGenProvider={misc.imageGenProvider}
+                  onImageGenProviderChange={misc.handleImageGenProviderChange}
+                  imageGenPrompt={misc.imageGenPrompt}
+                  setImageGenPrompt={misc.setImageGenPrompt}
+                  imageGenModel={misc.imageGenModel}
+                  setImageGenModel={misc.setImageGenModel}
+                  imageGenSize={misc.imageGenSize}
+                  setImageGenSize={misc.setImageGenSize}
+                  onRunImageGen={misc.runImageGen}
+                  imageUnderstandProvider={misc.imageUnderstandProvider}
+                  onImageUnderstandProviderChange={misc.handleImageUnderstandProviderChange}
+                  imageUnderstandFile={misc.imageUnderstandFile}
+                  setImageUnderstandFile={misc.setImageUnderstandFile}
+                  imageUnderstandPrompt={misc.imageUnderstandPrompt}
+                  setImageUnderstandPrompt={misc.setImageUnderstandPrompt}
+                  imageUnderstandModel={misc.imageUnderstandModel}
+                  setImageUnderstandModel={misc.setImageUnderstandModel}
+                  onRunImageUnderstand={misc.runImageUnderstand}
+                  translateProvider={misc.translateProvider}
+                  setTranslateProvider={misc.setTranslateProvider}
+                  translateText={misc.translateText}
+                  setTranslateText={misc.setTranslateText}
+                  translateTarget={misc.translateTarget}
+                  setTranslateTarget={misc.setTranslateTarget}
+                  translateSource={misc.translateSource}
+                  setTranslateSource={misc.setTranslateSource}
+                  translateModel={misc.translateModel}
+                  setTranslateModel={misc.setTranslateModel}
+                  onRunTranslate={misc.runTranslate}
+                  codeProvider={misc.codeProvider}
+                  setCodeProvider={misc.setCodeProvider}
+                  codeModel={misc.codeModel}
+                  setCodeModel={misc.setCodeModel}
+                  codeMessages={misc.codeMessages}
+                  setCodeMessages={misc.setCodeMessages}
+                  codeInput={misc.codeInput}
+                  setCodeInput={misc.setCodeInput}
+                  codeLoading={misc.codeLoading}
+                  codeLang={misc.codeLang}
+                  setCodeLang={misc.setCodeLang}
+                  onSendCodeMessage={misc.sendCodeMessage}
+                  imgGenProvider={imageExt.imgGenProvider}
+                  onImgGenProviderChange={imageExt.handleImgGenProviderChange}
+                  imgGenPrompt={imageExt.imgGenPrompt}
+                  setImgGenPrompt={imageExt.setImgGenPrompt}
+                  imgGenModel={imageExt.imgGenModel}
+                  setImgGenModel={imageExt.setImgGenModel}
+                  imgGenSize={imageExt.imgGenSize}
+                  setImgGenSize={imageExt.setImgGenSize}
+                  imgGenComfyUrl={imageExt.imgGenComfyUrl}
+                  setImgGenComfyUrl={imageExt.setImgGenComfyUrl}
+                  onRunImgGen={imageExt.runImgGen}
+                  imgI2iProvider={imageExt.imgI2iProvider}
+                  onImgI2iProviderChange={imageExt.handleImgI2iProviderChange}
+                  imgI2iSourceFile={imageExt.imgI2iSourceFile}
+                  setImgI2iSourceFile={imageExt.setImgI2iSourceFile}
+                  imgI2iRefFile={imageExt.imgI2iRefFile}
+                  setImgI2iRefFile={imageExt.setImgI2iRefFile}
+                  imgI2iPrompt={imageExt.imgI2iPrompt}
+                  setImgI2iPrompt={imageExt.setImgI2iPrompt}
+                  imgI2iModel={imageExt.imgI2iModel}
+                  setImgI2iModel={imageExt.setImgI2iModel}
+                  imgI2iStrength={imageExt.imgI2iStrength}
+                  setImgI2iStrength={imageExt.setImgI2iStrength}
+                  imgI2iComfyUrl={imageExt.imgI2iComfyUrl}
+                  setImgI2iComfyUrl={imageExt.setImgI2iComfyUrl}
+                  onRunImgI2i={imageExt.runImgI2i}
+                  videoGenProvider={imageExt.videoGenProvider}
+                  onVideoGenProviderChange={imageExt.handleVideoGenProviderChange}
+                  videoGenPrompt={imageExt.videoGenPrompt}
+                  setVideoGenPrompt={imageExt.setVideoGenPrompt}
+                  videoGenModel={imageExt.videoGenModel}
+                  setVideoGenModel={imageExt.setVideoGenModel}
+                  videoGenDuration={imageExt.videoGenDuration}
+                  setVideoGenDuration={imageExt.setVideoGenDuration}
+                  videoGenMode={imageExt.videoGenMode}
+                  setVideoGenMode={imageExt.setVideoGenMode}
+                  videoGenImageFile={imageExt.videoGenImageFile}
+                  setVideoGenImageFile={imageExt.setVideoGenImageFile}
+                  onRunVideoGen={imageExt.runVideoGen}
+                  ocrProvider={imageExt.ocrProvider}
+                  onOcrProviderChange={imageExt.handleOcrProviderChange}
+                  ocrFile={imageExt.ocrFile}
+                  setOcrFile={imageExt.setOcrFile}
+                  ocrModel={imageExt.ocrModel}
+                  setOcrModel={imageExt.setOcrModel}
+                  ocrLocalUrl={imageExt.ocrLocalUrl}
+                  setOcrLocalUrl={imageExt.setOcrLocalUrl}
+                  onRunOcr={imageExt.runOcr}
+                  lipsyncProvider={imageExt.lipsyncProvider}
+                  onLipsyncProviderChange={imageExt.handleLipsyncProviderChange}
+                  lipsyncVideoFile={imageExt.lipsyncVideoFile}
+                  setLipsyncVideoFile={imageExt.setLipsyncVideoFile}
+                  lipsyncAudioFile={imageExt.lipsyncAudioFile}
+                  setLipsyncAudioFile={imageExt.setLipsyncAudioFile}
+                  lipsyncModel={imageExt.lipsyncModel}
+                  setLipsyncModel={imageExt.setLipsyncModel}
+                  lipsyncLocalUrl={imageExt.lipsyncLocalUrl}
+                  setLipsyncLocalUrl={imageExt.setLipsyncLocalUrl}
+                  onRunLipsync={imageExt.runLipsync}
+                  fieldCls={fieldCls}
+                  fileCls={fileCls}
+                  labelCls={labelCls}
+                  btnSec={btnSec}
+                  allowedSubPages={['img_gen', 'img_i2i', 'image_understand', 'ocr']}
+                />
+              </>
+            )}
+
+            {/* 视频工具 */}
+            {showVideoTools && (
+              <>
+                <header className="flex items-center gap-3.5 pb-1">
+                  <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+                    <rect width="28" height="28" rx="7" fill="#0f766e"/>
+                    <rect x="4" y="8" width="14" height="12" rx="2.5" fill="none" stroke="#99f6e4" strokeWidth="1.5"/>
+                    <path d="M18 12l6-3v10l-6-3V12z" fill="#5eead4"/>
+                  </svg>
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">视频工具</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">视频生成 · 唇形同步</p>
+                  </div>
+                </header>
+                <MiscPanel
+                  miscSubPage={misc.miscSubPage}
+                  setMiscSubPage={misc.setMiscSubPage}
+                  apiKey={apiKey}
+                  setApiKey={setApiKey}
+                  cloudEndpoint={cloudEndpoint}
+                  setCloudEndpoint={setCloudEndpoint}
+                  status={status}
+                  imageGenProvider={misc.imageGenProvider}
+                  onImageGenProviderChange={misc.handleImageGenProviderChange}
+                  imageGenPrompt={misc.imageGenPrompt}
+                  setImageGenPrompt={misc.setImageGenPrompt}
+                  imageGenModel={misc.imageGenModel}
+                  setImageGenModel={misc.setImageGenModel}
+                  imageGenSize={misc.imageGenSize}
+                  setImageGenSize={misc.setImageGenSize}
+                  onRunImageGen={misc.runImageGen}
+                  imageUnderstandProvider={misc.imageUnderstandProvider}
+                  onImageUnderstandProviderChange={misc.handleImageUnderstandProviderChange}
+                  imageUnderstandFile={misc.imageUnderstandFile}
+                  setImageUnderstandFile={misc.setImageUnderstandFile}
+                  imageUnderstandPrompt={misc.imageUnderstandPrompt}
+                  setImageUnderstandPrompt={misc.setImageUnderstandPrompt}
+                  imageUnderstandModel={misc.imageUnderstandModel}
+                  setImageUnderstandModel={misc.setImageUnderstandModel}
+                  onRunImageUnderstand={misc.runImageUnderstand}
+                  translateProvider={misc.translateProvider}
+                  setTranslateProvider={misc.setTranslateProvider}
+                  translateText={misc.translateText}
+                  setTranslateText={misc.setTranslateText}
+                  translateTarget={misc.translateTarget}
+                  setTranslateTarget={misc.setTranslateTarget}
+                  translateSource={misc.translateSource}
+                  setTranslateSource={misc.setTranslateSource}
+                  translateModel={misc.translateModel}
+                  setTranslateModel={misc.setTranslateModel}
+                  onRunTranslate={misc.runTranslate}
+                  codeProvider={misc.codeProvider}
+                  setCodeProvider={misc.setCodeProvider}
+                  codeModel={misc.codeModel}
+                  setCodeModel={misc.setCodeModel}
+                  codeMessages={misc.codeMessages}
+                  setCodeMessages={misc.setCodeMessages}
+                  codeInput={misc.codeInput}
+                  setCodeInput={misc.setCodeInput}
+                  codeLoading={misc.codeLoading}
+                  codeLang={misc.codeLang}
+                  setCodeLang={misc.setCodeLang}
+                  onSendCodeMessage={misc.sendCodeMessage}
+                  imgGenProvider={imageExt.imgGenProvider}
+                  onImgGenProviderChange={imageExt.handleImgGenProviderChange}
+                  imgGenPrompt={imageExt.imgGenPrompt}
+                  setImgGenPrompt={imageExt.setImgGenPrompt}
+                  imgGenModel={imageExt.imgGenModel}
+                  setImgGenModel={imageExt.setImgGenModel}
+                  imgGenSize={imageExt.imgGenSize}
+                  setImgGenSize={imageExt.setImgGenSize}
+                  imgGenComfyUrl={imageExt.imgGenComfyUrl}
+                  setImgGenComfyUrl={imageExt.setImgGenComfyUrl}
+                  onRunImgGen={imageExt.runImgGen}
+                  imgI2iProvider={imageExt.imgI2iProvider}
+                  onImgI2iProviderChange={imageExt.handleImgI2iProviderChange}
+                  imgI2iSourceFile={imageExt.imgI2iSourceFile}
+                  setImgI2iSourceFile={imageExt.setImgI2iSourceFile}
+                  imgI2iRefFile={imageExt.imgI2iRefFile}
+                  setImgI2iRefFile={imageExt.setImgI2iRefFile}
+                  imgI2iPrompt={imageExt.imgI2iPrompt}
+                  setImgI2iPrompt={imageExt.setImgI2iPrompt}
+                  imgI2iModel={imageExt.imgI2iModel}
+                  setImgI2iModel={imageExt.setImgI2iModel}
+                  imgI2iStrength={imageExt.imgI2iStrength}
+                  setImgI2iStrength={imageExt.setImgI2iStrength}
+                  imgI2iComfyUrl={imageExt.imgI2iComfyUrl}
+                  setImgI2iComfyUrl={imageExt.setImgI2iComfyUrl}
+                  onRunImgI2i={imageExt.runImgI2i}
+                  videoGenProvider={imageExt.videoGenProvider}
+                  onVideoGenProviderChange={imageExt.handleVideoGenProviderChange}
+                  videoGenPrompt={imageExt.videoGenPrompt}
+                  setVideoGenPrompt={imageExt.setVideoGenPrompt}
+                  videoGenModel={imageExt.videoGenModel}
+                  setVideoGenModel={imageExt.setVideoGenModel}
+                  videoGenDuration={imageExt.videoGenDuration}
+                  setVideoGenDuration={imageExt.setVideoGenDuration}
+                  videoGenMode={imageExt.videoGenMode}
+                  setVideoGenMode={imageExt.setVideoGenMode}
+                  videoGenImageFile={imageExt.videoGenImageFile}
+                  setVideoGenImageFile={imageExt.setVideoGenImageFile}
+                  onRunVideoGen={imageExt.runVideoGen}
+                  ocrProvider={imageExt.ocrProvider}
+                  onOcrProviderChange={imageExt.handleOcrProviderChange}
+                  ocrFile={imageExt.ocrFile}
+                  setOcrFile={imageExt.setOcrFile}
+                  ocrModel={imageExt.ocrModel}
+                  setOcrModel={imageExt.setOcrModel}
+                  ocrLocalUrl={imageExt.ocrLocalUrl}
+                  setOcrLocalUrl={imageExt.setOcrLocalUrl}
+                  onRunOcr={imageExt.runOcr}
+                  lipsyncProvider={imageExt.lipsyncProvider}
+                  onLipsyncProviderChange={imageExt.handleLipsyncProviderChange}
+                  lipsyncVideoFile={imageExt.lipsyncVideoFile}
+                  setLipsyncVideoFile={imageExt.setLipsyncVideoFile}
+                  lipsyncAudioFile={imageExt.lipsyncAudioFile}
+                  setLipsyncAudioFile={imageExt.setLipsyncAudioFile}
+                  lipsyncModel={imageExt.lipsyncModel}
+                  setLipsyncModel={imageExt.setLipsyncModel}
+                  lipsyncLocalUrl={imageExt.lipsyncLocalUrl}
+                  setLipsyncLocalUrl={imageExt.setLipsyncLocalUrl}
+                  onRunLipsync={imageExt.runLipsync}
+                  fieldCls={fieldCls}
+                  fileCls={fileCls}
+                  labelCls={labelCls}
+                  btnSec={btnSec}
+                  allowedSubPages={['video_gen', 'lipsync']}
+                />
+              </>
+            )}
+
+            {/* 文字工具 */}
+            {showTextTools && (
+              <div>
+                <header className="flex items-center gap-3.5 pb-4">
+                  <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+                    <rect width="28" height="28" rx="7" fill="#0284c7"/>
+                    <path d="M7 9h14M7 14h10M7 19h8" stroke="#bae6fd" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">文字工具</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">LLM 聊天 · 文字翻译 · 代码助手</p>
+                  </div>
+                </header>
+                {/* Tab bar */}
+                <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                  {(['llm', 'translate', 'code_assist'] as const).map(tab => {
+                    const labels: Record<string, string> = { llm: 'LLM 聊天', translate: '文字翻译', code_assist: '代码助手' };
+                    return (
+                      <button key={tab}
+                        onClick={() => {
+                          setTextSubPage(tab);
+                          if (tab !== 'llm') misc.setMiscSubPage(tab as MiscSubPage);
+                        }}
+                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                          textSubPage === tab
+                            ? 'bg-white dark:bg-slate-900 text-[#1A8FE3] shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}>
+                        {labels[tab]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {textSubPage === 'llm' && (
+                  <LlmPanel
+                    taskType="llm"
+                    capabilities={backend.capabilities}
+                    selectedProvider={providerMap['llm'] || 'gemini'}
+                    needsAuth={!LOCAL_PROVIDERS.has(providerMap['llm'] || 'gemini') && !URL_ONLY_PROVIDERS.has(providerMap['llm'] || 'gemini')}
+                    isUrlOnly={URL_ONLY_PROVIDERS.has(providerMap['llm'] || 'gemini')}
+                    apiKey={apiKey}
+                    cloudEndpoint={cloudEndpoint}
+                    engineVersions={backend.engineVersions}
+                    setProviderMap={setProviderMap}
+                    setApiKey={setApiKey}
+                    setCloudEndpoint={setCloudEndpoint}
+                    llmMessages={llm.llmMessages}
+                    setLlmMessages={llm.setLlmMessages}
+                    llmInput={llm.llmInput}
+                    setLlmInput={llm.setLlmInput}
+                    llmModel={llm.llmModel}
+                    setLlmModel={llm.setLlmModel}
+                    llmLoading={llm.llmLoading}
+                    llmScrollRef={llm.llmScrollRef}
+                    onSendLlmMessage={llm.sendLlmMessage}
+                    fieldCls={fieldCls}
+                    labelCls={labelCls}
+                  />
+                )}
+                {(textSubPage === 'translate' || textSubPage === 'code_assist') && (
+                  <MiscPanel
+                    miscSubPage={misc.miscSubPage}
+                    setMiscSubPage={misc.setMiscSubPage}
+                    apiKey={apiKey}
+                    setApiKey={setApiKey}
+                    cloudEndpoint={cloudEndpoint}
+                    setCloudEndpoint={setCloudEndpoint}
+                    status={status}
+                    imageGenProvider={misc.imageGenProvider}
+                    onImageGenProviderChange={misc.handleImageGenProviderChange}
+                    imageGenPrompt={misc.imageGenPrompt}
+                    setImageGenPrompt={misc.setImageGenPrompt}
+                    imageGenModel={misc.imageGenModel}
+                    setImageGenModel={misc.setImageGenModel}
+                    imageGenSize={misc.imageGenSize}
+                    setImageGenSize={misc.setImageGenSize}
+                    onRunImageGen={misc.runImageGen}
+                    imageUnderstandProvider={misc.imageUnderstandProvider}
+                    onImageUnderstandProviderChange={misc.handleImageUnderstandProviderChange}
+                    imageUnderstandFile={misc.imageUnderstandFile}
+                    setImageUnderstandFile={misc.setImageUnderstandFile}
+                    imageUnderstandPrompt={misc.imageUnderstandPrompt}
+                    setImageUnderstandPrompt={misc.setImageUnderstandPrompt}
+                    imageUnderstandModel={misc.imageUnderstandModel}
+                    setImageUnderstandModel={misc.setImageUnderstandModel}
+                    onRunImageUnderstand={misc.runImageUnderstand}
+                    translateProvider={misc.translateProvider}
+                    setTranslateProvider={misc.setTranslateProvider}
+                    translateText={misc.translateText}
+                    setTranslateText={misc.setTranslateText}
+                    translateTarget={misc.translateTarget}
+                    setTranslateTarget={misc.setTranslateTarget}
+                    translateSource={misc.translateSource}
+                    setTranslateSource={misc.setTranslateSource}
+                    translateModel={misc.translateModel}
+                    setTranslateModel={misc.setTranslateModel}
+                    onRunTranslate={misc.runTranslate}
+                    codeProvider={misc.codeProvider}
+                    setCodeProvider={misc.setCodeProvider}
+                    codeModel={misc.codeModel}
+                    setCodeModel={misc.setCodeModel}
+                    codeMessages={misc.codeMessages}
+                    setCodeMessages={misc.setCodeMessages}
+                    codeInput={misc.codeInput}
+                    setCodeInput={misc.setCodeInput}
+                    codeLoading={misc.codeLoading}
+                    codeLang={misc.codeLang}
+                    setCodeLang={misc.setCodeLang}
+                    onSendCodeMessage={misc.sendCodeMessage}
+                    imgGenProvider={imageExt.imgGenProvider}
+                    onImgGenProviderChange={imageExt.handleImgGenProviderChange}
+                    imgGenPrompt={imageExt.imgGenPrompt}
+                    setImgGenPrompt={imageExt.setImgGenPrompt}
+                    imgGenModel={imageExt.imgGenModel}
+                    setImgGenModel={imageExt.setImgGenModel}
+                    imgGenSize={imageExt.imgGenSize}
+                    setImgGenSize={imageExt.setImgGenSize}
+                    imgGenComfyUrl={imageExt.imgGenComfyUrl}
+                    setImgGenComfyUrl={imageExt.setImgGenComfyUrl}
+                    onRunImgGen={imageExt.runImgGen}
+                    imgI2iProvider={imageExt.imgI2iProvider}
+                    onImgI2iProviderChange={imageExt.handleImgI2iProviderChange}
+                    imgI2iSourceFile={imageExt.imgI2iSourceFile}
+                    setImgI2iSourceFile={imageExt.setImgI2iSourceFile}
+                    imgI2iRefFile={imageExt.imgI2iRefFile}
+                    setImgI2iRefFile={imageExt.setImgI2iRefFile}
+                    imgI2iPrompt={imageExt.imgI2iPrompt}
+                    setImgI2iPrompt={imageExt.setImgI2iPrompt}
+                    imgI2iModel={imageExt.imgI2iModel}
+                    setImgI2iModel={imageExt.setImgI2iModel}
+                    imgI2iStrength={imageExt.imgI2iStrength}
+                    setImgI2iStrength={imageExt.setImgI2iStrength}
+                    imgI2iComfyUrl={imageExt.imgI2iComfyUrl}
+                    setImgI2iComfyUrl={imageExt.setImgI2iComfyUrl}
+                    onRunImgI2i={imageExt.runImgI2i}
+                    videoGenProvider={imageExt.videoGenProvider}
+                    onVideoGenProviderChange={imageExt.handleVideoGenProviderChange}
+                    videoGenPrompt={imageExt.videoGenPrompt}
+                    setVideoGenPrompt={imageExt.setVideoGenPrompt}
+                    videoGenModel={imageExt.videoGenModel}
+                    setVideoGenModel={imageExt.setVideoGenModel}
+                    videoGenDuration={imageExt.videoGenDuration}
+                    setVideoGenDuration={imageExt.setVideoGenDuration}
+                    videoGenMode={imageExt.videoGenMode}
+                    setVideoGenMode={imageExt.setVideoGenMode}
+                    videoGenImageFile={imageExt.videoGenImageFile}
+                    setVideoGenImageFile={imageExt.setVideoGenImageFile}
+                    onRunVideoGen={imageExt.runVideoGen}
+                    ocrProvider={imageExt.ocrProvider}
+                    onOcrProviderChange={imageExt.handleOcrProviderChange}
+                    ocrFile={imageExt.ocrFile}
+                    setOcrFile={imageExt.setOcrFile}
+                    ocrModel={imageExt.ocrModel}
+                    setOcrModel={imageExt.setOcrModel}
+                    ocrLocalUrl={imageExt.ocrLocalUrl}
+                    setOcrLocalUrl={imageExt.setOcrLocalUrl}
+                    onRunOcr={imageExt.runOcr}
+                    lipsyncProvider={imageExt.lipsyncProvider}
+                    onLipsyncProviderChange={imageExt.handleLipsyncProviderChange}
+                    lipsyncVideoFile={imageExt.lipsyncVideoFile}
+                    setLipsyncVideoFile={imageExt.setLipsyncVideoFile}
+                    lipsyncAudioFile={imageExt.lipsyncAudioFile}
+                    setLipsyncAudioFile={imageExt.setLipsyncAudioFile}
+                    lipsyncModel={imageExt.lipsyncModel}
+                    setLipsyncModel={imageExt.setLipsyncModel}
+                    lipsyncLocalUrl={imageExt.lipsyncLocalUrl}
+                    setLipsyncLocalUrl={imageExt.setLipsyncLocalUrl}
+                    onRunLipsync={imageExt.runLipsync}
+                    fieldCls={fieldCls}
+                    fileCls={fileCls}
+                    labelCls={labelCls}
+                    btnSec={btnSec}
+                    allowedSubPages={[textSubPage as MiscSubPage]}
+                  />
+                )}
+              </div>
+            )}
+
             {/* ── 处理中进度条 ── */}
             {!showHome && !showTasks && !showSystem && status === 'processing' && (
               <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 px-5 py-4 space-y-3">
@@ -1112,9 +1541,9 @@ export default function Home() {
         </div>{/* p-4 */}
       </div>{/* flex-1 main scroll */}
 
-      {/* 系统工具 — 独立全高容器，不在滚动区内，侧边栏/标题才能真正固定 */}
+      {/* 设置 — 独立全高容器，不在滚动区内 */}
       {showSystem && (
-        <div className="flex-1 overflow-hidden min-w-0 flex flex-col bg-slate-50 dark:bg-slate-950">
+        <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 dark:bg-slate-950">
           <SystemPanel
             backendBaseUrl={backend.backendBaseUrl}
             isElectron={isElectron}

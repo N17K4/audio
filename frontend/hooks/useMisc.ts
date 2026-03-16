@@ -11,7 +11,6 @@ interface UseMiscProps {
   setError: (e: string) => void;
   addInstantJobResult: (type: string, label: string, provider: string, isLocal: boolean, result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string }) => void;
   fetchJobs: () => Promise<void>;
-  onNavigateTasks: () => void;
 }
 
 export function useMisc({
@@ -23,7 +22,6 @@ export function useMisc({
   setError,
   addInstantJobResult,
   fetchJobs,
-  onNavigateTasks,
 }: UseMiscProps) {
   const [miscSubPage, setMiscSubPage] = useState<MiscSubPage>('img_gen');
 
@@ -93,7 +91,6 @@ export function useMisc({
       // Returns job_id for queued job — fetch once to seed polling
       if (data.job_id) {
         await fetchJobs();
-        onNavigateTasks();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '图像生成失败');
@@ -123,7 +120,6 @@ export function useMisc({
       addInstantJobResult('image_understand', label, imageUnderstandProvider, false, {
         status: 'completed', result_text: data.text || '',
       });
-      onNavigateTasks();
     } catch (e) {
       setError(e instanceof Error ? e.message : '图像理解失败');
     } finally {
@@ -190,7 +186,6 @@ export function useMisc({
       addInstantJobResult('translate', label, translateProvider, false, {
         status: 'completed', result_text: data.text || '',
       });
-      onNavigateTasks();
     } catch (e) {
       setError(e instanceof Error ? e.message : '翻译失败');
     } finally {
