@@ -386,9 +386,10 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
       }
       return;
     }
-    // 阶段2：下载 HuggingFace 模型
+    // 阶段2：下载 HuggingFace 模型 + FaceFusion pip 依赖
     const dlArgs = ['--json-progress'];
     if (hfEndpoint) dlArgs.push('--hf-endpoint', hfEndpoint);
+    if (pypiMirror) dlArgs.push('--pypi-mirror', pypiMirror);
     downloadProc = spawnScript(downloadScript, dlArgs, (code2) => {
       downloadProc = null;
       if (setupGuideWin && !setupGuideWin.isDestroyed()) {

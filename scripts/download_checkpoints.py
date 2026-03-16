@@ -643,7 +643,7 @@ _FACEFUSION_RM = [
 ]
 
 
-def setup_facefusion_engine(project_root: Path, resources_root: Path) -> bool:
+def setup_facefusion_engine(project_root: Path, resources_root: Path, pypi_mirror: str = "") -> bool:
     """克隆 FaceFusion 3.5.4 并精简到运行时所需文件，再运行 install.py。
 
     与 setup-engines.py 里 fish_speech / seed_vc 的模式一致：
@@ -715,8 +715,11 @@ def setup_facefusion_engine(project_root: Path, resources_root: Path) -> bool:
     print(f"  [facefusion] 安装 {len(packages)} 个依赖包（可能需要 3-10 分钟）...")
     emit("log", message=f"  正在安装 FaceFusion 依赖（{len(packages)} 个包，可能需要 3-10 分钟）…")
 
+    pip_cmd = [py, "-m", "pip", "install", "--quiet"] + packages
+    if pypi_mirror:
+        pip_cmd += ["--index-url", pypi_mirror, "--extra-index-url", "https://pypi.org/simple"]
     proc = subprocess.Popen(
-        [py, "-m", "pip", "install", "--quiet"] + packages,
+        pip_cmd,
         cwd=str(engine_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -943,6 +946,8 @@ def main() -> int:
                         help="以 JSON Lines 格式输出进度（供 Electron IPC 使用）")
     parser.add_argument("--hf-endpoint", default="",
                         help="HuggingFace 镜像端点（如 https://hf-mirror.com）")
+    parser.add_argument("--pypi-mirror", default="", dest="pypi_mirror",
+                        help="PyPI 镜像地址（如 https://pypi.tuna.tsinghua.edu.cn/simple）")
     args = parser.parse_args()
     _JSON_MODE = args.json_progress
 
@@ -1002,7 +1007,7 @@ def main() -> int:
 
         # FaceFusion：先 clone 引擎源码，再下载模型（clone 会删除 engine/ 目录，必须先 clone）
         if engine_name == "facefusion" and not args.check_only:
-            ok_ff = setup_facefusion_engine(project_root, resources_root)
+            ok_ff = setup_facefusion_engine(project_root, resources_root, pypi_mirror=args.pypi_mirror)
             if not ok_ff:
                 all_ready = False
 

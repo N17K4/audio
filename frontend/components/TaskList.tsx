@@ -44,7 +44,7 @@ function crc32(data: Uint8Array): number {
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
-function createTestZip(filename: string, data: Uint8Array): Uint8Array {
+function createTestZip(filename: string, data: Uint8Array): Uint8Array<ArrayBuffer> {
   const fn = new TextEncoder().encode(filename);
   const fnLen = fn.length, dataLen = data.length, crc = crc32(data);
   const now = new Date();

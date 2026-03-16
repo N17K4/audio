@@ -268,7 +268,10 @@ print('\\n'.join(reqs))
   // 2. 安装引擎 pip 包 + FFmpeg（从 manifest.json pip_packages 安装）
   console.log("\n[setup-runtime] 2/2 安装引擎 pip 包 + FFmpeg...");
   const setupEnginesScript = path.join(ROOT, "scripts", "setup-engines.py");
-  run(`"${pyExe}" "${setupEnginesScript}"`, { env: patchedEnv });
-
-  console.log("\n[setup-runtime] 全部完成 ✓");
+  try {
+    run(`"${pyExe}" "${setupEnginesScript}"`, { env: patchedEnv });
+    console.log("\n[setup-runtime] 全部完成 ✓");
+  } catch (e) {
+    console.warn("\n[setup-runtime] ⚠ 部分引擎依赖安装失败（见上方日志），构建继续。");
+  }
 })();
