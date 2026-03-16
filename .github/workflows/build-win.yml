@@ -70,7 +70,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           if (-not $tag -or $tag -eq "") { $tag = "dev" }
-          $zipName = "AI-Tool-win-$tag.zip"
+          $zipName = "AI-Workshop-win-$tag.zip"
           $distDir = Get-ChildItem -Path "dist" -Directory | Where-Object { $_.Name -like "*unpacked*" } | Select-Object -First 1 -ExpandProperty FullName
           if (-not $distDir) { Write-Error "dist 下未找到 *unpacked 目录"; exit 1 }
           Write-Host "压缩目录：$distDir"

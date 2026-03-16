@@ -469,7 +469,7 @@
     },
     "flux": {
       "version": "1.0-schnell-Q4_K_M",
-      "ui": { "label": "Stable Diffusion Flux", "size_display": "~24 GB", "default_install": false },
+      "ui": { "label": "Flux.1-Schnell", "size_display": "~16.5 GB", "default_install": false },
       "code_dir": "runtime/flux",
       "checkpoint_dir": "checkpoints/flux",
       "pip_packages": [
@@ -513,7 +513,7 @@
     },
     "sd": {
       "version": "sd-turbo",
-      "ui": { "label": "Stable Diffusion Turbo", "size_display": "~2.3 GB", "default_install": false },
+      "ui": { "label": "Stable Diffusion Turbo", "size_display": "~24 GB", "default_install": false },
       "description": "Stable Diffusion Turbo 本地图像生成（~2.3 GB，无需 HF 账号，1-4 步，512px）",
       "code_dir": "runtime/sd",
       "checkpoint_dir": "checkpoints/sd",

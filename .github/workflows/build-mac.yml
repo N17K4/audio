@@ -55,9 +55,9 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           [ -z "$TAG" ] && TAG="dev"
-          ZIP_NAME="AI-Tool-mac-${TAG}.zip"
+          ZIP_NAME="AI-Workshop-mac-${TAG}.zip"
           ditto -c -k --sequesterRsrc --keepParent \
-            "dist/mac-arm64/AI Tool.app" "$ZIP_NAME"
+            "dist/mac-arm64/AI Workshop.app" "$ZIP_NAME"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           du -sh "$ZIP_NAME"
 
@@ -77,7 +77,7 @@ jobs:
 
             **首次打开提示"已损坏"时**，在终端执行：
             ```bash
-            xattr -cr "/Applications/AI Tool.app"
+            xattr -cr "/Applications/AI Workshop.app"
             ```
 
       # ── 10b. 上传为 Artifact（始终执行，作为备份）──────────────────────────
