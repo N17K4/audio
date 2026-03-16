@@ -163,8 +163,9 @@ models/
 ## 依赖安装时机（强制规范）
 
 **所有 Python 依赖的安装，必须且只能在以下阶段触发：**
-- `pnpm run setup` / `pnpm run setup:backend`
-- `pnpm run checkpoints`（`scripts/download_checkpoints.py`）
+- `pnpm run setup` / `pnpm run setup:backend`（轻量依赖 + 引擎源码）
+- `pnpm run setup:ml`（`scripts/install-runtime-deps.py`，torch 等重型 ML 包，装入嵌入式 Python）
+- `pnpm run checkpoints`（`scripts/download_checkpoints.py`，模型文件下载）
 - `pnpm run dist`（打包阶段）
 
 **严禁在用户运行时（runtime）动态安装任何依赖。** 具体禁止：
@@ -173,9 +174,10 @@ models/
 - 在任何被用户触发的代码路径中调用 `subprocess.run(["pip", "install", ...])`
 
 如果引擎缺少某个 Python 包，正确做法是：
-1. 在 `wrappers/manifest.json` 对应引擎的 `pip_packages` 字段中声明
-2. `download_checkpoints.py` 会在 checkpoints 阶段统一安装到嵌入式 Python
-3. 引擎脚本只负责 import，缺包时打印错误信息并以非零退出码退出
+1. 在 `wrappers/manifest.json` 对应引擎的 `pip_packages`（轻量）或 `runtime_pip_packages`（torch 等重型）字段中声明
+2. 轻量依赖：`setup-engines.py` 在 CI/setup 阶段装入嵌入式 Python
+3. 重型依赖：`install-runtime-deps.py` 在 `pnpm run setup:ml`（开发）或用户首次启动引导（生产）时安装
+4. 引擎脚本只负责 import，缺包时打印错误信息并以非零退出码退出
 
 ## 分发架构与下载分工
 
@@ -184,9 +186,10 @@ models/
 | 阶段 | 脚本调用 | 装什么 | 存到哪 |
 |---|---|---|---|
 | **CI 构建** | `setup-engines.py`（无参数） | 引擎源码（HF zip / git clone）+ `pip_packages`（轻量依赖） | 嵌入式 Python，打进安装包 |
-| **用户首次启动 Phase 1** | `setup-engines.py --runtime --target userData/` | `runtime_pip_packages`（torch、torchaudio 等重型 ML 包） | `userData/python-packages/`，不打包 |
+| **本地开发（ML 包）** | `pnpm run setup:ml` → `install-runtime-deps.py` | `runtime_pip_packages`（torch、torchaudio 等重型 ML 包） | 嵌入式 Python |
+| **用户首次启动 Phase 1** | `install-runtime-deps.py --target userData/` | 同上 | `userData/python-packages/`，不打包 |
 | **用户首次启动 Phase 2** | `download_checkpoints.py`（无 `--engine`，全量） | 所有 `default_install: true` 引擎的 checkpoint + 内置音色 | `checkpoints/` + `models/voices/` |
-| **本地开发** | `pnpm run checkpoints` | 同 Phase 2（facefusion 还额外装 pip 依赖） | 同上 |
+| **本地开发（模型）** | `pnpm run checkpoints` | 同 Phase 2 | 同上 |
 
 ### pip_packages vs runtime_pip_packages
 
@@ -231,7 +234,7 @@ wrappers/
 └── wan/                       # inference.py
 ```
 
-`wrappers/manifest.json` 包含 `voices` 引擎定义，`download_checkpoints.py --engine voices` 从 HF `N17K4/ai-workshop-assets` dataset 下载内置音色到 `models/voices/`。
+`wrappers/manifest.json` 包含 `voices` 引擎定义，内置音色通过 `download_checkpoints.py`（全量）从 HF `N17K4/ai-workshop-assets` dataset 下载到 `models/voices/`，不打包进安装包。
 
 ### runtime/ 结构（整个目录 gitignored）
 ```
@@ -306,23 +309,6 @@ $PY $RVC_INF --input /tmp/chain1.wav --output /tmp/chain5.wav --model $RVC_MODEL
 $PY $WHISPER_INF --input /tmp/chain1.wav --output /tmp/chain6.txt --model base
 cat /tmp/chain6.txt
 ```
-
- ┌────────────────────┬──────┬──────────────────────────────────────────────────┐
-  │        链路        │ 状态 │                       说明                       │
-  ├────────────────────┼──────┼──────────────────────────────────────────────────┤
-  │ 1. Fish Speech TTS │ ✅   │ 首次 ~40s（含模型加载），后续 ~10s（worker复用） │
-  ├────────────────────┼──────┼──────────────────────────────────────────────────┤
-  │ 2. Seed-VC 基础    │ ✅   │ ~20s                                             │
-  ├────────────────────┼──────┼──────────────────────────────────────────────────┤
-  │ 3. Seed-VC F0      │ ✅   │ ~15s                                             │
-  ├────────────────────┼──────┼──────────────────────────────────────────────────┤
-  │ 4. RVC 基础        │ ✅   │ ~30s                                             │
-  ├────────────────────┼──────┼──────────────────────────────────────────────────┤
-  │ 5. RVC+Index       │ ✅   │ ~30s（macOS ARM 自动跳过 FAISS）                 │
-  ├────────────────────┼──────┼──────────────────────────────────────────────────┤
-  │ 6. Whisper STT     │ ✅   │ ~5s                                              │
-  └────────────────────┴──────┴──────────────────────────────────────────────────┘
-
 
 注意：
 - fish_speech worker 持久化运行（首次启动慢，后续请求共享已加载模型）
