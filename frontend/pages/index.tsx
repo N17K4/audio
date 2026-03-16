@@ -187,7 +187,7 @@ export default function Home() {
   const [vcInputMode, setVcInputMode] = useState<VcInputMode>('upload');
   const [vcFile, setVcFile] = useState<File | null>(null);
   const [vcRefAudio, setVcRefAudio] = useState<File | null>(null);
-  const [seedVcDiffusionSteps, setSeedVcDiffusionSteps] = useState(10);
+  const [seedVcDiffusionSteps, setSeedVcDiffusionSteps] = useState(8);
   const [seedVcPitchShift, setSeedVcPitchShift] = useState(0);
   const [seedVcF0Condition, setSeedVcF0Condition] = useState(false);
   const [seedVcEnablePostprocess, setSeedVcEnablePostprocess] = useState(true);
@@ -393,6 +393,23 @@ export default function Home() {
     }
   }
 
+  // ─── 重命名音色 ───────────────────────────────────────────────────────────
+  async function renameVoice(voiceId: string, newName: string) {
+    try {
+      const fd = new FormData();
+      fd.append('voice_name', newName);
+      const res = await fetch(`${backend.backendBaseUrl}/voices/${voiceId}`, { method: 'PATCH', body: fd });
+      if (!res.ok) {
+        let data: any = null;
+        try { data = await res.json(); } catch { /**/ }
+        throw new Error(`重命名失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
+      }
+      await backend.fetchVoices();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重命名音色失败');
+    }
+  }
+
   // ─── 删除音色 ─────────────────────────────────────────────────────────────
   async function deleteVoice(voiceId: string) {
     const voice = backend.voices.find(v => v.voice_id === voiceId);
@@ -500,7 +517,7 @@ export default function Home() {
           <div className="mx-auto w-full max-w-3xl space-y-5">
 
             {/* 首页 */}
-            {showHome && <HomePanel onNavigate={navigate} />}
+            {showHome && <HomePanel onNavigate={navigate} jobs={jobs} backendBaseUrl={backend.backendBaseUrl} />}
 
             {/* 任务列表 */}
             {showTasks && (
@@ -651,6 +668,7 @@ export default function Home() {
                 setNewVoiceRef={setNewVoiceRef}
                 onCreateVoice={createVoice}
                 onDeleteVoice={deleteVoice}
+                onRenameVoice={renameVoice}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}

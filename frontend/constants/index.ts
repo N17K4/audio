@@ -28,9 +28,9 @@ export const TASK_PHASES: Record<string, string[]> = {
 };
 
 export const DEFAULT_CAPS: CapabilityMap = {
-  tts: ['fish_speech', 'openai', 'gemini', 'elevenlabs', 'cartesia', 'dashscope', 'minimax_tts'],
+  tts: ['fish_speech', 'gemini', 'openai', 'elevenlabs', 'cartesia', 'dashscope', 'minimax_tts'],
   vc: ['seed_vc', 'local_rvc', 'elevenlabs'],
-  asr: ['faster_whisper', 'whisper', 'openai', 'gemini', 'groq', 'deepgram', 'dashscope'],
+  asr: ['faster_whisper', 'whisper', 'gemini', 'openai', 'groq', 'deepgram', 'dashscope'],
   llm: ['gemini', 'openai', 'claude', 'groq', 'deepseek', 'mistral', 'xai', 'ollama', 'github',
         'qwen', 'doubao', 'hunyuan', 'glm', 'moonshot', 'spark', 'minimax', 'baichuan'],
   media: [],
@@ -212,7 +212,7 @@ export const TRANSLATE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'g
   'qwen', 'doubao', 'hunyuan', 'glm', 'moonshot', 'spark', 'minimax', 'baichuan'];
 export const TRANSLATE_LANGUAGES = ['中文', '英文', '日文', '韩文', '法文', '德文', '西班牙文', '俄文', '阿拉伯文', '葡萄牙文'];
 
-export const LOCAL_PROVIDERS = new Set(['faster_whisper', 'whisper', 'local_rvc', 'seed_vc', 'fish_speech', 'comfyui', 'flux', 'facefusion', 'wan_local', 'got_ocr', 'liveportrait', 'sadtalker']);
+export const LOCAL_PROVIDERS = new Set(['faster_whisper', 'whisper', 'local_rvc', 'seed_vc', 'fish_speech', 'comfyui', 'flux', 'sd_local', 'facefusion', 'wan_local', 'got_ocr', 'liveportrait', 'sadtalker']);
 // 前端 provider 名 → manifest engine key
 export const PROVIDER_TO_ENGINE: Record<string, string> = {
   fish_speech: 'fish_speech',
@@ -258,17 +258,19 @@ export const TASK_ICON_CFG: Record<TaskType, { abbr: string; bg: string; text: s
 };
 
 // ─── 图像生成（独立）提供商 ──────────────────────────────────────────────────
-// 推荐顺序：Flux 本地 GGUF > ComfyUI 本地 > 主流云端
-export const IMG_GEN_PROVIDERS = ['flux', 'comfyui', 'openai', 'gemini', 'stability', 'dashscope'];
+// 推荐顺序：SD-Turbo 本地 > ComfyUI 本地 > 主流云端（Flux 已禁用）
+export const IMG_GEN_PROVIDERS = ['sd_local', 'flux', 'comfyui', 'openai', 'gemini', 'stability', 'dashscope'];
 export const IMG_GEN_PROVIDER_LABELS: Record<string, string> = {
+  sd_local:  'Stable Diffusion（本地）',
   flux:      'Flux.1 GGUF（本地 · 无需 API Key）',
   comfyui:   'ComfyUI（本地 · 需本地服务）',
   openai:    'DALL-E · OpenAI',
   gemini:    'Imagen · Google（有免费额度）',
-  stability: 'Stable Diffusion · Stability AI',
+  stability: 'SD3 · Stability AI（云端）',
   dashscope: '万象 · 阿里云（DashScope）',
 };
 export const IMG_GEN_MODELS: Record<string, string[]> = {
+  sd_local:  ['sd-turbo'],
   flux:      ['flux1-schnell-Q4_K_S'],
   comfyui:   [],
   openai:    ['dall-e-3', 'dall-e-2'],
@@ -277,6 +279,7 @@ export const IMG_GEN_MODELS: Record<string, string[]> = {
   dashscope: ['wanx2.1-t2i-turbo', 'wanx2.1-t2i-plus', 'wanx-v1'],
 };
 export const IMG_GEN_SIZES: Record<string, string[]> = {
+  sd_local:  ['512x512', '768x512', '512x768', '640x640'],
   flux:      ['1024x1024', '1360x768', '768x1360', '1152x896', '896x1152', '512x512'],
   comfyui:   ['1024x1024', '768x768', '512x512', '1152x896', '896x1152'],
   openai:    ['1024x1024', '1024x1792', '1792x1024'],
@@ -303,7 +306,7 @@ export const IMG_I2I_MODELS: Record<string, string[]> = {
 
 // ─── 视频生成提供商（本地优先 + 云端）──────────────────────────────────────
 // 推荐：Wan 2.1 本地 1.3B > 可灵 > RunwayML
-export const VIDEO_GEN_PROVIDERS = ['wan_local', 'kling', 'wan_video', 'runway', 'pika', 'sora'];
+export const VIDEO_GEN_PROVIDERS = ['kling', 'wan_local', 'wan_video', 'runway', 'pika', 'sora'];
 export const VIDEO_GEN_PROVIDER_LABELS: Record<string, string> = {
   wan_local: 'Wan 2.1（本地 · 无需 API Key）',
   kling:     '可灵 · 快手',
@@ -314,7 +317,7 @@ export const VIDEO_GEN_PROVIDER_LABELS: Record<string, string> = {
 };
 export const VIDEO_GEN_MODELS: Record<string, string[]> = {
   wan_local: ['Wan2.1-T2V-1.3B', 'Wan2.1-I2V-1.3B'],
-  kling:     ['kling-v2', 'kling-v1-5', 'kling-v1'],
+  kling:     ['kling-v1', 'kling-v1-5', 'kling-v2'],
   wan_video: ['wan2.1-t2v-plus', 'wan2.1-t2v-turbo', 'wan2.1-i2v-plus', 'wan2.1-i2v-turbo'],
   runway:    ['gen3a_turbo', 'gen-3-alpha'],
   pika:      ['pika-2.2', 'pika-2.0'],

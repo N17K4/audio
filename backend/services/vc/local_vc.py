@@ -222,14 +222,10 @@ def run_seed_vc_cmd(
         raise HTTPException(status_code=500, detail=f"Seed-VC 超时（1800s），请检查日志。stderr={stderr[:500]}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Seed-VC command failed: {exc}") from exc
-    # 不论成功失败，均输出 stderr（内含 worker 启动/推理进度日志）
-    if completed.stderr and completed.stderr.strip():
-        for line in completed.stderr.strip().splitlines()[-50:]:
-            logger.info("[Seed-VC] %s", line)
     if completed.returncode != 0:
-        stdout = (completed.stdout or "").strip()[:5000]
-        stderr = (completed.stderr or "").strip()[:5000]
-        logger.error("[Seed-VC] 失败 (code=%s)\nstdout: %s", completed.returncode, stdout)
+        stdout = (completed.stdout or "").strip()
+        stderr = (completed.stderr or "").strip()
+        logger.error("[Seed-VC] 失败 (code=%s)\nstderr (last 8000):\n%s\nstdout: %s", completed.returncode, stderr[-8000:], stdout[-2000:])
         raise HTTPException(status_code=500, detail=f"Seed-VC failed (code={completed.returncode}): {stderr}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
         logger.error("[Seed-VC] 完成但输出文件缺失: %s", output_path)

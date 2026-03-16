@@ -42,6 +42,20 @@ export default function VideoGenPanel({
   const busy = status === 'processing';
   const isLocal = LOCAL_PROVIDERS.has(videoGenProvider);
   const isUnsupported = UNSUPPORTED_PROVIDERS.has(videoGenProvider);
+
+  function handleRun() {
+    if (isLocal) {
+      const ok = window.confirm(
+        '⚠️ 本地视频生成耗时较长\n\n' +
+        '· NVIDIA GPU：约 2–5 分钟\n' +
+        '· Apple Silicon / CPU：可能超过 30 分钟\n\n' +
+        '任务提交后可在「任务列表」查看进度，期间可继续使用其他功能。\n\n' +
+        '确认提交？'
+      );
+      if (!ok) return;
+    }
+    onRun();
+  }
   const models = VIDEO_GEN_MODELS[videoGenProvider] || [];
   const durations = VIDEO_GEN_DURATIONS[videoGenProvider] || [5];
   const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_local' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
@@ -64,7 +78,10 @@ export default function VideoGenPanel({
         <div>
           <label className={labelCls}>API Key</label>
           <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-            placeholder="sk-... / Bearer ..." />
+            placeholder={videoGenProvider === 'kling' ? '粘贴官方格式：Access Key: xxx Secret Key: xxx' : 'API Key'} />
+          {videoGenProvider === 'kling' && (
+            <p className="text-xs text-slate-400 mt-1">直接粘贴官方控制台复制的内容，例如：<code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs">Access Key: AR9M Secret Key: M8aT</code></p>
+          )}
         </div>
       )}
 
@@ -140,7 +157,7 @@ export default function VideoGenPanel({
       <button
         className={btnPrimary}
         disabled={busy || isUnsupported || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
-        onClick={onRun}>
+        onClick={handleRun}>
         {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成视频'}
       </button>
     </div>

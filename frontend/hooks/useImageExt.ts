@@ -47,9 +47,9 @@ export function useImageExt({
   const [imgI2iComfyUrl, setImgI2iComfyUrl] = useState('http://127.0.0.1:8188');
 
   // ── 视频生成状态 ──
-  const [videoGenProvider, setVideoGenProvider] = useState('wan_local');
+  const [videoGenProvider, setVideoGenProvider] = useState('kling');
   const [videoGenPrompt, setVideoGenPrompt] = useState('');
-  const [videoGenModel, setVideoGenModel] = useState('Wan2.1-T2V-1.3B');
+  const [videoGenModel, setVideoGenModel] = useState('');
   const [videoGenDuration, setVideoGenDuration] = useState(5);
   const [videoGenImageFile, setVideoGenImageFile] = useState<File | null>(null);
   const [videoGenMode, setVideoGenMode] = useState<'t2v' | 'i2v'>('t2v');

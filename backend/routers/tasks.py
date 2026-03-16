@@ -45,6 +45,7 @@ from services.image_gen.stability_image_gen import run_stability_image_gen
 from services.image_gen.dashscope_image_gen import run_dashscope_image_gen
 from services.image_gen.comfyui_image_gen import run_comfyui_image_gen
 from services.image_gen.flux_image_gen import run_flux_image_gen
+from services.image_gen.sd_image_gen import run_sd_image_gen
 from services.image_i2i.facefusion_i2i import run_facefusion_i2i
 from services.image_i2i.comfyui_i2i import run_comfyui_i2i
 from services.video_gen.kling_video_gen import run_kling_video_gen
@@ -472,7 +473,7 @@ async def task_media_convert(
         else:
             raise HTTPException(status_code=400, detail=f"不支持的 action: {action}")
 
-        logger.info("[media-convert] action=%s fmt=%s cmd=%s", act, fmt, " ".join(cmd))
+        logger.debug("[media-convert] action=%s fmt=%s cmd=%s", act, fmt, " ".join(cmd))
         completed = await asyncio.to_thread(
             subprocess.run, cmd, capture_output=True, text=True, timeout=300
         )
@@ -554,7 +555,7 @@ async def task_doc_convert(
             fmt = output_format.strip().lower() or "docx"
             output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.{fmt}"
             cmd = [pandoc, "-o", str(output_path), str(input_path)]
-            logger.info("[doc-convert] pandoc cmd: %s", " ".join(cmd))
+            logger.debug("[doc-convert] pandoc cmd: %s", " ".join(cmd))
             completed = await asyncio.to_thread(
                 subprocess.run, cmd, capture_output=True, text=True, timeout=120
             )
@@ -702,7 +703,7 @@ async def task_subtitle(
             if not ffmpeg:
                 raise HTTPException(status_code=500, detail="FFmpeg 未找到，无法提取字幕")
             cmd = [ffmpeg, "-hide_banner", "-y", "-i", str(input_path), "-map", "0:s:0", str(output_path)]
-            logger.info("[subtitle] extract cmd: %s", " ".join(cmd))
+            logger.debug("[subtitle] extract cmd: %s", " ".join(cmd))
             completed = await asyncio.to_thread(
                 subprocess.run, cmd, capture_output=True, text=True, timeout=120
             )
@@ -895,7 +896,7 @@ async def task_image_gen(
         raise HTTPException(status_code=400, detail="prompt is required")
     p = provider.strip().lower()
     label = (prompt[:30] + "…") if len(prompt) > 30 else prompt
-    is_local = p in ("comfyui", "flux")
+    is_local = p in ("comfyui", "flux", "sd_local")
     job = _make_job("image_gen", f"图像生成 · {label}", p, is_local=is_local)
     job_id = job["id"]
 
@@ -915,6 +916,9 @@ async def task_image_gen(
             # 解析尺寸（支持 "1024x1024" 或 "1:1" 格式）
             w, h = _parse_size_for_flux(size or aspect_ratio)
             return await run_flux_image_gen(prompt=prompt, model=model, width=w, height=h)
+        if p == "sd_local":
+            w, h = _parse_size_for_flux(size or aspect_ratio)
+            return await run_sd_image_gen(prompt=prompt, model=model, width=w, height=h)
         raise HTTPException(status_code=400, detail=f"Unsupported image gen provider: {provider}")
 
     task = asyncio.create_task(_run_tts_job(job_id, _do))
@@ -962,15 +966,30 @@ async def task_image_i2i(
     if ref_tmp:
         job["_ref_tmp"] = str(ref_tmp)
 
-    output_path = DOWNLOAD_DIR / f"{str(uuid.uuid4())[:8]}_i2i_out.png"
-
     async def _do():
         try:
             if p == "facefusion":
                 target = str(ref_tmp) if ref_tmp else str(source_tmp)
+                # 预处理：用 Pillow 规范化图片（处理 EXIF 旋转、CMYK 色彩空间等），
+                # 并统一输出为标准 JPEG，避免 FaceFusion ffmpeg copy_image 失败
+                def _normalize_image(path: str) -> str:
+                    try:
+                        from PIL import Image as _Img, ImageOps as _ImgOps
+                        img = _Img.open(path)
+                        img = _ImgOps.exif_transpose(img)
+                        norm_path = path + "_norm.jpg"
+                        img.convert("RGB").save(norm_path, "JPEG", quality=95)
+                        return norm_path
+                    except Exception:
+                        return path
+                norm_source = await asyncio.to_thread(_normalize_image, str(source_tmp))
+                norm_target = await asyncio.to_thread(_normalize_image, target)
+                # FaceFusion 要求 --target-path 与 --output-path 扩展名完全一致
+                target_ext = Path(norm_target).suffix or ".jpg"
+                output_path = DOWNLOAD_DIR / f"{str(uuid.uuid4())[:8]}_i2i_out{target_ext}"
                 return await run_facefusion_i2i(
-                    source_image_path=str(source_tmp),
-                    target_image_path=target,
+                    source_image_path=norm_source,
+                    target_image_path=norm_target,
                     output_path=str(output_path),
                     model=model,
                 )
@@ -1037,7 +1056,7 @@ async def task_video_gen(
         try:
             if p == "kling":
                 return await run_kling_video_gen(
-                    prompt=prompt, api_key=api_key, model=model or "kling-v2",
+                    prompt=prompt, api_key=api_key, model=model or "kling-v1",
                     duration=duration, mode=mode,
                     image_bytes=image_bytes, image_filename=image_filename,
                 )
@@ -1091,7 +1110,7 @@ async def task_ocr(
     async def _do():
         if p == "got_ocr":
             result = await run_got_ocr(file_content=content, filename=filename, model=model or "GOT-OCR2.0")
-            return {"status": "completed", "result_text": result.get("text", "")}
+            return {"text": result.get("text", "")}
         if p == "openai":
             from services.image_understand.openai_image_understand import run_openai_image_understand
             r = await run_openai_image_understand(

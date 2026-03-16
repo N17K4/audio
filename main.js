@@ -713,57 +713,46 @@ ipcMain.handle('app:getDiskUsage', () => {
         deletable: false,
       }];
     })(),
-    // ── STT：Faster Whisper + Whisper ───────────────────────────────────────
+    // ── STT：Faster Whisper ──────────────────────────────────────────────────
     {
       key: 'faster_whisper_ckpt',
-      label: 'Faster Whisper 模型权重',
+      label: 'Faster Whisper 模型（STT 推荐 · ~150 MB）',
       sub: path.join(ckptRoot, 'faster_whisper'),
       size: measureCkpt('faster_whisper'),
       engineKey: 'faster_whisper',
-      ready: measureCkpt('faster_whisper') > 0,
+      ready: (() => {
+        const modelBin = path.join(ckptRoot, 'faster_whisper', 'base', 'model.bin');
+        try { return fs.statSync(modelBin).size > 50 * 1024 * 1024; } catch { return false; }
+      })(),
       estimatedSizeMb: 150,
       deletable: false,
     },
+    // ── 图像生成：SD-Turbo ─────────────────────────────────────────────────
     {
-      key: 'whisper_engine',
-      label: 'Whisper 引擎',
-      sub: path.join(resRoot, 'runtime/whisper'),
-      size: measureRes('runtime/whisper'),
+      key: 'sd_ckpt',
+      label: 'SD-Turbo（本地图像生成 · ~2.3 GB）',
+      sub: path.join(ckptRoot, 'sd'),
+      size: (() => measureCkpt('sd') + measureHfCache('stabilityai/sd-turbo'))(),
+      engineKey: 'sd',
+      ready: measureHfCache('stabilityai/sd-turbo') > 200 * 1024 * 1024,
+      estimatedSizeMb: 2300,
       deletable: false,
     },
-    {
-      key: 'whisper_ckpt',
-      label: 'Whisper 模型权重',
-      sub: path.join(ckptRoot, 'whisper'),
-      size: measureCkpt('whisper'),
-      deletable: false,
-    },
-    // ── 图像生成：Flux ──────────────────────────────────────────────────────
-    {
-      key: 'flux_ckpt',
-      label: 'Flux.1-Schnell GGUF（图像生成）',
-      sub: path.join(ckptRoot, 'flux'),
-      size: (() => measureCkpt('flux') + measureHfCache('black-forest-labs/FLUX.1-schnell'))(),
-      engineKey: 'flux',
-      ready: (() => {
-        // GGUF 文件存在且 >5 GB（完整文件约 6.5 GB）视为已就绪
-        const gguf = path.join(ckptRoot, 'flux', 'flux1-schnell-Q4_K_S.gguf');
-        try { return fs.statSync(gguf).size > 5 * 1024 * 1024 * 1024; } catch { return false; }
-      })(),
-      estimatedSizeMb: 16667,
-      deletable: false,
-    },
-    // ── 视频生成：Wan ───────────────────────────────────────────────────────
-    {
-      key: 'wan_ckpt',
-      label: 'Wan 2.1（本地视频生成）',
-      sub: path.join(ckptRoot, 'hf_cache', 'models--Wan-AI--Wan2.1-T2V-1.3B-Diffusers'),
-      size: (() => measureHfCache('Wan-AI/Wan2.1-T2V-1.3B-Diffusers'))(),
-      engineKey: 'wan',
-      ready: measureHfCache('Wan-AI/Wan2.1-T2V-1.3B-Diffusers') > 0,
-      estimatedSizeMb: 15600,
-      deletable: false,
-    },
+    // ── 图像生成：Flux（已禁用，保留入口方便手动安装）─────────────────────
+    // {
+    //   key: 'flux_ckpt',
+    //   label: 'Flux.1-Schnell GGUF（图像生成 · ~30 GB · 已替换为 SD-Turbo）',
+    //   sub: path.join(ckptRoot, 'flux'),
+    //   size: (() => measureCkpt('flux') + measureHfCache('black-forest-labs/FLUX.1-schnell'))(),
+    //   engineKey: 'flux',
+    //   ready: (() => {
+    //     const gguf = path.join(ckptRoot, 'flux', 'flux1-schnell-Q4_K_S.gguf');
+    //     try { return fs.statSync(gguf).size > 5 * 1024 * 1024 * 1024; } catch { return false; }
+    //   })(),
+    //   estimatedSizeMb: 16667,
+    //   deletable: false,
+    // },
+    // Wan 2.1 本地视频生成（~15.6 GB，暂不在此列出）
     // ── OCR：GOT-OCR ────────────────────────────────────────────────────────
     {
       key: 'got_ocr_ckpt',
@@ -931,6 +920,9 @@ const ENGINE_EXTRA_PATHS = {
   ],
   got_ocr: [
     path.join('hf_cache', 'models--stepfun-ai--GOT-OCR-2.0-hf'),
+  ],
+  sd: [
+    path.join('hf_cache', 'models--stabilityai--sd-turbo'),
   ],
   flux: [
     // flux 直接 checkpoint 目录已由主删除逻辑清理（checkpoints/flux/）

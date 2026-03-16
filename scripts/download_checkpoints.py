@@ -149,7 +149,6 @@ def download_via_requests(url: str, dest_path: Path) -> None:
         msg = f"  [HTTP] 续传（已有 {resume_pos/1024/1024:.1f} MB）→ {url}"
     else:
         msg = f"  [HTTP] {url}"
-    print(msg)
     emit("log", message=msg)
 
     resp = requests.get(url, stream=True, timeout=60, headers=headers)
@@ -201,7 +200,6 @@ def check_and_download(
 
     if not checkpoint_files:
         msg = f"  [{engine_name}] 无 checkpoint_files 定义，跳过（依赖 hf_cache_downloads）"
-        print(msg)
         emit("log", message=msg)
         return True
 
@@ -383,7 +381,6 @@ def download_hf_cache(
         from huggingface_hub import hf_hub_download, snapshot_download
     except ImportError:
         msg = f"  [{engine_name}] huggingface_hub 未安装，跳过 HF 缓存下载"
-        print(msg)
         emit("log", message=msg)
         return False
 
@@ -438,7 +435,6 @@ def download_hf_cache(
         if already_cached and not force:
             cached_size_mb = max(blobs_real_size, direct_size) / 1024 / 1024
             msg = f"  ✓ {label}  (已缓存 {cached_size_mb:.0f} MB)  {note}"
-            print(msg)
             emit("log", message=msg)
             continue
 
@@ -449,12 +445,10 @@ def download_hf_cache(
             partial_mb = max(blobs_real_size, direct_size) / 1024 / 1024
             partial_hint = f"  (已有 {partial_mb:.1f} MB 部分数据，将继续下载)"
         msg = f"  ✗ {label}  {size_indicator} [{status}]{partial_hint}  {note}"
-        print(msg)
         emit("log", message=msg)
 
         if not required and not force and not explicit:
             skip_msg = f"    跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）"
-            print(skip_msg)
             emit("log", message=skip_msg)
             continue
 
@@ -550,21 +544,27 @@ def download_hf_cache(
                         monitor.join(timeout=5)
 
             done_msg = f"    ✓ 下载完成: {label}"
-            print(done_msg)
             emit("log", message=done_msg)
             emit("file_done", engine=engine_name, file=label, ok=True)
             # 创建 refs/main（若不存在），使 hf_hub_download 离线模式可在不指定
             # revision 参数时找到已缓存的文件（refs/main 是 HF 缓存格式的入口指针）。
-            if revision and revision != "main":
+            if revision:
                 refs_dir = marker_dir / "refs"
                 refs_main = refs_dir / "main"
                 if not refs_main.exists():
                     refs_dir.mkdir(parents=True, exist_ok=True)
                     refs_main.write_text(revision, encoding="utf-8")
+            # 同时在 hf_cache 目录创建软链接，使绝对路径 HF_HUB_CACHE 也能找到该缓存
+            # （当 cache_dir_rel != "checkpoints/hf_cache" 时，模型存于 checkpoints/ 根目录）
+            if cache_dir_rel != "checkpoints/hf_cache":
+                hf_cache_dir = (checkpoints_base or (resources_root / "checkpoints")) / "hf_cache"
+                hf_cache_dir.mkdir(parents=True, exist_ok=True)
+                link_target = hf_cache_dir / marker_dir.name
+                if not link_target.exists():
+                    link_target.symlink_to(os.path.relpath(marker_dir, hf_cache_dir))
         except Exception as e:
             err_str = str(e)
             err_msg = f"    ✗ 下载失败: {err_str[:300]}"
-            print(err_msg)
             emit("log", message=err_msg)
             is_gated = "gated" in err_str.lower() or "access to model" in err_str.lower()
             is_auth = "401" in err_str or "403" in err_str
@@ -998,6 +998,31 @@ def main() -> int:
     if sha256_updates and not args.check_only:
         save_sha256_to_manifest(manifest, manifest_path, sha256_updates)
         print()
+
+    # 强制升级 huggingface_hub 到 >=1.3.0，覆盖 gradio 等包引入的旧版本约束。
+    # transformers / diffusers / seed_vc / wan / flux / got_ocr 等引擎均需要 >=1.3.0。
+    # 必须在所有引擎 pip 安装完成后执行，确保最终版本满足要求。
+    if not args.check_only:
+        py = get_embedded_python(project_root)
+        if py:
+            print("── 修复 huggingface_hub 版本（强制升级至 >=1.3.0）──")
+            r = subprocess.run(
+                [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
+                 "--force-reinstall", "--quiet"],
+                capture_output=True, text=True, timeout=120,
+            )
+            if r.returncode == 0:
+                # 验证安装版本
+                ver_check = subprocess.run(
+                    [py, "-c",
+                     "import huggingface_hub; print(huggingface_hub.__version__)"],
+                    capture_output=True, text=True,
+                )
+                ver = ver_check.stdout.strip()
+                print(f"  ✓ huggingface_hub=={ver}")
+            else:
+                print(f"  ✗ 升级失败: {r.stderr.strip()[:200]}")
+            print()
 
     if all_ready:
         print("✓ 所有必填 checkpoint 文件就绪")

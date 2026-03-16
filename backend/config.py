@@ -21,6 +21,7 @@ CHECKPOINTS_ROOT = (
 
 MODEL_ROOT = Path(os.getenv("MODEL_ROOT", str(APP_ROOT / "models"))).resolve()
 VOICES_DIR = MODEL_ROOT / "voices"
+USER_VOICES_DIR = VOICES_DIR / "user"
 UPLOADS_DIR = MODEL_ROOT / "uploads"
 RVC_RUNTIME_CONFIG_PATH = MODEL_ROOT / "rvc_runtime.json"
 FISH_SPEECH_ENGINE_JSON = RUNTIME_ROOT / "fish_speech" / "engine.json"

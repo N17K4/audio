@@ -798,6 +798,45 @@ def _patch_seed_vc_inference(engine_dir: Path) -> None:
         inf.write_text(src, encoding="utf-8")
         print("  ✓ seed_vc engine/inference.py 已补丁（is_offline_mode shim）")
 
+    # bigvgan/_from_pretrained 兼容性修复：
+    # huggingface_hub>=1.3.0 的 ModelHubMixin.from_pretrained 不再向 _from_pretrained
+    # 传递 proxies/resume_download，需将这两个参数改为可选。
+    bigvgan_file = engine_dir / "modules" / "bigvgan" / "bigvgan.py"
+    if bigvgan_file.exists():
+        bsrc = bigvgan_file.read_text(encoding="utf-8")
+        if "proxies: Optional[Dict]," in bsrc or "resume_download: bool," in bsrc:
+            bsrc = bsrc.replace("proxies: Optional[Dict],", "proxies: Optional[Dict] = None,")
+            bsrc = bsrc.replace("resume_download: bool,", "resume_download: bool = False,")
+            bigvgan_file.write_text(bsrc, encoding="utf-8")
+            print("  ✓ seed_vc modules/bigvgan/bigvgan.py 已补丁（proxies/resume_download 可选化）")
+
+    # MPS BigVGAN 修复：conv_transpose1d 在通道数较大时触发 "Output channels > 65536" 错误，
+    # PYTORCH_ENABLE_MPS_FALLBACK=1 对此 op 无效。改为将 BigVGAN 保持在 CPU 上运行。
+    inf_src = inf.read_text(encoding="utf-8")
+    old_bigvgan_device = "        bigvgan_model = bigvgan_model.eval().to(device)\n        vocoder_fn = bigvgan_model"
+    new_bigvgan_device = (
+        "        # MPS 不支持 conv_transpose1d output_channels > 65536（BigVGAN 大通道数会触发此限制）\n"
+        "        # 保持 BigVGAN 在 CPU 上运行；扩散推理仍在 MPS 上，只有 vocoder 在 CPU\n"
+        "        bigvgan_device = torch.device(\"cpu\") if device.type == \"mps\" else device\n"
+        "        bigvgan_model = bigvgan_model.eval().to(bigvgan_device)\n"
+        "        vocoder_fn = bigvgan_model"
+    )
+    old_vocoder_call = "        vc_wave = vocoder_fn(vc_target.float()).squeeze()"
+    new_vocoder_call = (
+        "        _vocoder_device = next(vocoder_fn.parameters()).device\n"
+        "        vc_wave = vocoder_fn(vc_target.float().to(_vocoder_device)).squeeze()"
+    )
+    changed = False
+    if old_bigvgan_device in inf_src:
+        inf_src = inf_src.replace(old_bigvgan_device, new_bigvgan_device)
+        changed = True
+    if old_vocoder_call in inf_src:
+        inf_src = inf_src.replace(old_vocoder_call, new_vocoder_call)
+        changed = True
+    if changed:
+        inf.write_text(inf_src, encoding="utf-8")
+        print("  ✓ seed_vc engine/inference.py 已补丁（BigVGAN MPS CPU fallback）")
+
 
 # ─── FFmpeg ───────────────────────────────────────────────────────────────────
 
@@ -1019,11 +1058,15 @@ def main_build() -> int:
         packages: list[str] = cfg.get("pip_packages", [])
         if not packages:
             continue
+        if engine_name == "flux":
+            # Flux (~30 GB, 需 HF 账号) 已被 SD-Turbo 替代，默认跳过 pip 安装。
+            # 如需启用，手动运行 pnpm run checkpoints --engine flux
+            print(f"▶ {engine_name}  [已禁用，使用 SD-Turbo 替代]")
+            print()
+            continue
         print(f"▶ {engine_name}")
         if engine_name == "rvc":
             ok = setup_rvc_engine(project_root)
-        elif engine_name == "flux":
-            ok = setup_flux_engine(project_root, packages, py)
         else:
             ok = setup_pip_packages(engine_name, packages, py)
         if not ok:

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Status, VoiceInfo, CapabilityMap, VcInputMode } from '../../types';
 import { LOCAL_PROVIDERS } from '../../constants';
+import CustomSelect from '../shared/CustomSelect';
 import ProviderRow from '../shared/ProviderRow';
 import OutputDirRow from '../shared/OutputDirRow';
 import VoiceSelector from '../shared/VoiceSelector';
@@ -41,6 +42,7 @@ interface VcPanelProps {
   setNewVoiceRef: (v: File | null) => void;
   onCreateVoice: () => void;
   onDeleteVoice: (voiceId: string) => void;
+  onRenameVoice: (voiceId: string, newName: string) => void;
   outputDir: string;
   setOutputDir: (v: string) => void;
   status: Status;
@@ -128,6 +130,7 @@ export default function VcPanel({
   setNewVoiceRef,
   onCreateVoice,
   onDeleteVoice,
+  onRenameVoice,
   outputDir,
   setOutputDir,
   status,
@@ -177,6 +180,8 @@ export default function VcPanel({
   btnSec,
 }: VcPanelProps) {
   const [voiceTab, setVoiceTab] = useState<'select' | 'import' | 'train'>('select');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
@@ -227,14 +232,55 @@ export default function VcPanel({
             {/* 选择音色 */}
             {voiceTab === 'select' && (
               <div className="space-y-3">
-                <VoiceSelector label="" value={selectedVoiceId} onChange={setSelectedVoiceId} voices={voices} onRefresh={onRefreshVoices} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
+                <VoiceSelector label="" value={selectedVoiceId} onChange={v => { setSelectedVoiceId(v); setRenamingId(null); }} voices={voices} onRefresh={onRefreshVoices} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
                 {selectedVoiceId && (
-                  <div className="flex justify-end">
-                    <button className="text-xs font-medium text-rose-500 hover:text-rose-600 transition-colors"
-                      onClick={() => onDeleteVoice(selectedVoiceId)}>
-                      删除音色
-                    </button>
-                  </div>
+                  <>
+                    {renamingId === selectedVoiceId ? (
+                      <div className="flex gap-2">
+                        <input
+                          className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && renameValue.trim()) {
+                              onRenameVoice(selectedVoiceId, renameValue.trim());
+                              setRenamingId(null);
+                            } else if (e.key === 'Escape') {
+                              setRenamingId(null);
+                            }
+                          }}
+                          autoFocus
+                          placeholder="输入新名称"
+                        />
+                        <button
+                          className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-2 text-xs font-medium text-white transition-colors disabled:opacity-50"
+                          disabled={!renameValue.trim()}
+                          onClick={() => { onRenameVoice(selectedVoiceId, renameValue.trim()); setRenamingId(null); }}>
+                          确认
+                        </button>
+                        <button
+                          className="rounded-xl border border-slate-200 dark:border-slate-600 px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                          onClick={() => setRenamingId(null)}>
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end gap-3">
+                        <button className="text-xs font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
+                          onClick={() => {
+                            const v = voices.find(x => x.voice_id === selectedVoiceId);
+                            setRenameValue(v?.name || '');
+                            setRenamingId(selectedVoiceId);
+                          }}>
+                          重命名
+                        </button>
+                        <button className="text-xs font-medium text-rose-500 hover:text-rose-600 transition-colors"
+                          onClick={() => onDeleteVoice(selectedVoiceId)}>
+                          删除音色
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -389,7 +435,7 @@ export default function VcPanel({
                 <span className={labelCls}>扩散步数（{seedVcDiffusionSteps}）</span>
                 <input type="range" min={1} max={30} step={1} className="w-full accent-indigo-600"
                   value={seedVcDiffusionSteps} onChange={e => setSeedVcDiffusionSteps(Number(e.target.value))} />
-                <span className="text-xs text-slate-400 mt-1 block">降噪迭代次数，步数越多细节越丰富但越慢。快速预览用 5 步，正式输出用 15～20 步，默认 10</span>
+                <span className="text-xs text-slate-400 mt-1 block">降噪迭代次数，步数越多细节越丰富但越慢。⚠️ 每分钟音频约需 1～2 分钟（MPS）。快速预览用 4～6 步，正式输出用 10～15 步，默认 8</span>
               </label>
               <label className="block">
                 <span className={labelCls}>音调偏移（{seedVcPitchShift} 半音）</span>
@@ -431,11 +477,15 @@ export default function VcPanel({
             <>
               <label className="block">
                 <span className={labelCls}>F0 提取方法</span>
-                <select className={fieldCls} value={rvcF0Method} onChange={e => setRvcF0Method(e.target.value)}>
-                  <option value="rmvpe">rmvpe（推荐）</option>
-                  <option value="harvest">harvest</option>
-                  <option value="pm">pm（最快）</option>
-                </select>
+                <CustomSelect
+                  value={rvcF0Method}
+                  onChange={setRvcF0Method}
+                  options={[
+                    { value: 'rmvpe', label: 'rmvpe（推荐）' },
+                    { value: 'harvest', label: 'harvest' },
+                    { value: 'pm', label: 'pm（最快）' },
+                  ]}
+                />
                 <span className="text-xs text-slate-400 mt-1 block">分析原始音频音调的算法。rmvpe 精度最高适合大多数场景；harvest 更稳定适合低质量录音；pm 最快但精度低，仅用于测试</span>
               </label>
               <label className="block">

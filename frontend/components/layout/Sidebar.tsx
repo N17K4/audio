@@ -1,7 +1,5 @@
 import { TASK_LABELS } from '../../constants';
 import type { TaskType, Job } from '../../types';
-import TaskIcon from '../icons/TaskIcon';
-import TasksIcon from '../icons/TasksIcon';
 
 export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert';
 
@@ -60,7 +58,7 @@ export default function Sidebar({
         {/* 品牌区 — 点击返回首页 */}
         <button
           onClick={() => onNavigate('home')}
-          className={`flex items-center py-5 border-b border-blue-200 dark:border-slate-800 hover:bg-blue-100/60 dark:hover:bg-slate-800/50 transition-colors ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-4 gap-2.5 w-full'}`}>
+          className={`flex items-center py-4 border-b border-blue-200 dark:border-slate-800 hover:bg-blue-100/60 dark:hover:bg-slate-800/50 transition-colors ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-4 gap-2.5 w-full'}`}>
           <svg width="30" height="30" viewBox="0 0 30 30" style={{ flexShrink: 0 }}>
             <rect width="30" height="30" rx="8" fill="#3b82f6" />
             <path d="M7 20 Q15 8 23 20" stroke="#bfdbfe" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
@@ -76,8 +74,8 @@ export default function Sidebar({
         </button>
 
         {/* 主导航 */}
-        <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
-          <NavItem page="audio_tools" label="AI音频" subtitle="TTS · VC · STT · LLM · 语音" icon={
+        <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto overflow-x-hidden">
+          <NavItem page="audio_tools" label="AI 音频" subtitle="TTS · VC · STT · LLM · 语音" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#4f46e5"/>
               <rect x="5" y="13" width="2.5" height="6" rx="1.2" fill="#c7d2fe"/>
@@ -87,6 +85,15 @@ export default function Sidebar({
               <rect x="21" y="14" width="2.5" height="4" rx="1.2" fill="#c7d2fe"/>
             </svg>
           } />
+          <NavItem page="misc" label="AI 视图" subtitle="图像 · 视频 · 翻译" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#7c3aed"/>
+              <rect x="6" y="6" width="7" height="7" rx="2" fill="#ddd6fe"/>
+              <rect x="15" y="6" width="7" height="7" rx="2" fill="#c4b5fd"/>
+              <rect x="6" y="15" width="7" height="7" rx="2" fill="#c4b5fd"/>
+              <rect x="15" y="15" width="7" height="7" rx="2" fill="#a78bfa"/>
+            </svg>
+          } />
           <NavItem page="format_convert" label="格式转换" subtitle="音视频 · 文档" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#0f766e"/>
@@ -94,13 +101,29 @@ export default function Sidebar({
               <path d="M21 18H11M21 18l-3-3M21 18l-3 3" stroke="#5eead4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           } />
-          <NavItem page="misc" label="AI扩展" subtitle="图像·翻译·视频" icon={<TaskIcon task="misc" />} />
         </nav>
 
         {/* 底部工具区 */}
-        <div className="px-2 pb-1 space-y-0.5">
-          <NavItem page="tasks" label="任务列表" icon={<TasksIcon badge={activeBadge} />} />
-          <NavItem page="system" label="系统工具" icon={<svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}><rect width="28" height="28" rx="7" fill="#f1f5f9"/><path d="M10.325 8.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
+        <div className="px-2 pb-1 space-y-1">
+          <NavItem page="tasks" label="任务列表" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#15803d"/>
+              <rect x="7" y="8" width="14" height="2.5" rx="1.25" fill="#bbf7d0"/>
+              <rect x="7" y="12.75" width="10" height="2.5" rx="1.25" fill="#bbf7d0"/>
+              <rect x="7" y="17.5" width="7" height="2.5" rx="1.25" fill="#bbf7d0"/>
+              {activeBadge > 0 && <>
+                <circle cx="22" cy="7" r="5" fill="#f97316"/>
+                <text x="22" y="7" dominantBaseline="central" textAnchor="middle" fontSize="6" fontWeight="700" fill="#fff" fontFamily="-apple-system,sans-serif">{activeBadge > 9 ? '9+' : activeBadge}</text>
+              </>}
+            </svg>
+          } />
+          <NavItem page="system" label="系统工具" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#334155"/>
+              <path d="M10.325 8.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          } />
         </div>
 
         {/* 折叠按钮 */}

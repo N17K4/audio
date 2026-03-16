@@ -40,9 +40,31 @@ export default function ImageGenPanel({
   const isComfyUI = imgGenProvider === 'comfyui';
   const isLocal = LOCAL_PROVIDERS.has(imgGenProvider);
   const isUnsupported = UNSUPPORTED_PROVIDERS.has(imgGenProvider);
+
+  function handleRun() {
+    if (imgGenProvider === 'sd_local') {
+      const ok = window.confirm(
+        '⚠️ 本地 Stable Diffusion 图像生成\n\n' +
+        '首次运行约需 20-30 秒加载模型\n' +
+        '· Apple Silicon / NVIDIA：约 10-30 秒\n' +
+        '· CPU：约 1-3 分钟\n\n' +
+        '确认提交？'
+      );
+      if (!ok) return;
+    } else if (imgGenProvider === 'flux') {
+      const ok = window.confirm(
+        '⚠️ 本地 Flux 图像生成耗时较长\n\n' +
+        '· NVIDIA GPU：约 30 秒\n' +
+        '· Apple Silicon / CPU：可能超过 10 分钟\n\n' +
+        '确认提交？'
+      );
+      if (!ok) return;
+    }
+    onRun();
+  }
   const models = IMG_GEN_MODELS[imgGenProvider] || [];
   const sizes = IMG_GEN_SIZES[imgGenProvider] || [];
-  const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' ? '尺寸' : '比例';
+  const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' || imgGenProvider === 'sd_local' ? '尺寸' : '比例';
 
   return (
     <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
@@ -96,6 +118,9 @@ export default function ImageGenPanel({
             options={sizes.map(s => ({ value: s, label: s }))}
             placeholder="选择尺寸"
           />
+          {imgGenProvider === 'sd_local' && (
+            <p className="text-xs text-slate-400 mt-1">SD-Turbo 最佳分辨率为 512×512，大尺寸不会提升质量</p>
+          )}
         </div>
       )}
 
@@ -107,7 +132,7 @@ export default function ImageGenPanel({
           placeholder="描述你想生成的图像内容，越详细越好..." />
       </div>
 
-      <button className={btnPrimary} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={onRun}>
+      <button className={btnPrimary} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={handleRun}>
         {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成图像'}
       </button>
     </div>

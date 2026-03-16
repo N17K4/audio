@@ -140,22 +140,37 @@ interface MiscPanelProps {
   btnSec: string;
 }
 
-const ROW1_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
-  { key: 'image_understand', label: '图像理解',  icon: '🔍' },
-  { key: 'translate',        label: '文字翻译',  icon: '🌐' },
-  { key: 'code_assist',      label: '代码助手',  icon: '💻' },
+type MiscTab = { key: MiscSubPage; label: string; abbr: string; bg: string };
+
+const ROW1_TABS: MiscTab[] = [
+  { key: 'image_understand', label: '图像理解', abbr: 'IU',   bg: '#7c3aed' },
+  { key: 'translate',        label: '文字翻译', abbr: 'TRL',  bg: '#0284c7' },
+  { key: 'code_assist',      label: '代码助手', abbr: 'CODE', bg: '#059669' },
 ];
 
-const ROW2_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
-  { key: 'img_gen',   label: '图像生成',  icon: '✨' },
-  { key: 'img_i2i',  label: '换脸换图',  icon: '🔄' },
-  { key: 'video_gen', label: '视频生成',  icon: '🎬' },
+const ROW2_TABS: MiscTab[] = [
+  { key: 'img_gen',   label: '图像生成', abbr: 'T2I', bg: '#db2777' },
+  { key: 'img_i2i',  label: '换脸换图', abbr: 'I2I', bg: '#b45309' },
+  { key: 'video_gen', label: '视频生成', abbr: 'T2V', bg: '#0f766e' },
 ];
 
-const ROW3_TABS: { key: MiscSubPage; label: string; icon: string }[] = [
-  { key: 'ocr',     label: 'OCR 图文识别',  icon: '📄' },
-  { key: 'lipsync', label: '口型同步',  icon: '💋' },
+const ROW3_TABS: MiscTab[] = [
+  { key: 'ocr',     label: 'OCR 识别', abbr: 'OCR', bg: '#0369a1' },
+  { key: 'lipsync', label: '口型同步', abbr: 'LIP', bg: '#be185d' },
 ];
+
+function MiscTabIcon({ abbr, bg, size = 22 }: { abbr: string; bg: string; size?: number }) {
+  const fs = abbr.length >= 4 ? size * 0.32 : abbr.length >= 3 ? size * 0.36 : size * 0.42;
+  return (
+    <svg width={size} height={size} viewBox="0 0 22 22" style={{ flexShrink: 0 }}>
+      <rect width="22" height="22" rx="5.5" fill={bg} />
+      <text x="11" y="11" dominantBaseline="central" textAnchor="middle"
+        fontSize={fs} fontWeight="700" fill="#fff" fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+        {abbr}
+      </text>
+    </svg>
+  );
+}
 
 const CODE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'groq', 'mistral', 'xai', 'ollama', 'github'];
 
@@ -277,7 +292,7 @@ export default function MiscPanel({
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}>
-                <span>{tab.icon}</span>
+                <MiscTabIcon abbr={tab.abbr} bg={tab.bg} />
                 <span>{tab.label}</span>
               </button>
             ))}
@@ -511,7 +526,7 @@ export default function MiscPanel({
         const isUnsupported = UNSUPPORTED_PROVIDERS.has(imgGenProvider);
         const models = IMG_GEN_MODELS[imgGenProvider] || [];
         const sizes = IMG_GEN_SIZES[imgGenProvider] || [];
-        const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' ? '尺寸' : '比例';
+        const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' || imgGenProvider === 'sd_local' ? '尺寸' : '比例';
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
             <div>
@@ -523,7 +538,8 @@ export default function MiscPanel({
                   </button>
                 ))}
               </div>
-              {imgGenProvider === 'flux' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，无需 API Key，首次需下载模型（约 2 GB）</p>}
+              {imgGenProvider === 'sd_local' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，无需 API Key，首次需安装模型（约 2.3 GB，运行 pnpm run checkpoints --engine sd）</p>}
+              {imgGenProvider === 'flux' && <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">⚠ Flux 已被 SD-Turbo 替代（Flux 需 ~30 GB + HF 账号）。如需使用，手动运行 pnpm run checkpoints --engine flux</p>}
               {imgGenProvider === 'comfyui' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">需提前在本地启动 ComfyUI 服务（默认端口 8188）</p>}
               {imgGenProvider === 'openai' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">DALL-E 3 支持自然语言描述，效果出色</p>}
               {imgGenProvider === 'gemini' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">Imagen 3，支持多种宽高比，需要 Google AI API Key</p>}
@@ -664,13 +680,14 @@ export default function MiscPanel({
                 ))}
               </div>
               {videoGenProvider === 'wan_local' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，无需 API Key，首次需下载模型（约 6 GB）</p>}
-              {videoGenProvider === 'kling' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">快手可灵，需要 Kling API Key（klingai.com）</p>}
+              {videoGenProvider === 'kling' && <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">快手可灵（klingai.com）。API Key 直接粘贴官方格式：Access Key: xxx Secret Key: xxx</p>}
               {(videoGenProvider === 'wan_video' || videoGenProvider === 'runway' || videoGenProvider === 'pika' || videoGenProvider === 'sora') && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
             </div>
             {!isLocal && (
               <div>
                 <label className={labelCls}>API Key</label>
-                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-... / Bearer ..." />
+                <input className={fieldCls} type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
+                  placeholder={videoGenProvider === 'kling' ? '粘贴：Access Key: xxx Secret Key: xxx' : 'sk-... / Bearer ...'} />
               </div>
             )}
             <div>

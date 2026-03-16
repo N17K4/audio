@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from fastapi import HTTPException
 
-from config import VOICES_DIR
+from config import VOICES_DIR, USER_VOICES_DIR
 from logging_setup import logger
 
 
@@ -63,9 +63,13 @@ def read_voice_meta(voice_dir: Path) -> Dict:
 
 def list_voices() -> List[Dict]:
     voices = []
-    for p in sorted(VOICES_DIR.iterdir()):
-        if p.is_dir():
-            voices.append(read_voice_meta(p))
+    dirs = []
+    if VOICES_DIR.exists():
+        dirs += [p for p in VOICES_DIR.iterdir() if p.is_dir() and p.name != "user"]
+    if USER_VOICES_DIR.exists():
+        dirs += [p for p in USER_VOICES_DIR.iterdir() if p.is_dir()]
+    for p in sorted(dirs, key=lambda x: x.name):
+        voices.append(read_voice_meta(p))
     return voices
 
 

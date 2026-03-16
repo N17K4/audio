@@ -1,7 +1,0 @@
-{
-  "voice_id": "test_seed_vc",
-  "name": "Test Seed-VC",
-  "engine": "seed_vc",
-  "inference_mode": "command",
-  "reference_audio": "reference.wav"
-}

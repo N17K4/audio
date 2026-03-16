@@ -198,7 +198,7 @@ def run_subprocess_fallback(args, checkpoint_dir: str, project_root: Path) -> in
         _hf_cache = os.getenv("HF_HUB_CACHE", "").strip()
         _run_cwd = str(Path(_hf_cache).parent.parent) if (_hf_cache and Path(_hf_cache).parent.parent.exists()) else str(project_root)
         completed = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=600,
+            cmd, shell=True, capture_output=True, text=True, timeout=1800,
             cwd=_run_cwd,
         )
         _elapsed = _time.monotonic() - _t0

@@ -14,26 +14,32 @@ npx electron .          # 启动应用（严禁在此阶段触发任何网络下
 
 ## 模型总览
 
-| 功能 | 模型 | 状态 | RTX 4050 16G | MBP 32G (Apple Silicon) | checkpoint 大小 |
-|---|---|---|---|---|---|
-| 图像生成 | Flux.1-Schnell GGUF Q4_K_S | ✅ 已支持 | ✅ CUDA | ✅ MPS | ~17 GB（GGUF 6.7 + T5/CLIP/VAE ~10）|
-| 图像生成 | ComfyUI（本地代理） | ✅ 已支持 | ✅ | ✅ | 视工作流而定 |
-| 图像生成 | OpenAI / Gemini / Stability / DashScope | ✅ 云端 | ✅ | ✅ | — |
-| 换脸/换图 | FaceFusion 3.x | ✅ 已支持 | ✅ CUDA | ⚠️ CPU 模式（较慢） | ~300 MB（换脸模型）|
-| 换脸/换图 | ComfyUI img2img | ✅ 已支持 | ✅ | ✅ | 视工作流而定 |
-| 换脸/换图 | Replicate API | 【暂不支持】 | — | — | — |
-| 视频生成 | Wan 2.1 T2V-1.3B（本地） | ✅ 已支持 | ✅ 推荐 | ✅ 32G 充裕 | ~15.6 GB |
-| 视频生成 | Kling API | ✅ 已支持（云端） | ✅ | ✅ | — |
-| 视频生成 | Wan Video / Runway / Pika / Sora | 【暂不支持】 | — | — | — |
-| OCR / 文档 | GOT-OCR2.0（本地） | ✅ 已支持 | ✅ | ✅ | ~1.5 GB |
-| OCR / 文档 | OpenAI / Gemini / Claude（视觉） | ✅ 云端 | ✅ | ✅ | — |
-| OCR / 文档 | Azure Document Intelligence | 【暂不支持】 | — | — | — |
-| 口型同步 | LivePortrait FP16（本地） | ✅ 已支持 | ✅ | ✅ MPS | ~800 MB |
-| 口型同步 | SadTalker / HeyGen / D-ID | 【暂不支持】 | — | — | — |
-| TTS | Fish Speech 1.5（本地） | ✅ 已支持 | ✅ | ✅ | ~1 GB |
-| 音色转换 | Seed-VC 2.0（本地） | ✅ 已支持 | ✅ | ✅ | ~2.7 GB |
-| 音色转换 | RVC v2（本地） | ✅ 已支持 | ✅ | ✅ | ~760 MB（仅训练用） |
-| STT | Faster Whisper base（本地） | ✅ 已支持 | ✅ | ✅ | ~150 MB |
+### 基本功能（AI 音频）
+
+| 功能 | 模型 | RTX 4050 16G | MBP 32GB | checkpoint 大小 |
+|---|---|---|---|---|
+| TTS | Fish Speech 1.5 | ✅ CUDA | ✅ MPS | ~1 GB |
+| 音色转换 | Seed-VC 2.0 | ✅ | ✅ | ~2.7 GB |
+| 音色转换 | RVC v2 | ✅ | ✅ | ~760 MB（仅训练用）|
+| STT | Faster Whisper base | ✅ | ✅ | ~150 MB |
+
+### 扩展功能（LLM · 格式转换）
+
+| 功能 | 模型 / 引擎 | RTX 4050 16G | MBP 32GB | 备注 |
+|---|---|---|---|---|
+| LLM 对话 | Ollama（本地） | ✅ CUDA | ✅ MPS | 按模型不同 |
+| LLM 对话 | OpenAI / Gemini / Claude / DeepSeek 等 | ✅ 云端 | ✅ 云端 | 需 API Key |
+| 格式转换 | FFmpeg（内置） | ✅ | ✅ | 无需额外下载 |
+
+### 进阶功能（AI 视图）
+
+| 功能领域 | 推荐本地模型（4050 6GB） | 推荐云端 API（生产环境） | 理由（4050 优化方向） | MBP 32GB 表现 |
+|---|---|---|---|---|
+| 图像生成 | Flux.1-Schnell GGUF Q4 | Midjourney | Schnell 是 6GB 显存下的速度之王 | 优（可跑 Dev 版 FP8 高质模型）|
+| 换脸/动作 | FaceFusion 3.x | Replicate（InsightFace）| 4050 跑实时推理极稳，无需云端 | 良（MPS 加速下兼容性较好）|
+| 视频生成 | Wan 2.1（1.3B）| Kling（可灵）/ Runway | 本地仅能做 2-3 秒预览，成品必须云端 | 差（内存交换频繁，不建议）|
+| OCR / 文档 | GOT-OCR2.0 | Azure Doc Intelligence | 本地运行轻量级，满足日常识别 | 极优（大内存处理高密文档）|
+| 口型同步 | LivePortrait FP16 | HeyGen | 4050 跑 LivePortrait 对延迟优化极好 | 中（仅能处理轻量级任务）|
 
 ---
 

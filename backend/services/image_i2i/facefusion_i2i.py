@@ -40,23 +40,28 @@ async def run_facefusion_i2i(
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    # FaceFusion 用相对路径 resolve_file_paths('facefusion/processors/modules') 查找处理器模块，
+    # 必须在引擎根目录下运行，否则 face_swapper_model 状态无法初始化。
+    engine_dir = str((RUNTIME_ROOT / "facefusion" / "engine").resolve())
+
     cmd = [
         py, script,
         "headless-run",
         "--source-paths", source_image_path,
         "--target-path", target_image_path,
         "--output-path", output_path,
+        "--processors", "face_swapper",
         "--execution-providers", "cuda" if _has_cuda() else "cpu",
+        "--face-swapper-model", model or "inswapper_128_fp16",
     ]
-    if model:
-        cmd += ["--face-swapper-model", model]
 
-    logger.info("[facefusion] 执行换脸: %s", " ".join(str(c) for c in cmd))
+    logger.debug("[facefusion] 执行换脸: %s", " ".join(str(c) for c in cmd))
     try:
         completed = await asyncio.to_thread(
             subprocess.run,
             cmd, check=False, capture_output=True, text=True, timeout=600,
             env=build_engine_env("facefusion"),
+            cwd=engine_dir,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"FaceFusion 执行失败: {exc}") from exc

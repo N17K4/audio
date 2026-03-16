@@ -23,6 +23,10 @@ models/**/*.ckpt
 models/**/*.safetensors
 models/**/*.index
 
+# ─── 用户创建的音色（运行时数据，不跟踪） ──────────────────────────────────────
+models/voices/user/*
+!models/voices/user/.gitkeep
+
 # ─── runtime 目录 ─────────────────────────────────────────────────────────────
 # 默认忽略 runtime/ 下所有内容，然后逐一解除需要跟踪的目录
 runtime/*

@@ -506,92 +506,96 @@ export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelP
   }
 
   function SectionAbout() {
+    const Table = ({ children }: { children: React.ReactNode }) => (
+      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+        <table className="text-xs w-full table-fixed">{children}</table>
+      </div>
+    );
+    const Thead = ({ cols }: { cols: { label: string; w: string }[] }) => (
+      <thead>
+        <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+          {cols.map(c => <th key={c.label} className={`text-left px-3 py-2 font-medium ${c.w}`}>{c.label}</th>)}
+        </tr>
+      </thead>
+    );
+    const Row3 = ({ row }: { row: string[] }) => (
+      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+        <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
+        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[1]}</td>
+        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[2]}</td>
+      </tr>
+    );
+    const Row5 = ({ row }: { row: string[] }) => (
+      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+        <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
+        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[1]}</td>
+        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{row[2]}</td>
+        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">{row[3]}</td>
+        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">{row[4]}</td>
+      </tr>
+    );
+
     return (
       <div className="space-y-6">
 
-        {(() => {
-          const TheadRow = () => (
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                <th className="text-left px-3 py-2 font-medium w-[28%]">功能</th>
-                <th className="text-left px-3 py-2 font-medium w-[28%]">本地引擎</th>
-                <th className="text-left px-3 py-2 font-medium w-[44%]">云端服务商</th>
-              </tr>
-            </thead>
-          );
-          const Row = ({ row, dim }: { row: string[]; dim?: boolean }) => (
-            <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${dim ? 'text-slate-400 dark:text-slate-500' : ''}`}>
-              <td className={`px-3 py-2 font-medium ${dim ? '' : 'text-slate-700 dark:text-slate-300'}`}>{row[0]}</td>
-              <td className={`px-3 py-2 ${dim ? '' : 'text-slate-500 dark:text-slate-400'}`}>{row[1]}</td>
-              <td className={`px-3 py-2 ${dim ? '' : 'text-slate-500 dark:text-slate-400'}`}>{row[2]}</td>
-            </tr>
-          );
-          const Table = ({ children }: { children: React.ReactNode }) => (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-              <table className="text-xs w-full table-fixed">{children}</table>
-            </div>
-          );
-          return (
-            <>
-              {/* 已有功能 */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">已有功能</h3>
-                <Table>
-                  <TheadRow />
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {[
-                      ['TTS 文本转语音', 'Fish Speech', 'OpenAI · Gemini · ElevenLabs · Cartesia · DashScope'],
-                      ['VC 音色转换', 'RVC · Seed-VC', 'ElevenLabs'],
-                      ['STT 语音转文字', 'Whisper', 'OpenAI · Gemini · Groq · Deepgram'],
-                      ['LLM 聊天', 'Ollama', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
-                      ['语音聊天', 'Whisper + Ollama + Fish Speech', 'OpenAI Realtime · Gemini Live'],
-                      ['音视频格式转换', 'FFmpeg（内置）', '—'],
-                      ['文档转换 / PDF', 'pdf2docx · pandoc · PyMuPDF', '—'],
-                    ].map(row => <Row key={row[0]} row={row} />)}
-                  </tbody>
-                </Table>
-              </div>
+        {/* 基本功能 */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">基本功能</h3>
+          <Table>
+            <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} />
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {[
+                ['TTS 文本转语音', 'Fish Speech', 'OpenAI · Gemini · ElevenLabs · Cartesia · DashScope'],
+                ['VC 音色转换', 'RVC · Seed-VC', 'ElevenLabs'],
+                ['STT 语音转文字', 'Whisper', 'OpenAI · Gemini · Groq · Deepgram'],
+                ['LLM 聊天', 'Ollama', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
+                ['语音聊天', 'Whisper + Ollama + Fish Speech', 'OpenAI Realtime · Gemini Live'],
+                ['音视频格式转换', 'FFmpeg（内置）', '—'],
+                ['文档转换 / PDF', 'pdf2docx · pandoc · PyMuPDF', '—'],
+              ].map(row => <Row3 key={row[0]} row={row} />)}
+            </tbody>
+          </Table>
+        </div>
 
-              {/* 扩展功能 */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">扩展功能</h3>
-                <Table>
-                  <TheadRow />
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {[
-                      ['图像生成', 'Flux.1-Schnell GGUF', 'OpenAI DALL-E 3 · Gemini Imagen 3 · Stability AI · DashScope'],
-                      ['图像理解', 'Ollama（LLaVA · moondream）', 'OpenAI GPT-4o · Gemini Vision · Claude Vision'],
-                      ['文字翻译', 'Ollama', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
-                      ['代码助手', 'Ollama（Qwen-Coder · DeepSeek-Coder）', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
-                      ['OCR / 文档理解', 'GOT-OCR2.0', 'Azure Doc Intelligence'],
-                      ['口型同步 · 动作驱动', 'LivePortrait FP16', 'HeyGen · D-ID'],
-                      ['换脸', 'FaceFusion 3.x', '—'],
-                      ['视频生成', 'Wan 2.1 1.3B', 'Kling · Hailuo · Veo · Sora · Runway'],
-                    ].map(row => <Row key={row[0]} row={row} />)}
-                  </tbody>
-                </Table>
-              </div>
+        {/* 扩展功能 */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">扩展功能</h3>
+          <Table>
+            <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} />
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {[
+                ['图像生成', 'SD-Turbo · Flux.1-Schnell GGUF · ComfyUI', 'OpenAI DALL-E 3 · Gemini Imagen 3 · Stability AI · DashScope'],
+                ['图像理解', 'Ollama（LLaVA · moondream）', 'OpenAI GPT-4o · Gemini Vision · Claude Vision'],
+                ['文字翻译', 'Ollama', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
+                ['代码助手', 'Ollama（Qwen-Coder · DeepSeek-Coder）', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
+              ].map(row => <Row3 key={row[0]} row={row} />)}
+            </tbody>
+          </Table>
+        </div>
 
-              {/* 后端待接入 */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">后端待接入</h3>
-                <Table>
-                  <TheadRow />
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {[
-                      ['图生图（img2img）', 'Flux / ComfyUI', '—'],
-                      ['口型同步（后端）', 'LivePortrait FP16', '—'],
-                      ['换脸（后端）', 'FaceFusion 3.x', '—'],
-                      ['视频生成（后端）', 'Wan 2.1', '—'],
-                      ['图像生成（本地）', 'Flux.1-Schnell GGUF', '—'],
-                      ['OCR（后端）', 'GOT-OCR2.0', '—'],
-                    ].map(row => <Row key={row[0]} row={row} dim />)}
-                  </tbody>
-                </Table>
-              </div>
-            </>
-          );
-        })()}
+        {/* 进阶功能 */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">进阶功能</h3>
+          <Table>
+            <Thead cols={[
+              { label: '功能领域',              w: 'w-[14%]' },
+              { label: '推荐本地（4050 6GB）',   w: 'w-[20%]' },
+              { label: '推荐云端（生产环境）',   w: 'w-[18%]' },
+              { label: '4050 优化方向',          w: 'w-[28%]' },
+              { label: 'MBP 32GB 表现',          w: 'w-[20%]' },
+            ]} />
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {[
+                ['图像生成',  'Flux.1-Schnell GGUF Q4', 'Midjourney',                  'Schnell 是 6GB 显存下的速度之王',          '优（可跑 Dev 版 FP8 高质模型）'],
+                ['换脸/动作', 'FaceFusion 3.x',         'Replicate（InsightFace）',    '4050 跑实时推理极稳，无需云端',            '良（MPS 加速下兼容性较好）'],
+                ['视频生成',  'Wan 2.1（1.3B）',        'Kling（可灵）/ Runway',       '本地仅能做 2-3 秒预览，成品必须云端',      '差（内存交换频繁，不建议）'],
+                ['OCR / 文档','GOT-OCR2.0',             'Azure Doc Intelligence',       '本地运行轻量级，满足日常识别',             '极优（大内存处理高密文档）'],
+                ['口型同步',  'LivePortrait FP16',       'HeyGen',                      '4050 跑 LivePortrait 对延迟优化极好',      '中（仅能处理轻量级任务）'],
+              ].map(row => <Row5 key={row[0]} row={row} />)}
+            </tbody>
+          </Table>
+        </div>
+
       </div>
     );
   }
