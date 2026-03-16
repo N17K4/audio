@@ -215,7 +215,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('provider', 'fish_speech');
 
       const res = await postForm(`${backendBaseUrl}/tasks/tts`, fd);
-      if (!res.ok) { log(`✗ Fish Speech TTS 失败: ${res.errMsg}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
+      if (res.ok === false) { log(`✗ Fish Speech TTS 失败: ${res.errMsg}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
       else if (res.data?.job_id) { log(`✓ Fish Speech TTS 已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Fish Speech TTS', status: 'passed' }); }
       else { log(`✗ Fish Speech TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
     } catch (e: any) { log(`✗ Fish Speech TTS 异常: ${e.message}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
@@ -228,7 +228,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('model', 'base');
 
       const res = await postForm(`${backendBaseUrl}/tasks/stt`, fd);
-      if (!res.ok) {
+      if (res.ok === false) {
         log(`✗ Faster Whisper STT 失败: ${res.errMsg}`); results.push({ name: 'Faster Whisper STT', status: 'failed' });
       } else if (res.data?.job_id) {
         log(`✓ Faster Whisper STT 已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Faster Whisper STT', status: 'passed' });
@@ -250,7 +250,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('reference_audio', testWav, 'ref.wav');
 
       const res = await postForm(`${backendBaseUrl}/convert`, fd);
-      if (!res.ok) { log(`✗ Seed-VC 换声失败: ${res.errMsg}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
+      if (res.ok === false) { log(`✗ Seed-VC 换声失败: ${res.errMsg}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
       else if (res.data?.job_id) { log(`✓ Seed-VC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Seed-VC 换声', status: 'passed' }); }
       else { log(`✗ Seed-VC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
     } catch (e: any) { log(`✗ Seed-VC 换声异常: ${e.message}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
@@ -264,7 +264,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         fd.append('mode', 'local');
   
         const res = await postForm(`${backendBaseUrl}/convert`, fd);
-        if (!res.ok) { log(`✗ RVC 换声失败: ${res.errMsg}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
+        if (res.ok === false) { log(`✗ RVC 换声失败: ${res.errMsg}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
         else if (res.data?.job_id) { log(`✓ RVC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 换声', status: 'passed' }); }
         else { log(`✗ RVC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
       } catch (e: any) { log(`✗ RVC 换声异常: ${e.message}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
@@ -284,7 +284,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('voice_subdir', 'user');
       fd.append('epochs', '1');
       const res = await postForm(`${backendBaseUrl}/train`, fd);
-      if (!res.ok) { log(`✗ RVC 训练失败: ${res.errMsg}`); results.push({ name: 'RVC 训练', status: 'failed' }); }
+      if (res.ok === false) { log(`✗ RVC 训练失败: ${res.errMsg}`); results.push({ name: 'RVC 训练', status: 'failed' }); }
       else if (res.data?.job_id) { log(`✓ RVC 训练音色已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 训练音色', status: 'passed' }); }
       else { log(`✗ RVC 训练音色响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
     } catch (e: any) { log(`✗ RVC 训练音色异常: ${e.message}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
@@ -298,7 +298,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('provider', 'facefusion');
 
       const res = await postForm(`${backendBaseUrl}/tasks/image-i2i`, fd);
-      if (!res.ok) { log(`✗ FaceFusion 换脸接口失败: ${res.errMsg}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
+      if (res.ok === false) { log(`✗ FaceFusion 换脸接口失败: ${res.errMsg}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
       else if (res.data?.job_id) { log(`✓ FaceFusion 换脸已排队 [${String(res.data.job_id).slice(0, 8)}]（⚠ 合成图无人脸，任务预期失败）`); results.push({ name: 'FaceFusion 换脸', status: 'passed' }); }
       else { log(`✗ FaceFusion 换脸响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
     } catch (e: any) { log(`✗ FaceFusion 换脸异常: ${e.message}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
@@ -311,7 +311,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('output_format', 'mp3');
 
       const res = await postForm(`${backendBaseUrl}/tasks/media-convert`, fd);
-      if (!res.ok) {
+      if (res.ok === false) {
         log(`✗ FFmpeg 音视频转换失败: ${res.errMsg}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' });
       } else if (res.data?.job_id) {
         log(`✓ FFmpeg 音视频转换已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'FFmpeg 音视频转换', status: 'passed' });

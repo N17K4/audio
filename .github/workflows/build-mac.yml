@@ -27,24 +27,14 @@ jobs:
       - name: 安装 pnpm
         run: npm install -g pnpm
 
-      # ── 3. 创建嵌入式 Python 虚拟环境 ────────────────────────────────────────
-      - name: 准备 Mac 嵌入式 Python（venv）
-        run: |
-          python3 --version
-          python3 -m venv runtime/mac/python
-          runtime/mac/python/bin/python3 -m pip install --upgrade pip --quiet
-          runtime/mac/python/bin/python3 -m pip --version
-
-      # ── 4. 安装 Node 依赖 + Python 后端依赖（不含引擎 requirements.txt）────────
+      # ── 3. 安装 Node 依赖 + 嵌入式 Python + 后端依赖 + 引擎依赖 ────────────────
+      # setup-runtime.js 自动下载 standalone Python（python-build-standalone 3.12），
+      # 再装 backend pip 依赖和引擎 pip_packages + FFmpeg
       - name: 安装依赖（pnpm install + setup-runtime）
         run: |
           pnpm install
           cd frontend && pnpm install && cd ..
           node scripts/setup-runtime.js
-
-      # ── 5a. 安装引擎依赖（rvc-python 等装入嵌入式 Python）───────────────────
-      - name: 安装引擎依赖（setup-engines）
-        run: runtime/mac/python/bin/python3 scripts/setup-engines.py
 
       # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
