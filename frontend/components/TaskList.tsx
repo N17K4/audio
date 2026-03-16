@@ -275,7 +275,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
     // 5. RVC 训练
     try {
-      const wavBytes = new Uint8Array(await testWav.arrayBuffer());
+      const wavBytes = new Uint8Array(await testWav.arrayBuffer() as ArrayBuffer);
       const zipBlob = new Blob([createTestZip('smoke_test.wav', wavBytes)], { type: 'application/zip' });
       const fd = new FormData();
       fd.append('dataset', zipBlob, 'smoke_dataset.zip');
