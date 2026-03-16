@@ -588,24 +588,6 @@
           "size_mb": 501,
           "required": false,
           "sha256": "227f40cfcde9edd581ef53edd91a8a34425c983199ea331a38f539be7b2716b0"
-        },
-        {
-          "path": "voice_730603/model.pth",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
-          "filename": "voice_730603/model.pth",
-          "size_mb": 70,
-          "required": true,
-          "sha256": "dca91fdc7e1cab9c74a838ef3c42295f316dac6bc78facf16930544fbcf8b55f"
-        },
-        {
-          "path": "voice_730603/index.index",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
-          "filename": "voice_730603/index.index",
-          "size_mb": 15,
-          "required": false,
-          "sha256": "15e289a87f662cc5863601fee3005aa8965b9f2d67b1054dc01890aa5b9617c9"
         }
       ]
     },
@@ -691,6 +673,27 @@
         }
       ],
       "env_key": "FLUX_CHECKPOINT_DIR"
+    },
+    "rag_engine": {
+      "pip_packages": [],
+      "runtime_pip_packages": [
+        "llama-index-core", "llama-index-embeddings-ollama",
+        "llama-index-vector-stores-faiss", "faiss-cpu",
+        "pypdf", "docx2txt", "openpyxl"
+      ]
+    },
+    "agent_engine": {
+      "pip_packages": [],
+      "runtime_pip_packages": [
+        "langgraph", "langchain-core", "langchain-community",
+        "duckduckgo-search"
+      ]
+    },
+    "finetune_engine": {
+      "pip_packages": [],
+      "runtime_pip_packages": [
+        "peft", "trl", "datasets", "bitsandbytes", "accelerate"
+      ]
     },
     "sd": {
       "version": "sd-turbo",

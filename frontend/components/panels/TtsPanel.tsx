@@ -4,6 +4,25 @@ import ProviderRow from '../shared/ProviderRow';
 import OutputDirRow from '../shared/OutputDirRow';
 import ModelInput from '../shared/ModelInput';
 import FileDrop from '../shared/FileDrop';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── Fish Speech 本地 TTS 流程 ────────────────────────────────────────────────
+const TTS_FLOW_FISH: FlowStep[] = [
+  { label: '文字输入' },
+  { label: '分词/G2P',    tech: 'Tokenizer' },
+  { label: '声学建模',    tech: 'Fish Speech LLM' },
+  { label: '参考音色',    tech: 'ECAPA-TDNN' },
+  { label: '声码器',      tech: 'FireflyGAN' },
+  { label: '音频输出' },
+];
+
+// ─── 云端 TTS（OpenAI / ElevenLabs 等）流程 ──────────────────────────────────
+const TTS_FLOW_CLOUD: FlowStep[] = [
+  { label: '文字输入' },
+  { label: '分句处理' },
+  { label: '云端合成',    tech: 'API' },
+  { label: '音频输出' },
+];
 
 interface TtsPanelProps {
   taskType: 'tts';
@@ -96,6 +115,11 @@ export default function TtsPanel({
         labelCls={labelCls}
       />
       <div className="border-t border-slate-100 dark:border-slate-800" />
+
+      {/* 实际运行流程 */}
+      {selectedProvider === 'fish_speech'
+        ? <ProcessFlow steps={TTS_FLOW_FISH} color="#f59e0b" />
+        : <ProcessFlow steps={TTS_FLOW_CLOUD} color="#6366f1" />}
 
       {selectedProvider === 'fish_speech' ? (
         <div className="space-y-3">

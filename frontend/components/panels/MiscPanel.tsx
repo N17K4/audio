@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import ComboSelect from '../shared/ComboSelect';
 import ModelInput, { INPUT_CLS } from '../shared/ModelInput';
 import FileDrop from '../shared/FileDrop';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
 import type { MiscSubPage, Status, ChatMessage } from '../../types';
 import {
   IMAGE_UNDERSTAND_PROVIDERS, IMAGE_UNDERSTAND_PROVIDER_LABELS, IMAGE_UNDERSTAND_MODELS,
@@ -177,6 +178,125 @@ function MiscTabIcon({ abbr, bg, size = 22 }: { abbr: string; bg: string; size?:
 
 const CODE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'groq', 'mistral', 'xai', 'ollama', 'github'];
 
+// ─── 实际运行流程定义 ─────────────────────────────────────────────────────────
+const TRANSLATE_FLOW: FlowStep[] = [
+  { label: '源文本' },
+  { label: '语言检测',     tech: '自动 / 手动' },
+  { label: '构建 Prompt',  tech: 'Few-shot' },
+  { label: 'LLM 翻译',    tech: 'OpenAI/Gemini...' },
+  { label: '译文输出' },
+];
+
+const CODE_FLOW: FlowStep[] = [
+  { label: '代码问题' },
+  { label: '语言标注',     tech: 'Language Tag' },
+  { label: '上下文拼接',   tech: 'Context Window' },
+  { label: 'LLM 推理',    tech: 'Code LLM' },
+  { label: '代码回答' },
+];
+
+// ─── 图像理解流程 ─────────────────────────────────────────────────────────────
+const IMG_UNDERSTAND_FLOW: FlowStep[] = [
+  { label: '图片上传' },
+  { label: '图像编码',    tech: 'ViT / CLIP' },
+  { label: '多模态推理',  tech: 'VLM' },
+  { label: '文字回答' },
+];
+
+// ─── 文字生图（本地 / 云端）流程 ─────────────────────────────────────────────
+const IMG_GEN_FLOW_LOCAL: FlowStep[] = [
+  { label: '提示词' },
+  { label: '文本编码',    tech: 'CLIP / T5' },
+  { label: '噪声采样',    tech: 'Latent' },
+  { label: '扩散去噪',    tech: 'UNet / DiT' },
+  { label: 'VAE 解码' },
+  { label: '图像输出' },
+];
+const IMG_GEN_FLOW_CLOUD: FlowStep[] = [
+  { label: '提示词' },
+  { label: '安全审核' },
+  { label: '云端生成',    tech: 'DALL-E / Imagen' },
+  { label: '图像输出' },
+];
+
+// ─── 换脸换图（FaceFusion / ComfyUI）流程 ────────────────────────────────────
+const IMG_I2I_FLOW_FACEFUSION: FlowStep[] = [
+  { label: '源人脸图' },
+  { label: '人脸检测',    tech: 'RetinaFace' },
+  { label: '目标图/视频' },
+  { label: '换脸',        tech: 'FaceFusion 3.x' },
+  { label: '增强',        tech: 'GFPGAN/CodeFormer' },
+  { label: '输出' },
+];
+const IMG_I2I_FLOW_COMFYUI: FlowStep[] = [
+  { label: '源图片' },
+  { label: '参考图 / Prompt' },
+  { label: '图像编码',    tech: 'VAE Encoder' },
+  { label: '扩散推理',    tech: 'ComfyUI / SD' },
+  { label: '图像解码',    tech: 'VAE Decoder' },
+  { label: '输出图片' },
+];
+
+// ─── 视频生成（本地 Wan2.1 / 云端）流程 ──────────────────────────────────────
+const VIDEO_GEN_FLOW_LOCAL: FlowStep[] = [
+  { label: '提示词 / 图片' },
+  { label: '文本编码',    tech: 'CLIP / T5' },
+  { label: '时序扩散',    tech: 'Wan2.1 DiT' },
+  { label: 'VAE 解码' },
+  { label: '帧合成',      tech: 'FFmpeg' },
+  { label: '视频输出' },
+];
+const VIDEO_GEN_FLOW_CLOUD: FlowStep[] = [
+  { label: '提示词 / 图片' },
+  { label: '云端处理',    tech: '可灵 / RunwayML' },
+  { label: '异步等待',    note: '数秒至数分钟' },
+  { label: '视频输出' },
+];
+
+// ─── OCR 识别（本地 GOT-OCR / 云端 VLM）流程 ─────────────────────────────────
+const OCR_FLOW_LOCAL: FlowStep[] = [
+  { label: '图片 / PDF' },
+  { label: '图像编码',    tech: 'ViT' },
+  { label: 'OCR LLM',    tech: 'GOT-OCR 2.0' },
+  { label: '文字输出' },
+];
+const OCR_FLOW_CLOUD: FlowStep[] = [
+  { label: '图片 / PDF' },
+  { label: '图像压缩',    tech: 'Base64' },
+  { label: '视觉大模型',  tech: 'GPT-4o / Gemini' },
+  { label: '文字输出' },
+];
+
+const LIPSYNC_FLOWS: Record<string, FlowStep[]> = {
+  liveportrait: [
+    { label: '人物图片' },
+    { label: '关键点检测',  tech: 'FaceKeypoints' },
+    { label: '驱动视频' },
+    { label: '运动迁移',    tech: 'LivePortrait' },
+    { label: '渲染',        tech: 'OpenCV' },
+    { label: '动画输出' },
+  ],
+  sadtalker: [
+    { label: '人物图片' },
+    { label: '音频文件' },
+    { label: '头部建模',    tech: '3D Morphable Model' },
+    { label: '口型驱动',    tech: 'SadTalker' },
+    { label: '视频输出' },
+  ],
+  heygen: [
+    { label: '人物视频' },
+    { label: '音频 / 文字' },
+    { label: '云端处理',    tech: 'HeyGen API' },
+    { label: '口型同步视频' },
+  ],
+  did: [
+    { label: '人物图片' },
+    { label: '音频 / 文字' },
+    { label: '云端处理',    tech: 'D-ID API' },
+    { label: '口型同步视频' },
+  ],
+};
+
 const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
 
 function shortProv(label: string): string {
@@ -314,6 +434,7 @@ export default function MiscPanel({
       {/* ── 图像理解 ── */}
       {miscSubPage === 'image_understand' && (
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+          <ProcessFlow steps={IMG_UNDERSTAND_FLOW} color="#7c3aed" />
           <div>
             <label className={labelCls}>服务商</label>
             <div className="grid grid-cols-2 gap-2">
@@ -373,6 +494,7 @@ export default function MiscPanel({
       {/* ── 文字翻译 ── */}
       {miscSubPage === 'translate' && (
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+          <ProcessFlow steps={TRANSLATE_FLOW} color="#0284c7" />
           <div className="flex flex-wrap gap-3 items-end">
             <label className="flex flex-col gap-1 min-w-[140px] flex-1">
               <span className={labelCls}>服务商</span>
@@ -439,6 +561,9 @@ export default function MiscPanel({
       {/* ── 代码助手 ── */}
       {miscSubPage === 'code_assist' && (
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel overflow-hidden flex flex-col" style={{ minHeight: '520px' }}>
+          <div className="px-5 pt-4">
+            <ProcessFlow steps={CODE_FLOW} color="#059669" />
+          </div>
           {/* 配置栏 */}
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-3 items-end">
             <label className="flex flex-col gap-1 min-w-[140px] flex-1">
@@ -543,6 +668,9 @@ export default function MiscPanel({
         const sizeLabel = imgGenProvider === 'openai' || imgGenProvider === 'dashscope' || imgGenProvider === 'sd_local' ? '尺寸' : '比例';
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            {isLocal
+              ? <ProcessFlow steps={IMG_GEN_FLOW_LOCAL} color="#db2777" />
+              : <ProcessFlow steps={IMG_GEN_FLOW_CLOUD} color="#db2777" />}
             <div>
               <label className={labelCls}>服务商</label>
               <div className="grid grid-cols-3 gap-2">
@@ -629,6 +757,11 @@ export default function MiscPanel({
               {imgI2iProvider === 'comfyui' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">需提前在本地启动 ComfyUI 服务，适合风格迁移</p>}
               {(imgI2iProvider === 'replicate' || imgI2iProvider === 'dashscope') && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
             </div>
+            {imgI2iProvider === 'facefusion'
+              ? <ProcessFlow steps={IMG_I2I_FLOW_FACEFUSION} color="#b45309" />
+              : imgI2iProvider === 'comfyui'
+                ? <ProcessFlow steps={IMG_I2I_FLOW_COMFYUI} color="#7c3aed" />
+                : null}
             {isComfyUI ? (
               <div>
                 <label className={labelCls}>ComfyUI 服务地址</label>
@@ -700,6 +833,9 @@ export default function MiscPanel({
         const supportsI2v = videoGenProvider === 'kling' || videoGenProvider === 'wan_local' || videoGenProvider === 'wan_video' || videoGenProvider === 'runway';
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            {isLocal
+              ? <ProcessFlow steps={VIDEO_GEN_FLOW_LOCAL} color="#0f766e" />
+              : <ProcessFlow steps={VIDEO_GEN_FLOW_CLOUD} color="#0f766e" />}
             <div>
               <label className={labelCls}>服务商</label>
               <div className="grid grid-cols-3 gap-2">
@@ -795,6 +931,9 @@ export default function MiscPanel({
         const models = OCR_MODELS[ocrProvider] || [];
         return (
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+            {isLocal
+              ? <ProcessFlow steps={OCR_FLOW_LOCAL} color="#0369a1" />
+              : <ProcessFlow steps={OCR_FLOW_CLOUD} color="#0369a1" />}
             <div>
               <label className={labelCls}>服务商</label>
               <div className="grid grid-cols-2 gap-2">
@@ -867,6 +1006,8 @@ export default function MiscPanel({
               {lipsyncProvider === 'liveportrait' && <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">本地运行，用驱动视频的表情/动作生成人物动画，无需 API Key</p>}
               {(lipsyncProvider === 'sadtalker' || lipsyncProvider === 'heygen' || lipsyncProvider === 'did') && <p className="mt-1.5 text-xs text-amber-500">暂不支持，敬请期待</p>}
             </div>
+            {/* 实际运行流程 */}
+            <ProcessFlow steps={LIPSYNC_FLOWS[lipsyncProvider] || LIPSYNC_FLOWS['liveportrait']} color="#be185d" />
             {!isLocal && (
               <div>
                 <label className={labelCls}>API Key</label>

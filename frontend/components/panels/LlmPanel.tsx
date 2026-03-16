@@ -1,6 +1,16 @@
 import type { ChatMessage, CapabilityMap } from '../../types';
 import { PROVIDER_LABELS } from '../../constants';
 import ModelInput, { INPUT_CLS } from '../shared/ModelInput';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── LLM 聊天实际流程 ─────────────────────────────────────────────────────────
+const LLM_FLOW: FlowStep[] = [
+  { label: '用户输入' },
+  { label: 'System Prompt', tech: 'Context 注入' },
+  { label: 'LLM 推理',      tech: 'Transformer' },
+  { label: '流式解码',       tech: 'Streaming Tokens' },
+  { label: '输出文字' },
+];
 
 interface LlmPanelProps {
   taskType: 'llm';
@@ -50,7 +60,9 @@ export default function LlmPanel({
   fieldCls,
 }: LlmPanelProps) {
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: 'calc(100vh - 220px)', minHeight: '480px', maxHeight: '760px' }}>
+    <>
+    <ProcessFlow steps={LLM_FLOW} color="#4f46e5" />
+    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: 'calc(100vh - 256px)', minHeight: '480px', maxHeight: '720px' }}>
       {/* 顶部配置栏（始终可见） */}
       <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-3 items-end">
         {/* 服务商下拉 */}
@@ -152,5 +164,6 @@ export default function LlmPanel({
         </div>
       </div>
     </section>
+    </>
   );
 }

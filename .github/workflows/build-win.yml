@@ -65,13 +65,6 @@ jobs:
           & $py scripts/setup-engines.py
         continue-on-error: false
 
-      # ── 5b. 下载内置音色模型（从 HuggingFace N17K4/ai-workshop-assets 下载）───
-      - name: 下载内置音色模型
-        shell: pwsh
-        run: |
-          $py = "runtime\win\python\python.exe"
-          & $py scripts/download_checkpoints.py --engine voices
-
       # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端
         run: pnpm run build:frontend

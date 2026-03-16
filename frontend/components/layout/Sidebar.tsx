@@ -1,7 +1,7 @@
 import { TASK_LABELS } from '../../constants';
 import type { TaskType, Job } from '../../types';
 
-export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert' | 'image_tools' | 'video_tools' | 'text_tools' | 'misc';
+export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert' | 'image_tools' | 'video_tools' | 'text_tools' | 'misc' | 'advanced_tools';
 
 interface SidebarProps {
   currentPage: Page;
@@ -75,6 +75,13 @@ export default function Sidebar({
 
         {/* 主导航 */}
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto overflow-x-hidden">
+          <NavItem page="system" label="设置" subtitle="功能说明 · 配置 · 健康检查" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#334155"/>
+              <path d="M10.325 8.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          } />
           <NavItem page="audio_tools" label="音频工具" subtitle="TTS · 音色转换 · STT · 语音聊天" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#4f46e5"/>
@@ -106,6 +113,15 @@ export default function Sidebar({
               <path d="M7 9h14M7 14h10M7 19h8" stroke="#bae6fd" strokeWidth="2" strokeLinecap="round"/>
             </svg>
           } />
+          <NavItem page="advanced_tools" label="AI 进阶" subtitle="知识库 · 智能体 · 微调" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#7c3aed"/>
+              <circle cx="14" cy="10" r="4" fill="none" stroke="#ddd6fe" strokeWidth="1.5"/>
+              <path d="M7 22c0-3.866 3.134-7 7-7s7 3.134 7 7" fill="none" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="21" cy="10" r="2.5" fill="#a78bfa"/>
+              <circle cx="7" cy="10" r="2.5" fill="#a78bfa"/>
+            </svg>
+          } />
           <NavItem page="format_convert" label="格式转换" subtitle="音视频 · 文档" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#0f766e"/>
@@ -127,13 +143,6 @@ export default function Sidebar({
                 <circle cx="22" cy="7" r="5" fill="#f97316"/>
                 <text x="22" y="7" dominantBaseline="central" textAnchor="middle" fontSize="6" fontWeight="700" fill="#fff" fontFamily="-apple-system,sans-serif">{activeBadge > 9 ? '9+' : activeBadge}</text>
               </>}
-            </svg>
-          } />
-          <NavItem page="system" label="设置" icon={
-            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-              <rect width="28" height="28" rx="7" fill="#334155"/>
-              <path d="M10.325 8.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           } />
         </div>

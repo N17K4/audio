@@ -1,6 +1,25 @@
 import type { Status } from '../../types';
 import { IMG_GEN_PROVIDERS, IMG_GEN_PROVIDER_LABELS, IMG_GEN_MODELS, IMG_GEN_SIZES, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
 import ComboSelect from '../shared/ComboSelect';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── 本地文字生图（Flux / SD-Turbo / ComfyUI）流程 ────────────────────────────
+const IMG_GEN_FLOW_LOCAL: FlowStep[] = [
+  { label: '提示词' },
+  { label: '文本编码',   tech: 'CLIP / T5' },
+  { label: '噪声采样',   tech: 'Latent' },
+  { label: '扩散去噪',   tech: 'UNet / DiT' },
+  { label: 'VAE 解码' },
+  { label: '图像输出' },
+];
+
+// ─── 云端文字生图（DALL-E / Gemini / Stability 等）流程 ───────────────────────
+const IMG_GEN_FLOW_CLOUD: FlowStep[] = [
+  { label: '提示词' },
+  { label: '安全审核' },
+  { label: '云端生成',   tech: 'DALL-E / Imagen' },
+  { label: '图像输出' },
+];
 
 interface ImageGenPanelProps {
   status: Status;
@@ -68,6 +87,11 @@ export default function ImageGenPanel({
 
   return (
     <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+      {/* 实际运行流程 */}
+      {isLocal
+        ? <ProcessFlow steps={IMG_GEN_FLOW_LOCAL} color="#db2777" />
+        : <ProcessFlow steps={IMG_GEN_FLOW_CLOUD} color="#db2777" />}
+
       {/* 服务商下拉 */}
       <div>
         <label className={labelCls}>服务商</label>

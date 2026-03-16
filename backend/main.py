@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT
 from logging_setup import logger
-from routers import health, voices, jobs, convert, train, tasks
+from routers import health, voices, jobs, convert, train, tasks, rag, agent, finetune
 
 app = FastAPI()
 
@@ -24,6 +24,9 @@ app.include_router(jobs.router)
 app.include_router(convert.router)
 app.include_router(train.router)
 app.include_router(tasks.router)
+app.include_router(rag.router)
+app.include_router(agent.router)
+app.include_router(finetune.router)
 
 # 静态前端必须最后挂载，否则 mount("/") 会拦截所有 POST 请求返回 405
 frontend_out = APP_ROOT / "frontend" / "out"

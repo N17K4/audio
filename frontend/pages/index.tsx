@@ -32,6 +32,9 @@ import VoiceChatPanel from '../components/panels/VoiceChatPanel';
 import MediaPanel from '../components/panels/MediaPanel';
 import DocPanel from '../components/panels/DocPanel';
 import MiscPanel from '../components/panels/MiscPanel';
+import RagPanel from '../components/panels/RagPanel';
+import AgentPanel from '../components/panels/AgentPanel';
+import FinetunePanel from '../components/panels/FinetunePanel';
 
 export default function Home() {
   // ─── 导航状态 ─────────────────────────────────────────────────────────────
@@ -44,6 +47,8 @@ export default function Home() {
   const [showImageTools, setShowImageTools] = useState(false);
   const [showVideoTools, setShowVideoTools] = useState(false);
   const [showTextTools, setShowTextTools] = useState(false);
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
+  const [advancedSubPage, setAdvancedSubPage] = useState<'rag' | 'agent' | 'finetune'>('rag');
   const [textSubPage, setTextSubPage] = useState<'llm' | 'translate' | 'code_assist'>('llm');
   const [formatGroup, setFormatGroup] = useState<'media' | 'doc'>('media');
   const [hwAccelDetected, setHwAccelDetected] = useState('');
@@ -52,6 +57,7 @@ export default function Home() {
 
   const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' :
     showAudioTools ? 'audio_tools' : showFormatConvert ? 'format_convert' :
+    showAdvancedTools ? 'advanced_tools' :
     showImageTools ? 'image_tools' : showVideoTools ? 'video_tools' :
     showTextTools ? 'text_tools' : taskType;
 
@@ -60,6 +66,7 @@ export default function Home() {
       setShowHome(false); setShowTasks(false); setShowSystem(false);
       setShowAudioTools(false); setShowFormatConvert(false);
       setShowImageTools(false); setShowVideoTools(false); setShowTextTools(false);
+      setShowAdvancedTools(false);
     };
     if (page === 'home') { resetAll(); setShowHome(true); }
     else if (page === 'tasks') { resetAll(); setShowTasks(true); fetchJobs(); }
@@ -93,6 +100,12 @@ export default function Home() {
       if (subPage === 'llm' || subPage === 'translate' || subPage === 'code_assist') {
         setTextSubPage(subPage);
         if (subPage !== 'llm') misc.setMiscSubPage(subPage as MiscSubPage);
+      }
+    }
+    else if (page === 'advanced_tools') {
+      resetAll(); setShowAdvancedTools(true);
+      if (subPage === 'rag' || subPage === 'agent' || subPage === 'finetune') {
+        setAdvancedSubPage(subPage);
       }
     }
     else if (page === 'misc') {
@@ -516,6 +529,8 @@ export default function Home() {
                 setJobs={setJobs}
                 onFetchJobs={fetchJobs}
                 outputDir={outputDir}
+                downloadDir={backend.downloadDir}
+                addInstantJobResult={addInstantJobResult}
               />
             )}
 
@@ -1478,6 +1493,44 @@ export default function Home() {
                     allowedSubPages={[textSubPage as MiscSubPage]}
                   />
                 )}
+              </div>
+            )}
+
+            {/* AI 进阶工具 */}
+            {showAdvancedTools && (
+              <div>
+                <header className="flex items-center gap-3.5 pb-4">
+                  <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+                    <rect width="28" height="28" rx="7" fill="#7c3aed"/>
+                    <circle cx="14" cy="10" r="4" fill="none" stroke="#ddd6fe" strokeWidth="1.5"/>
+                    <path d="M7 22c0-3.866 3.134-7 7-7s7 3.134 7 7" fill="none" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round"/>
+                    <circle cx="21" cy="10" r="2.5" fill="#a78bfa"/>
+                    <circle cx="7" cy="10" r="2.5" fill="#a78bfa"/>
+                  </svg>
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">AI 进阶</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">知识库 · 智能体 · 模型微调</p>
+                  </div>
+                </header>
+                <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                  {(['rag', 'agent', 'finetune'] as const).map(tab => {
+                    const labels: Record<string, string> = { rag: '知识库', agent: '智能体', finetune: 'LoRA 微调' };
+                    return (
+                      <button key={tab}
+                        onClick={() => setAdvancedSubPage(tab)}
+                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                          advancedSubPage === tab
+                            ? 'bg-white dark:bg-slate-900 text-[#7c3aed] shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}>
+                        {labels[tab]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {advancedSubPage === 'rag' && <RagPanel backendUrl={backend.backendBaseUrl} />}
+                {advancedSubPage === 'agent' && <AgentPanel backendUrl={backend.backendBaseUrl} />}
+                {advancedSubPage === 'finetune' && <FinetunePanel backendUrl={backend.backendBaseUrl} />}
               </div>
             )}
 

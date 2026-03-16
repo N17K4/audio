@@ -7,12 +7,12 @@ interface SystemPanelProps {
 }
 
 const NAV_ITEMS = [
+  { id: 'about',   label: '功能说明',   electronOnly: false, keywords: ['功能', '说明', '关于', '引擎'] },
   { id: 'models',  label: '模型管理',   electronOnly: true,  keywords: ['模型', '磁盘', '安装', '卸载', '下载', '体积'] },
   { id: 'perf',    label: '性能',       electronOnly: false, keywords: ['并发', '性能', '推理', '并行'] },
   { id: 'health',  label: '健康检查',   electronOnly: false, keywords: ['健康', '状态', '连接', '后端'] },
   { id: 'logs',    label: '日志',       electronOnly: true,  keywords: ['日志', 'log', '错误', '前端'] },
   { id: 'reset',   label: '重置',       electronOnly: true,  keywords: ['清除', '重置', '重新下载', '数据'] },
-  { id: 'about',   label: '功能说明',   electronOnly: false, keywords: ['功能', '说明', '关于', '引擎'] },
 ] as const;
 
 type SectionId = typeof NAV_ITEMS[number]['id'];
@@ -79,7 +79,7 @@ function Card({
 }
 
 export default function SystemPanel({ backendBaseUrl, isElectron }: SystemPanelProps) {
-  const [activeSection, setActiveSection] = useState<SectionId>(isElectron ? 'models' : 'health');
+  const [activeSection, setActiveSection] = useState<SectionId>('about');
 
   // ── 并发数 ─────────────────────────────────────────────────────────────────
   const [concurrency, setConcurrency] = useState(1);

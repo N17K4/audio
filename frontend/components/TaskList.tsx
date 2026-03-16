@@ -1,3 +1,4 @@
+import React, { useState, useRef, useEffect } from 'react';
 import type { Job } from '../types';
 import { PROVIDER_LABELS } from '../constants';
 import TasksIcon from './icons/TasksIcon';
@@ -8,6 +9,94 @@ interface TaskListProps {
   setJobs: React.Dispatch<React.SetStateAction<Job[]>>;
   onFetchJobs: () => void;
   outputDir?: string;
+  downloadDir?: string;
+  addInstantJobResult: (
+    type: string, label: string, provider: string, isLocal: boolean,
+    result: { status: 'completed' | 'failed'; result_url?: string; result_text?: string; error?: string }
+  ) => void;
+}
+
+// ─── Smoke test helpers ───────────────────────────────────────────────────────
+
+function createTestWav(): Blob {
+  const sampleRate = 8000, numSamples = 8000, numChannels = 1, bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize = numSamples * blockAlign;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buf);
+  const ws = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); ws(8, 'WAVE');
+  ws(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  ws(36, 'data'); view.setUint32(40, dataSize, true);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createTestZip(filename: string, data: Uint8Array): Uint8Array {
+  const fn = new TextEncoder().encode(filename);
+  const fnLen = fn.length, dataLen = data.length, crc = crc32(data);
+  const now = new Date();
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const buf = new Uint8Array((30 + fnLen) + dataLen + (46 + fnLen) + 22);
+  const view = new DataView(buf.buffer);
+  let o = 0;
+  view.setUint32(o, 0x04034b50, true); o += 4;
+  view.setUint16(o, 20, true); o += 2; view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
+  view.setUint16(o, dosTime, true); o += 2; view.setUint16(o, dosDate, true); o += 2;
+  view.setUint32(o, crc, true); o += 4;
+  view.setUint32(o, dataLen, true); o += 4; view.setUint32(o, dataLen, true); o += 4;
+  view.setUint16(o, fnLen, true); o += 2; view.setUint16(o, 0, true); o += 2;
+  fn.forEach((b, i) => { buf[o + i] = b; }); o += fnLen;
+  buf.set(data, o); o += dataLen;
+  const cdOffset = o;
+  view.setUint32(o, 0x02014b50, true); o += 4;
+  view.setUint16(o, 20, true); o += 2; view.setUint16(o, 20, true); o += 2;
+  view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
+  view.setUint16(o, dosTime, true); o += 2; view.setUint16(o, dosDate, true); o += 2;
+  view.setUint32(o, crc, true); o += 4;
+  view.setUint32(o, dataLen, true); o += 4; view.setUint32(o, dataLen, true); o += 4;
+  view.setUint16(o, fnLen, true); o += 2; view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
+  view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
+  view.setUint32(o, 0, true); o += 4; view.setUint32(o, 0, true); o += 4;
+  fn.forEach((b, i) => { buf[o + i] = b; }); o += fnLen;
+  view.setUint32(o, 0x06054b50, true); o += 4;
+  view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
+  view.setUint16(o, 1, true); o += 2; view.setUint16(o, 1, true); o += 2;
+  view.setUint32(o, 46 + fnLen, true); o += 4; view.setUint32(o, cdOffset, true); o += 4;
+  view.setUint16(o, 0, true);
+  return buf;
+}
+
+function createTestImage(): Blob {
+  const b64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=';
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: 'image/jpeg' });
+}
+
+const SPRING_GREEN = '#6db33f';
+
+function Spinner() {
+  return (
+    <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+    </svg>
+  );
 }
 
 // ─── 各引擎阶段定义 ──────────────────────────────────────────────────────────
@@ -75,8 +164,173 @@ function fmtDateTime(ts: number): string {
   return `${mo}月${da}日 ${h}:${mi}`;
 }
 
-export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir }: TaskListProps) {
+export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir, downloadDir, addInstantJobResult }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
+
+  // ── 烟雾测试 ────────────────────────────────────────────────────────────────
+  const [smokeRunning, setSmokeRunning] = useState(false);
+  const [smokeLog, setSmokeLog] = useState<string[]>([]);
+  const [smokeSummary, setSmokeSummary] = useState<Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>>([]);
+  const smokeLogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = smokeLogRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [smokeLog]);
+
+  async function runSmokeTests() {
+    setSmokeRunning(true);
+    setSmokeLog([]);
+    setSmokeSummary([]);
+
+    const log = (msg: string) => setSmokeLog(prev => [...prev, msg]);
+    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
+
+    async function postForm(url: string, fd: FormData): Promise<{ ok: true; data: any } | { ok: false; errMsg: string }> {
+      const r = await fetch(url, { method: 'POST', body: fd });
+      let body: any;
+      try { body = await r.json(); } catch { body = null; }
+      if (!r.ok) {
+        const detail = body?.detail ?? body?.error ?? (body ? JSON.stringify(body) : '');
+        return { ok: false, errMsg: `HTTP ${r.status}${detail ? ': ' + String(detail).slice(0, 120) : ''}` };
+      }
+      return { ok: true, data: body };
+    }
+
+    const testWav = createTestWav();
+    let rvcVoiceId: string | null = null;
+    try {
+      const r = await fetch(`${backendBaseUrl}/voices`);
+      if (r.ok) {
+        const data = await r.json();
+        const voices: Array<{ voice_id: string; engine?: string }> = Array.isArray(data) ? data : (data.voices ?? []);
+        rvcVoiceId = voices.find(v => v.engine === 'rvc')?.voice_id ?? null;
+      }
+    } catch { /**/ }
+
+    // 1. Fish Speech TTS
+    try {
+      const fd = new FormData();
+      fd.append('text', '烟雾测试文本合成');
+      fd.append('provider', 'fish_speech');
+
+      const res = await postForm(`${backendBaseUrl}/tasks/tts`, fd);
+      if (!res.ok) { log(`✗ Fish Speech TTS 失败: ${res.errMsg}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
+      else if (res.data?.job_id) { log(`✓ Fish Speech TTS 已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Fish Speech TTS', status: 'passed' }); }
+      else { log(`✗ Fish Speech TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
+    } catch (e: any) { log(`✗ Fish Speech TTS 异常: ${e.message}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
+
+    // 2. Faster Whisper STT
+    try {
+      const fd = new FormData();
+      fd.append('file', testWav, 'test.wav');
+      fd.append('provider', 'faster_whisper');
+      fd.append('model', 'base');
+
+      const res = await postForm(`${backendBaseUrl}/tasks/stt`, fd);
+      if (!res.ok) {
+        log(`✗ Faster Whisper STT 失败: ${res.errMsg}`); results.push({ name: 'Faster Whisper STT', status: 'failed' });
+      } else if (res.data?.job_id) {
+        log(`✓ Faster Whisper STT 已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Faster Whisper STT', status: 'passed' });
+      } else {
+        const d = res.data ?? {};
+        const status: 'completed' | 'failed' = (d.status === 'completed' || d.status === 'success') ? 'completed' : 'failed';
+        addInstantJobResult('stt', 'STT', 'faster_whisper', true, { status, result_text: d.text ?? d.result_text, error: d.error });
+        if (status === 'completed') { log(`✓ Faster Whisper STT 完成，识别文本: "${d.text ?? d.result_text ?? '(空)'}"`); results.push({ name: 'Faster Whisper STT', status: 'passed' }); }
+        else { log(`✗ Faster Whisper STT 失败: ${d.error ?? d.detail ?? JSON.stringify(d)}`); results.push({ name: 'Faster Whisper STT', status: 'failed' }); }
+      }
+    } catch (e: any) { log(`✗ Faster Whisper STT 异常: ${e.message}`); results.push({ name: 'Faster Whisper STT', status: 'failed' }); }
+
+    // 3. Seed-VC 换声（provider=seed_vc + reference_audio，无需专属模型）
+    try {
+      const fd = new FormData();
+      fd.append('file', testWav, 'test.wav');
+      fd.append('provider', 'seed_vc');
+      fd.append('mode', 'local');
+      fd.append('reference_audio', testWav, 'ref.wav');
+
+      const res = await postForm(`${backendBaseUrl}/convert`, fd);
+      if (!res.ok) { log(`✗ Seed-VC 换声失败: ${res.errMsg}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
+      else if (res.data?.job_id) { log(`✓ Seed-VC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Seed-VC 换声', status: 'passed' }); }
+      else { log(`✗ Seed-VC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
+    } catch (e: any) { log(`✗ Seed-VC 换声异常: ${e.message}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
+
+    // 4. RVC 换声
+    if (rvcVoiceId) {
+      try {
+        const fd = new FormData();
+        fd.append('file', testWav, 'test.wav');
+        fd.append('voice_id', rvcVoiceId);
+        fd.append('mode', 'local');
+  
+        const res = await postForm(`${backendBaseUrl}/convert`, fd);
+        if (!res.ok) { log(`✗ RVC 换声失败: ${res.errMsg}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
+        else if (res.data?.job_id) { log(`✓ RVC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 换声', status: 'passed' }); }
+        else { log(`✗ RVC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
+      } catch (e: any) { log(`✗ RVC 换声异常: ${e.message}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
+    } else {
+      log(`⚠ RVC 换声 — 未找到 rvc 引擎音色，跳过`);
+      results.push({ name: 'RVC 换声', status: 'skipped' });
+    }
+
+    // 5. RVC 训练
+    try {
+      const wavBytes = new Uint8Array(await testWav.arrayBuffer());
+      const zipBlob = new Blob([createTestZip('smoke_test.wav', wavBytes)], { type: 'application/zip' });
+      const fd = new FormData();
+      fd.append('dataset', zipBlob, 'smoke_dataset.zip');
+      fd.append('voice_id', 'smoke_test_voice');
+      fd.append('voice_name', '烟雾测试音色');
+      fd.append('voice_subdir', 'user');
+      fd.append('epochs', '1');
+      const res = await postForm(`${backendBaseUrl}/train`, fd);
+      if (!res.ok) { log(`✗ RVC 训练失败: ${res.errMsg}`); results.push({ name: 'RVC 训练', status: 'failed' }); }
+      else if (res.data?.job_id) { log(`✓ RVC 训练音色已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 训练音色', status: 'passed' }); }
+      else { log(`✗ RVC 训练音色响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
+    } catch (e: any) { log(`✗ RVC 训练音色异常: ${e.message}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
+
+    // 6. FaceFusion（合成图无人脸，任务预期失败，但验证接口/引擎可达）
+    try {
+      const imgBlob = createTestImage();
+      const fd = new FormData();
+      fd.append('source_image', imgBlob, 'source.jpg');
+      fd.append('reference_image', imgBlob, 'reference.jpg');
+      fd.append('provider', 'facefusion');
+
+      const res = await postForm(`${backendBaseUrl}/tasks/image-i2i`, fd);
+      if (!res.ok) { log(`✗ FaceFusion 换脸接口失败: ${res.errMsg}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
+      else if (res.data?.job_id) { log(`✓ FaceFusion 换脸已排队 [${String(res.data.job_id).slice(0, 8)}]（⚠ 合成图无人脸，任务预期失败）`); results.push({ name: 'FaceFusion 换脸', status: 'passed' }); }
+      else { log(`✗ FaceFusion 换脸响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
+    } catch (e: any) { log(`✗ FaceFusion 换脸异常: ${e.message}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
+
+    // 7. FFmpeg 音频转换（同步直接返回）
+    try {
+      const fd = new FormData();
+      fd.append('file', testWav, 'test.wav');
+      fd.append('action', 'convert');
+      fd.append('output_format', 'mp3');
+
+      const res = await postForm(`${backendBaseUrl}/tasks/media-convert`, fd);
+      if (!res.ok) {
+        log(`✗ FFmpeg 音视频转换失败: ${res.errMsg}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' });
+      } else if (res.data?.job_id) {
+        log(`✓ FFmpeg 音视频转换已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'FFmpeg 音视频转换', status: 'passed' });
+      } else if (res.data?.status === 'success' || res.data?.result_url) {
+        addInstantJobResult('media_convert', 'FFmpeg 音视频转换', 'ffmpeg', true, { status: 'completed', result_url: res.data.result_url });
+        log(`✓ FFmpeg 音视频转换完成 → ${res.data.result_url}`); results.push({ name: 'FFmpeg 音视频转换', status: 'passed' });
+      } else {
+        log(`✗ FFmpeg 音视频转换响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' });
+      }
+    } catch (e: any) { log(`✗ FFmpeg 音视频转换异常: ${e.message}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' }); }
+
+    const passed = results.filter(r => r.status === 'passed').length;
+    const failed = results.filter(r => r.status === 'failed').length;
+    const skipped = results.filter(r => r.status === 'skipped').length;
+    log(`─── 全部测试已提交  ✓ ${passed} 通过  ✗ ${failed} 失败${skipped ? `  ⚠ ${skipped} 跳过` : ''}`);
+    setSmokeSummary(results);
+    onFetchJobs();
+    setSmokeRunning(false);
+  }
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
   const now = Date.now() / 1000;
 
@@ -305,6 +559,63 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           )}
         </>
       )}
+      {/* 烟雾测试 */}
+      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试</span>
+              {downloadDir && (typeof window !== 'undefined') && (window as any).electronAPI?.openDir && (
+                <button
+                  onClick={() => (window as any).electronAPI.openDir(downloadDir)}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  title={downloadDir}
+                >
+                  打开音频缓存目录
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">自动提交 7 项任务验证本地引擎（TTS · STT · Seed-VC · RVC · 训练 · FaceFusion · FFmpeg）</p>
+          </div>
+          <button
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
+            style={{ backgroundColor: SPRING_GREEN }}
+            disabled={smokeRunning || !backendBaseUrl}
+            onClick={runSmokeTests}
+          >
+            {smokeRunning ? <><Spinner />运行中…</> : '运行烟雾测试'}
+          </button>
+        </div>
+        {smokeLog.length > 0 && (
+          <div
+            ref={smokeLogRef}
+            className="px-5 py-3 bg-slate-950 text-green-400 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap"
+            style={{ maxHeight: '10rem' }}
+          >
+            {smokeLog.join('\n')}
+          </div>
+        )}
+        {smokeSummary.length > 0 && (
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
+            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2">测试结果汇总</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {smokeSummary.map(r => (
+                <div key={r.name} className="flex items-center gap-1.5 text-xs">
+                  {r.status === 'passed'  && <span className="text-emerald-500 font-bold shrink-0">✓</span>}
+                  {r.status === 'failed'  && <span className="text-rose-500 font-bold shrink-0">✗</span>}
+                  {r.status === 'skipped' && <span className="text-amber-500 font-bold shrink-0">⚠</span>}
+                  <span className={
+                    r.status === 'passed'  ? 'text-emerald-700 dark:text-emerald-400' :
+                    r.status === 'failed'  ? 'text-rose-600 dark:text-rose-400' :
+                    'text-amber-600 dark:text-amber-400'
+                  }>{r.name}</span>
+                  {r.status === 'skipped' && <span className="text-slate-400 text-[10px]">跳过</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

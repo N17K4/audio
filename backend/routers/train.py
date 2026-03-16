@@ -8,14 +8,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from config import TRAIN_DATA_DIR, VOICES_DIR, RUNTIME_ROOT
+from config import TRAIN_DATA_DIR, VOICES_DIR, WRAPPERS_ROOT
 from job_queue import TRAIN_JOBS, JOBS
 from logging_setup import logger
 from utils.engine import get_embedded_python, build_engine_env
 
 router = APIRouter()
 
-_TRAIN_SCRIPT = RUNTIME_ROOT / "rvc" / "train.py"
+_TRAIN_SCRIPT = WRAPPERS_ROOT / "rvc" / "train.py"
 
 
 def _sync_jobs_status(job_id: str, status: str, **extra) -> None:
@@ -35,13 +35,14 @@ async def run_rvc_training(
     epochs: int,
     f0_method: str,
     sample_rate: int,
+    voice_subdir: str = "",
 ) -> None:
     """调用 runtime/rvc/train.py 子进程执行真实 RVC 训练，解析 stdout 进度行更新 TRAIN_JOBS。"""
     TRAIN_JOBS[job_id]["status"] = "running"
     TRAIN_JOBS[job_id]["started_at"] = datetime.utcnow().isoformat()
     _sync_jobs_status(job_id, "running", started_at=_time.time())
 
-    voice_dir = VOICES_DIR / voice_id
+    voice_dir = (VOICES_DIR / voice_subdir / voice_id) if voice_subdir else (VOICES_DIR / voice_id)
 
     if not _TRAIN_SCRIPT.exists():
         err = f"训练脚本不存在: {_TRAIN_SCRIPT}"
@@ -179,6 +180,7 @@ async def train_voice(
     epochs: int = Form(0),
     f0_method: str = Form("harvest"),
     sample_rate: int = Form(40000),
+    voice_subdir: str = Form(""),
 ):
     if not voice_id.strip():
         raise HTTPException(status_code=400, detail="voice_id 不能为空")
@@ -188,6 +190,10 @@ async def train_voice(
     )
     if not safe_voice_id:
         raise HTTPException(status_code=400, detail="voice_id 含无效字符")
+
+    safe_subdir = "".join(
+        ch for ch in voice_subdir.strip().lower() if ch.isalnum() or ch in ("_", "-")
+    )
 
     safe_voice_name = voice_name.strip() or safe_voice_id
     ext = Path(dataset.filename or "dataset.zip").suffix or ".zip"
@@ -227,7 +233,7 @@ async def train_voice(
     asyncio.create_task(
         run_rvc_training(
             job_id, safe_voice_id, safe_voice_name,
-            dataset_path, epochs, f0_method, sample_rate,
+            dataset_path, epochs, f0_method, sample_rate, safe_subdir,
         )
     )
 

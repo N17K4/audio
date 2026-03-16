@@ -1,6 +1,6 @@
 // ─── 类型 ──────────────────────────────────────────────────────────────────
 export type Status = 'idle' | 'recording' | 'processing';
-export type TaskType = 'tts' | 'vc' | 'asr' | 'llm' | 'voice_chat' | 'media' | 'doc' | 'misc';
+export type TaskType = 'tts' | 'vc' | 'asr' | 'llm' | 'voice_chat' | 'media' | 'doc' | 'misc' | 'rag' | 'agent' | 'finetune';
 export type MiscSubPage = 'image_understand' | 'translate' | 'code_assist' | 'img_gen' | 'img_i2i' | 'video_gen' | 'ocr' | 'lipsync';
 export type DocSubPage = 'pdf_to_word' | 'doc_convert' | 'pdf_extract' | 'image' | 'qr' | 'text_encoding';
 export type ToolboxSubPage = 'image' | 'qr' | 'text_encoding'; // 保留兼容 useToolbox hook
@@ -42,6 +42,32 @@ export type Job = {
   step?: string;          // 当前阶段名称
   step_msg?: string;      // 当前阶段描述
 };
+
+export interface RagCollection {
+  name: string;
+  doc_count: number;
+  size_mb: number;
+  created_at: string;
+}
+
+export interface AgentStep {
+  type: 'thought' | 'action' | 'observation' | 'final' | 'error';
+  content?: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+}
+
+export interface FinetuneJob {
+  job_id: string;
+  status: 'running' | 'done' | 'error' | 'cancelled';
+  model: string;
+  progress: number;
+  loss_curve: number[];
+  log_tail: string[];
+  output_dir: string;
+  export_format: string;
+  created_at: string;
+}
 
 declare global {
   interface Window {

@@ -10,6 +10,9 @@ export const TASK_LABELS: Record<TaskType, string> = {
   media: '音视频转换',
   doc:  '文档工具',
   misc: 'AI扩展',
+  rag: '知识库',
+  agent: '智能体',
+  finetune: '微调',
 };
 
 export const TASK_PHASES: Record<string, string[]> = {
@@ -254,7 +257,10 @@ export const TASK_ICON_CFG: Record<TaskType, { abbr: string; bg: string; text: s
   voice_chat: { abbr: 'V+',  bg: '#d97706', text: '#fff' },
   media:      { abbr: 'FMT', bg: '#0f766e', text: '#fff' },
   doc:        { abbr: 'DOC', bg: '#b45309', text: '#fff' },
-  misc: { abbr: 'EXT', bg: '#6d28d9', text: '#fff' },
+  misc:       { abbr: 'EXT', bg: '#6d28d9', text: '#fff' },
+  rag:        { abbr: 'RAG', bg: '#0d9488', text: '#fff' },
+  agent:      { abbr: 'AGT', bg: '#7c3aed', text: '#fff' },
+  finetune:   { abbr: 'FT',  bg: '#be185d', text: '#fff' },
 };
 
 // ─── 图像生成（独立）提供商 ──────────────────────────────────────────────────

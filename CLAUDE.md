@@ -177,6 +177,41 @@ models/
 2. `download_checkpoints.py` 会在 checkpoints 阶段统一安装到嵌入式 Python
 3. 引擎脚本只负责 import，缺包时打印错误信息并以非零退出码退出
 
+## 分发架构与下载分工
+
+### 三阶段下载分工
+
+| 阶段 | 脚本调用 | 装什么 | 存到哪 |
+|---|---|---|---|
+| **CI 构建** | `setup-engines.py`（无参数） | 引擎源码（HF zip / git clone）+ `pip_packages`（轻量依赖） | 嵌入式 Python，打进安装包 |
+| **用户首次启动 Phase 1** | `setup-engines.py --runtime --target userData/` | `runtime_pip_packages`（torch、torchaudio 等重型 ML 包） | `userData/python-packages/`，不打包 |
+| **用户首次启动 Phase 2** | `download_checkpoints.py`（无 `--engine`，全量） | 所有 `default_install: true` 引擎的 checkpoint + 内置音色 | `checkpoints/` + `models/voices/` |
+| **本地开发** | `pnpm run checkpoints` | 同 Phase 2（facefusion 还额外装 pip 依赖） | 同上 |
+
+### pip_packages vs runtime_pip_packages
+
+`wrappers/manifest.json` 每个引擎有两类依赖字段：
+
+- **`pip_packages`**：轻量依赖（loguru、soundfile、rvc-python 等），CI build 阶段装入嵌入式 Python，打进安装包，用户无需等待
+- **`runtime_pip_packages`**：重型 ML 包（torch、torchaudio、transformers 等），体积几 GB，不打进包，用户首次启动时通过引导窗口按需下载，支持配置 PyPI 镜像
+
+### 内置音色不打进安装包
+
+内置音色（hutao-jp、Ayayaka、tsukuyomi、raiden 等）和其他引擎 checkpoint 一样，走用户首次启动引导下载，不在 CI 阶段下载打包。CI workflow 只跑 `setup-engines.py`，不跑 `download_checkpoints.py`。
+
+**原因**：安装包体积控制；引导流程已支持全量下载，无需单独处理音色。
+
+### 用户引导下载的资产来源
+
+| 内容 | 来源 |
+|---|---|
+| torch 等 ML 包 | PyPI（引导页支持配置清华/阿里云等镜像） |
+| fish_speech / seed_vc / rvc checkpoints | HuggingFace 各原始仓库（固定 commit SHA） |
+| facefusion ONNX 模型 | HF `N17K4/ai-workshop-assets` dataset |
+| 内置音色 `.pth` / `.index` | HF `N17K4/ai-workshop-assets` dataset |
+
+---
+
 ## 引擎源码管理
 
 ### wrappers/ 结构（全部 git 跟踪）

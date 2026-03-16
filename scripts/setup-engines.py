@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-安装各引擎 pip 依赖 + FFmpeg 静态二进制。
-由 setup-runtime.js 在 pnpm run setup 阶段调用，与模型下载完全分离。
+构建期：安装各引擎 pip_packages（轻量依赖）+ 引擎源码 + FFmpeg 静态二进制到嵌入式 Python。
+由 CI workflow 和 pnpm run setup 阶段调用。
 
 用法：
-    # 构建期（CI/setup）：安装 pip_packages + FFmpeg
+    # 构建期（CI/setup）：安装所有引擎依赖
     python scripts/setup-engines.py
 
-    # 首次启动：安装 runtime_pip_packages 到 userData，输出 JSON Lines 给 Electron
-    python scripts/setup-engines.py --runtime --target /path/to/userData/python-packages \
-        [--pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple] --json-progress
+    # 只安装指定引擎源码（按需克隆）
+    python scripts/setup-engines.py --engine fish_speech
+
+runtime_pip_packages（torch 等重型 ML 包）由独立脚本 install-runtime-deps.py 负责，
+在用户首次启动时安装到 userData/python-packages/。
 """
 
 from __future__ import annotations
@@ -79,31 +81,6 @@ def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
 
 # ─── JSON Lines 输出（给 Electron IPC 用）────────────────────────────────────
 
-def _emit(obj: dict, json_progress: bool) -> None:
-    if json_progress:
-        print(json.dumps(obj, ensure_ascii=False), flush=True)
-    else:
-        t = obj.get("type")
-        if t == "log":
-            print(obj.get("message", ""), flush=True)
-        elif t == "phase":
-            print(f"\n=== {obj.get('label', '')} ===", flush=True)
-
-
-# ─── 包去重（合并多引擎列表，保留带版本号的规格）────────────────────────────
-
-def _dedup_packages(packages: list[str]) -> list[str]:
-    seen: dict[str, str] = {}
-    for pkg in packages:
-        name = re.split(r"[>=<!\[;\s]", pkg)[0].lower().replace("-", "_")
-        existing = seen.get(name)
-        if existing is None:
-            seen[name] = pkg
-        elif re.search(r"[>=<!]", pkg) and not re.search(r"[>=<!]", existing):
-            seen[name] = pkg  # 有版本号的优先
-    return list(seen.values())
-
-
 # ─── 构建期 pip 安装（安装到嵌入式 Python）────────────────────────────────────
 
 def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
@@ -125,39 +102,6 @@ def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
             print(f"    ✓ 安装成功: {pkg}")
         else:
             print(f"    ✗ 安装失败: {result.stderr.strip()[:200]}")
-            all_ok = False
-    return all_ok
-
-
-# ─── 运行时 pip 安装（安装到 userData/python-packages/）──────────────────────
-
-def install_to_target(
-    packages: list[str],
-    py: str,
-    target: str,
-    mirror: str,
-    json_progress: bool,
-) -> bool:
-    """将包安装到指定目录（--target），逐包输出进度。"""
-    Path(target).mkdir(parents=True, exist_ok=True)
-    all_ok = True
-    env = {**__import__('os').environ, "PYTHONPATH": target}
-    for pkg in packages:
-        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
-        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
-        if check.returncode == 0:
-            _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
-            continue
-        _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
-        cmd = [py, "-m", "pip", "install", "--target", target, "--upgrade", pkg, "--quiet"]
-        if mirror:
-            cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
-        if r.returncode == 0:
-            _emit({"type": "log", "message": f"  ✓ {pkg}"}, json_progress)
-        else:
-            err = r.stderr.strip()[:300]
-            _emit({"type": "log", "message": f"  ✗ {pkg} 失败: {err}"}, json_progress)
             all_ok = False
     return all_ok
 
@@ -633,6 +577,7 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
     _patch_fish_speech_generate(engine_dir)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
     n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
     print(f"  ✓ fish_speech engine 就绪（{n} 个文件）")
     return True
@@ -727,6 +672,7 @@ def setup_facefusion_engine(project_root: Path) -> bool:
             p.unlink(missing_ok=True)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
     n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
     print(f"  ✓ facefusion engine 就绪（{n} 个文件）")
     return True
@@ -804,6 +750,7 @@ def setup_liveportrait_engine(project_root: Path) -> bool:
             p.unlink(missing_ok=True)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
     n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
     print(f"  ✓ liveportrait engine 就绪（{n} 个文件）")
     return True
@@ -888,6 +835,7 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
             p.unlink(missing_ok=True)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
     _patch_seed_vc_inference(engine_dir)
     n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
     print(f"  ✓ seed_vc engine 就绪（{n} 个文件）")
@@ -1232,64 +1180,6 @@ def main_build() -> int:
         return 1
 
 
-# ─── 主流程：首次启动（安装 runtime_pip_packages 到 userData）─────────────────
-
-def main_runtime(args: argparse.Namespace) -> int:
-    json_progress = args.json_progress
-    target = args.target
-    mirror = args.pypi_mirror or ""
-
-    if not target:
-        _emit({"type": "log", "message": "✗ --runtime 模式必须指定 --target 目录"}, json_progress)
-        return 1
-
-    project_root = Path(__file__).resolve().parent.parent
-    resources_root_env = os.getenv("RESOURCES_ROOT", "")
-    resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
-
-    manifest_path = resources_root / "wrappers" / "manifest.json"
-    if not manifest_path.exists():
-        manifest_path = project_root / "wrappers" / "manifest.json"
-    if not manifest_path.exists():
-        _emit({"type": "log", "message": f"✗ 找不到 manifest.json: {manifest_path}"}, json_progress)
-        return 1
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-    engines: dict = manifest.get("engines", {})
-
-    py = get_embedded_python(resources_root)
-    if not py:
-        _emit({"type": "log", "message": "✗ 嵌入式 Python 未找到"}, json_progress)
-        return 1
-
-    _emit({"type": "phase", "label": "1/2 正在安装运行库…"}, json_progress)
-    _emit({"type": "log", "message": f"目标目录：{target}"}, json_progress)
-    if mirror:
-        _emit({"type": "log", "message": f"PyPI 镜像：{mirror}"}, json_progress)
-
-    # 收集所有引擎的 runtime_pip_packages，去重
-    all_pkgs: list[str] = []
-    for cfg in engines.values():
-        all_pkgs.extend(cfg.get("runtime_pip_packages", []))
-
-    packages = _dedup_packages(all_pkgs)
-
-    if not packages:
-        _emit({"type": "log", "message": "无需安装运行时包"}, json_progress)
-        return 0
-
-    _emit({"type": "log", "message": f"共 {len(packages)} 个包待安装"}, json_progress)
-
-    ok = install_to_target(packages, py, target, mirror, json_progress)
-
-    if ok:
-        _emit({"type": "log", "message": "✓ 运行库安装完成"}, json_progress)
-        return 0
-    else:
-        _emit({"type": "log", "message": "✗ 部分包安装失败，请检查日志"}, json_progress)
-        return 1
-
-
 # ─── 入口 ─────────────────────────────────────────────────────────────────────
 
 def main_setup_engine(engine: str) -> int:
@@ -1313,22 +1203,6 @@ def main_setup_engine(engine: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="安装引擎 pip 依赖 + FFmpeg")
     parser.add_argument(
-        "--runtime", action="store_true",
-        help="安装 runtime_pip_packages（首次启动时使用，写入 --target 目录）",
-    )
-    parser.add_argument(
-        "--target", default="",
-        help="pip install --target 目录（--runtime 模式下必填）",
-    )
-    parser.add_argument(
-        "--pypi-mirror", default="", dest="pypi_mirror",
-        help="PyPI 镜像地址，如 https://pypi.tuna.tsinghua.edu.cn/simple",
-    )
-    parser.add_argument(
-        "--json-progress", action="store_true", dest="json_progress",
-        help="输出 JSON Lines 进度（供 Electron IPC 使用）",
-    )
-    parser.add_argument(
         "--engine", default="",
         help="只安装指定引擎的源码目录（liveportrait / fish_speech / seed_vc / facefusion）",
     )
@@ -1336,10 +1210,7 @@ def main() -> int:
 
     if args.engine:
         return main_setup_engine(args.engine)
-    if args.runtime:
-        return main_runtime(args)
-    else:
-        return main_build()
+    return main_build()
 
 
 if __name__ == "__main__":

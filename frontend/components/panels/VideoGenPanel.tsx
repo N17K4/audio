@@ -2,6 +2,25 @@ import type { Status } from '../../types';
 import { VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
 import ComboSelect from '../shared/ComboSelect';
 import FileDrop from '../shared/FileDrop';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── 本地视频生成（Wan 2.1）流程 ─────────────────────────────────────────────
+const VIDEO_GEN_FLOW_LOCAL: FlowStep[] = [
+  { label: '提示词 / 图片' },
+  { label: '文本编码',    tech: 'CLIP / T5' },
+  { label: '时序扩散',    tech: 'Wan2.1 DiT' },
+  { label: 'VAE 解码' },
+  { label: '帧合成',      tech: 'FFmpeg' },
+  { label: '视频输出' },
+];
+
+// ─── 云端视频生成（可灵 / RunwayML 等）流程 ──────────────────────────────────
+const VIDEO_GEN_FLOW_CLOUD: FlowStep[] = [
+  { label: '提示词 / 图片' },
+  { label: '云端处理',    tech: '可灵 / RunwayML' },
+  { label: '异步等待',    note: '数秒至数分钟' },
+  { label: '视频输出' },
+];
 
 interface VideoGenPanelProps {
   status: Status;
@@ -63,6 +82,11 @@ export default function VideoGenPanel({
 
   return (
     <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+      {/* 实际运行流程 */}
+      {isLocal
+        ? <ProcessFlow steps={VIDEO_GEN_FLOW_LOCAL} color="#0f766e" />
+        : <ProcessFlow steps={VIDEO_GEN_FLOW_CLOUD} color="#0f766e" />}
+
       {/* 服务商下拉 */}
       <div>
         <label className={labelCls}>服务商</label>

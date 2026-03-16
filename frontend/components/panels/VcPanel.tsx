@@ -8,6 +8,38 @@ import VoiceSelector from '../shared/VoiceSelector';
 import CreateVoicePanel from '../shared/CreateVoicePanel';
 import HowToSteps from '../shared/HowToSteps';
 import FileDrop from '../shared/FileDrop';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── Seed-VC 音色转换流程 ─────────────────────────────────────────────────────
+const VC_FLOW_SEED_VC: FlowStep[] = [
+  { label: '参考音频' },
+  { label: '音色提取',   tech: 'ECAPA-TDNN' },
+  { label: '源音频' },
+  { label: '内容编码',   tech: 'Whisper Enc' },
+  { label: '扩散推理',   tech: 'DiT / CFG' },
+  { label: '声码器',     tech: 'BigVGAN' },
+  { label: '输出音频' },
+];
+
+// ─── RVC 音色转换流程 ─────────────────────────────────────────────────────────
+const VC_FLOW_RVC: FlowStep[] = [
+  { label: '源音频' },
+  { label: 'F0 提取',    tech: 'rmvpe' },
+  { label: '内容特征',   tech: 'HuBERT' },
+  { label: '推理',       tech: 'VITS / RVC' },
+  { label: '声码器',     tech: 'HifiGAN' },
+  { label: '输出音频' },
+];
+
+// ─── RVC 训练音色流程 ─────────────────────────────────────────────────────────
+const VC_FLOW_TRAIN: FlowStep[] = [
+  { label: '音频素材' },
+  { label: '预处理',     tech: 'resample/slice' },
+  { label: 'F0 提取',    tech: 'rmvpe' },
+  { label: '特征提取',   tech: 'HuBERT' },
+  { label: '训练',       tech: 'VITS' },
+  { label: '保存模型',   tech: '.pth' },
+];
 
 const VC_STEPS_SEED_VC = [
   { title: '上传参考音频', desc: '上传目标音色的参考录音（3–30 秒效果最佳）' },
@@ -221,6 +253,13 @@ export default function VcPanel({
         labelCls={labelCls}
       />
       <div className="border-t border-slate-100 dark:border-slate-800" />
+
+      {/* 实际运行流程 */}
+      {selectedProvider === 'seed_vc'
+        ? <ProcessFlow steps={VC_FLOW_SEED_VC} color="#0ea5e9" />
+        : voiceTab === 'train'
+          ? <ProcessFlow steps={VC_FLOW_TRAIN} color="#10b981" />
+          : <ProcessFlow steps={VC_FLOW_RVC} color="#8b5cf6" />}
 
       {/* 目标音色 */}
       <div className="space-y-3">

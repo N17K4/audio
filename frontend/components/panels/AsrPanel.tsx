@@ -3,6 +3,24 @@ import ProviderRow from '../shared/ProviderRow';
 import ModelInput from '../shared/ModelInput';
 import HowToSteps from '../shared/HowToSteps';
 import FileDrop from '../shared/FileDrop';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── 本地 Whisper / Faster-Whisper 流程 ──────────────────────────────────────
+const ASR_FLOW_LOCAL: FlowStep[] = [
+  { label: '音频文件' },
+  { label: 'VAD 切分',   tech: 'silero-vad' },
+  { label: '声学编码',   tech: 'Whisper Encoder' },
+  { label: 'Beam 解码',  tech: 'Beam Search' },
+  { label: '文字输出' },
+];
+
+// ─── 云端 STT（OpenAI / Deepgram 等）流程 ────────────────────────────────────
+const ASR_FLOW_CLOUD: FlowStep[] = [
+  { label: '音频文件' },
+  { label: '格式转换',   tech: 'ffmpeg' },
+  { label: '云端识别',   tech: 'OpenAI/Deepgram' },
+  { label: '文字输出' },
+];
 
 const ASR_STEPS = [
   { title: '上传音频', desc: '支持 MP3 / WAV / FLAC 等格式，拖拽即可' },
@@ -87,6 +105,11 @@ export default function AsrPanel({
         labelCls={labelCls}
       />
       <div className="border-t border-slate-100 dark:border-slate-800" />
+
+      {/* 实际运行流程 */}
+      {(selectedProvider === 'whisper' || selectedProvider === 'faster_whisper')
+        ? <ProcessFlow steps={ASR_FLOW_LOCAL} color="#0284c7" />
+        : <ProcessFlow steps={ASR_FLOW_CLOUD} color="#6366f1" />}
 
       <label className="block">
         <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">模型（可选）</span>

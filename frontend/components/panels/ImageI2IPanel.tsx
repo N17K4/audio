@@ -2,6 +2,27 @@ import type { Status } from '../../types';
 import { IMG_I2I_PROVIDERS, IMG_I2I_PROVIDER_LABELS, IMG_I2I_MODELS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
 import ComboSelect from '../shared/ComboSelect';
 import FileDrop from '../shared/FileDrop';
+import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+
+// ─── FaceFusion 换脸流程 ──────────────────────────────────────────────────────
+const FACEFUSION_FLOW: FlowStep[] = [
+  { label: '源人脸图片' },
+  { label: '人脸检测',   tech: 'RetinaFace' },
+  { label: '目标图/视频' },
+  { label: '换脸',       tech: 'FaceFusion 3.x' },
+  { label: '增强',       tech: 'GFPGAN/CodeFormer' },
+  { label: '输出' },
+];
+
+// ─── ComfyUI 风格迁移流程 ─────────────────────────────────────────────────────
+const COMFYUI_FLOW: FlowStep[] = [
+  { label: '源图片' },
+  { label: '参考图 / Prompt' },
+  { label: '图像编码',   tech: 'VAE Encoder' },
+  { label: '扩散推理',   tech: 'ComfyUI / SD' },
+  { label: '图像解码',   tech: 'VAE Decoder' },
+  { label: '输出图片' },
+];
 
 interface ImageI2IPanelProps {
   status: Status;
@@ -51,6 +72,13 @@ export default function ImageI2IPanel({
 
   return (
     <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-panel p-5 space-y-4">
+      {/* 实际运行流程 */}
+      {imgI2iProvider === 'facefusion'
+        ? <ProcessFlow steps={FACEFUSION_FLOW} color="#b45309" />
+        : imgI2iProvider === 'comfyui'
+          ? <ProcessFlow steps={COMFYUI_FLOW} color="#7c3aed" />
+          : null}
+
       {/* 服务商下拉 */}
       <div>
         <label className={labelCls}>服务商</label>

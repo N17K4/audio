@@ -371,14 +371,14 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     return proc;
   }
 
-  const setupEnginesScript   = path.join(__dirname, 'scripts', 'setup-engines.py');
+  const runtimeDepsScript    = path.join(__dirname, 'scripts', 'install-runtime-deps.py');
   const downloadScript       = path.join(__dirname, 'scripts', 'download_checkpoints.py');
 
   // 阶段1：安装 runtime_pip_packages（torch 等 ML 包）到 userData/python-packages/
-  const enginesArgs = ['--runtime', '--target', userPkgDir, '--json-progress'];
+  const enginesArgs = ['--target', userPkgDir, '--json-progress'];
   if (pypiMirror) enginesArgs.push('--pypi-mirror', pypiMirror);
 
-  downloadProc = spawnScript(setupEnginesScript, enginesArgs, (code1) => {
+  downloadProc = spawnScript(runtimeDepsScript, enginesArgs, (code1) => {
     downloadProc = null;
     if (code1 !== 0) {
       if (setupGuideWin && !setupGuideWin.isDestroyed()) {

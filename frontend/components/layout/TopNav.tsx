@@ -14,6 +14,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: '视频工具', page: 'video_tools' },
   { label: '文字工具', page: 'text_tools' },
   { label: '格式转换', page: 'format_convert' },
+  { label: 'AI 进阶',  page: 'advanced_tools' },
 ];
 
 interface TopNavProps {

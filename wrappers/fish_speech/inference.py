@@ -198,7 +198,7 @@ def _send_request(socket_path: str, text: str, voice_refs: list, output: str) ->
     """通过 socket 发送推理请求，返回响应 dict。"""
     payload = json.dumps({"text": text, "voice_refs": voice_refs, "output": output}, ensure_ascii=False)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(300.0)  # 推理本身的超时
+    s.settimeout(120.0)  # 推理本身的超时
     s.connect(socket_path)
     s.sendall((payload + "\n").encode())
     # 接收响应
@@ -285,15 +285,19 @@ def main() -> int:
         print(f"[fish_speech] 收到推理响应，耗时 {_time.monotonic()-_req_t0:.1f}s", file=sys.stderr, flush=True)
     except Exception as exc:
         print(f"[fish_speech] socket 通信失败 (耗时 {_time.monotonic()-_req_t0:.1f}s): {exc}", file=sys.stderr, flush=True)
-        # worker 可能崩溃了，清理 socket/pid 让下次重启
-        try:
-            os.unlink(socket_path)
-        except OSError:
-            pass
-        try:
-            os.unlink(pid_path)
-        except OSError:
-            pass
+        # worker 进程可能卡死（正在处理上一个请求），必须 kill 掉，否则下次仍会卡住
+        if os.path.exists(pid_path):
+            try:
+                pid = int(Path(pid_path).read_text().strip())
+                os.kill(pid, 9)  # SIGKILL
+                print(f"[fish_speech] 已 kill worker 进程 PID={pid}", file=sys.stderr, flush=True)
+            except (ProcessLookupError, ValueError, OSError):
+                pass
+        for _f in (socket_path, pid_path):
+            try:
+                os.unlink(_f)
+            except OSError:
+                pass
         return 1
 
     if not result.get("ok"):
