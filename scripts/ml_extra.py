@@ -71,22 +71,53 @@ def _dedup_packages(packages: list[str]) -> list[str]:
     return list(seen.values())
 
 
+def _group_by_namespace(packages: list[str]) -> list[list[str]]:
+    """将共享 namespace 的包（如 llama-index-*）分到同一组，其余每个包单独一组。
+    pip install --target 对 namespace package 有 bug：逐个安装时后装的会覆盖前装的子目录。
+    同一组的包必须在一次 pip install 中安装才能共存。"""
+    ns_groups: dict[str, list[str]] = {}
+    singles: list[list[str]] = []
+    for pkg in packages:
+        name = re.split(r"[>=<!\[;\s]", pkg)[0].lower()
+        # llama-index-core, llama-index-embeddings-ollama 等共享 llama_index namespace
+        if name.startswith("llama-index"):
+            ns_groups.setdefault("llama-index", []).append(pkg)
+        else:
+            singles.append([pkg])
+    result: list[list[str]] = []
+    for group in ns_groups.values():
+        result.append(group)
+    result.extend(singles)
+    return result
+
+
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
-    """安装包列表。target 为空时直接 pip install，否则 pip install --target。"""
+    """安装包列表。target 为空时直接 pip install，否则 pip install --target。
+    共享 namespace 的包会合并成一次 pip install 调用，避免目录覆盖问题。"""
     if target:
         Path(target).mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PYTHONPATH": target} if target else None
     all_ok = True
 
-    for pkg in packages:
-        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
-        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
-        if check.returncode == 0:
-            _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+    groups = _group_by_namespace(packages)
+    for group in groups:
+        # 检查哪些包需要安装
+        to_install = []
+        for pkg in group:
+            module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+            check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
+            if check.returncode == 0:
+                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+            else:
+                to_install.append(pkg)
+
+        if not to_install:
             continue
 
-        _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
-        cmd = [py, "-m", "pip", "install", pkg, "--quiet"]
+        for pkg in to_install:
+            _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
+
+        cmd = [py, "-m", "pip", "install"] + to_install + ["--quiet"]
         if target:
             cmd += ["--target", target, "--upgrade"]
         if mirror:
@@ -94,10 +125,12 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
 
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
         if r.returncode == 0:
-            _emit({"type": "log", "message": f"  ✓ {pkg}"}, json_progress)
+            for pkg in to_install:
+                _emit({"type": "log", "message": f"  ✓ {pkg}"}, json_progress)
         else:
             err = r.stderr.strip()[:300]
-            _emit({"type": "log", "message": f"  ✗ {pkg} 失败: {err}"}, json_progress)
+            for pkg in to_install:
+                _emit({"type": "log", "message": f"  ✗ {pkg} 失败: {err}"}, json_progress)
             all_ok = False
 
     return all_ok

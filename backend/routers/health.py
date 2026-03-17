@@ -114,9 +114,11 @@ async def run_smoketest():
             ml_pkg_dir = str(project_root / "local_data" / "python-packages")
             existing = env.get("PYTHONPATH", "")
             env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
+            env["BACKEND_PORT"] = str(BACKEND_PORT)
+            env["PYTHONUNBUFFERED"] = "1"
 
             proc = subprocess.Popen(
-                [py_cmd, str(test_file)],
+                [py_cmd, "-u", str(test_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -179,9 +181,11 @@ async def run_smoketest2():
             ml_pkg_dir = str(project_root / "local_data" / "python-packages")
             existing = env.get("PYTHONPATH", "")
             env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
+            env["BACKEND_PORT"] = str(BACKEND_PORT)
+            env["PYTHONUNBUFFERED"] = "1"
 
             proc = subprocess.Popen(
-                [py_cmd, str(test_file)],
+                [py_cmd, "-u", str(test_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,

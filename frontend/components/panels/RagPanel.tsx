@@ -85,7 +85,7 @@ export default function RagPanel({
   const [kbTab, setKbTab] = useState<KnowledgeBaseTab>('select');
 
   // ── 状态：新建知识库表单 ──────────────────────────────────────────────────
-  const [buildName, setBuildName] = useState('');       // 知识库名称输入
+  const [buildName, setBuildName] = useState('');       // 知识库名称输入（默认 placeholder: test_kb）
   const [buildFiles, setBuildFiles] = useState<File[]>([]); // 待上传文件列表
   const [building, setBuilding] = useState(false);     // 是否正在提交构建请求
   const [buildMsg, setBuildMsg] = useState('');         // 构建结果提示信息
@@ -117,13 +117,14 @@ export default function RagPanel({
   // POST /rag/collections（multipart/form-data）
   // 后端返回 job_id，实际索引在后台异步执行（可能需要数分钟）
   const handleBuild = async () => {
-    if (!buildName.trim() || buildFiles.length === 0) return;
+    const name = buildName.trim() || 'test_kb';
+    if (buildFiles.length === 0) return;
 
     setBuilding(true);
     setBuildMsg('正在提交构建任务...');
     try {
       const form = new FormData();
-      form.append('name', buildName.trim());
+      form.append('name', name);
       // 支持多文件：PDF、Word (.docx)、纯文本 (.txt)、Excel (.xlsx)
       buildFiles.forEach(f => form.append('files', f));
 
@@ -140,7 +141,7 @@ export default function RagPanel({
       }
 
       // 创建待处理任务，加入 TaskList
-      const jobId = addPendingJob('rag', buildName.trim(), 'rag_indexer', true);
+      const jobId = addPendingJob('rag', name, 'rag_indexer', true);
 
       setBuildMsg(
         `已提交！任务 ID：${data.job_id?.slice(0, 8)}…\n` +
@@ -205,9 +206,9 @@ export default function RagPanel({
   // POST /rag/query，后端用 SSE（Server-Sent Events）流式返回答案
   // SSE 格式：每行 "data: <文本片段>\n\n"
   const handleQuery = async () => {
-    if (!selectedCollection || !question.trim() || !llmModel) return;
+    const q = question.trim() || 'Python 是什么？';
+    if (!selectedCollection || !llmModel) return;
 
-    const userQuestion = question;
     setQuestion('');  // 立即清空输入框，便于连续提问
     setAnswer('');
     setLoading(true);
@@ -217,12 +218,12 @@ export default function RagPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           collection: selectedCollection,
-          question: userQuestion,
+          question: q,
           top_k: 5,
           provider: selectedProvider,
           model: llmModel,
           api_key: apiKey,
-          ollama_url: selectedProvider === 'ollama' ? cloudEndpoint : 'http://127.0.0.1:11434',
+          ollama_url: selectedProvider === 'ollama' ? (cloudEndpoint || 'http://127.0.0.1:11434') : 'http://127.0.0.1:11434',
         }),
       });
 
@@ -310,29 +311,52 @@ export default function RagPanel({
               </label>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
+                  disabled={building}
                   onClick={async () => {
+                    setBuilding(true);
+                    setBuildMsg('');
                     try {
-                      const res = await fetch(`${backendUrl}/rag/init-sample`, {
-                        method: 'POST',
-                      });
+                      const res = await fetch(`${backendUrl}/rag/init-sample`, { method: 'POST' });
                       const data = await res.json();
                       if (data.status === 'already_exists') {
-                        alert('示例知识库已存在');
-                      } else if (data.status === 'running') {
-                        alert('正在创建示例知识库，请稍候...');
+                        setSelectedCollection('示例知识库');
+                        await fetchCollections();
+                      } else if (data.job_id) {
+                        // 轮询等待构建完成
+                        const deadline = Date.now() + 5 * 60 * 1000;
+                        while (Date.now() < deadline) {
+                          await new Promise(r => setTimeout(r, 1500));
+                          try {
+                            const jr = await fetch(`${backendUrl}/rag/collections/jobs/${data.job_id}`);
+                            if (!jr.ok) continue;
+                            const jd = await jr.json();
+                            if (jd.status === 'done') {
+                              await fetchCollections();
+                              setSelectedCollection('示例知识库');
+                              break;
+                            }
+                            if (jd.status === 'error') {
+                              setBuildMsg(`示例库构建失败：${jd.error || '未知错误'}`);
+                              break;
+                            }
+                          } catch { /* 继续轮询 */ }
+                        }
                       }
-                      setTimeout(fetchCollections, 1000);
                     } catch (e: any) {
-                      alert(`创建失败：${e.message}`);
+                      setBuildMsg(`创建失败：${e.message}`);
+                    } finally {
+                      setBuilding(false);
                     }
                   }}
                   style={{
                     fontSize: 12, background: 'none',
                     border: '1px solid #0d9488', borderRadius: 4,
-                    padding: '3px 8px', cursor: 'pointer', color: '#0d9488', fontWeight: 500
+                    padding: '3px 8px', cursor: building ? 'wait' : 'pointer',
+                    color: '#0d9488', fontWeight: 500,
+                    opacity: building ? 0.5 : 1
                   }}
                 >
-                  示例库
+                  {building ? '构建中…' : '示例库'}
                 </button>
                 <button
                   onClick={fetchCollections}
@@ -355,6 +379,7 @@ export default function RagPanel({
               }))}
               placeholder="-- 请选择知识库 --"
             />
+
             {selectedCollection && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
                 <button
@@ -390,13 +415,13 @@ export default function RagPanel({
 
             {/* 名称：只用英文、数字、下划线，避免路径问题 */}
             <NameInput
-              placeholder="知识库名称（如 company_docs）"
+              placeholder="test_kb"
               value={buildName}
               onChange={setBuildName}
             />
             {!buildName.trim() && (
-              <div style={{ fontSize: 11, color: '#4f46e5', fontWeight: 500 }}>
-                ⚠️ 必须输入知识库名称才能构建
+              <div style={{ fontSize: 11, color: '#999' }}>
+                留空将使用默认名称 test_kb
               </div>
             )}
 
@@ -411,16 +436,33 @@ export default function RagPanel({
               emptyLabel="点击或拖拽上传文件（可多选）"
               formatHint="支持 PDF、Word (.docx)、纯文本 (.txt)、Excel (.xlsx)"
             />
+            <button
+              onClick={() => {
+                const content = 'Python 是一门广泛使用的编程语言。\nPython 支持多种编程范式。\n' +
+                  'Python 拥有丰富的第三方库和活跃的社区。\n' +
+                  'Python 适合数据科学、Web 开发、自动化脚本等多种场景。';
+                const file = new File([content], `sample_${buildFiles.length + 1}.txt`, { type: 'text/plain' });
+                setBuildFiles(prev => [...prev, file]);
+              }}
+              style={{
+                fontSize: 12, background: 'none',
+                border: '1px dashed #0d9488', borderRadius: 6,
+                padding: '6px 12px', cursor: 'pointer', color: '#0d9488', fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              + 导入样例文件
+            </button>
 
-            {/* 构建按钮：两个条件都满足才可点击 */}
+            {/* 构建按钮 */}
             <button
               onClick={handleBuild}
-              disabled={building || !buildName.trim() || buildFiles.length === 0}
+              disabled={building || buildFiles.length === 0}
               style={{
                 padding: '7px 14px', borderRadius: 6,
                 background: '#4f46e5', color: '#fff',
                 border: 'none', cursor: 'pointer', fontSize: 13,
-                opacity: (building || !buildName.trim() || buildFiles.length === 0) ? 0.5 : 1,
+                opacity: (building || buildFiles.length === 0) ? 0.5 : 1,
               }}
             >
               {building ? '提交中...' : '构建知识库'}
@@ -436,7 +478,7 @@ export default function RagPanel({
         )}
       </div>
 
-      {/* ── 问答区（仅在选择知识库 Tab 时显示）── */}
+      {/* ── 问答区（选择知识库 Tab 时显示）── */}
       {kbTab === 'select' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
@@ -446,15 +488,15 @@ export default function RagPanel({
             </span>
           </h3>
 
-          {/* 问题输入区 */}
+          {/* 问题输入区（已选择知识库时显示）*/}
           {selectedCollection && (
             <div style={{ display: 'flex', gap: 8 }}>
               <input
-                placeholder="输入你的问题…"
+                placeholder="Python 是什么？"
                 value={question}
                 onChange={e => setQuestion(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey && question.trim()) {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleQuery();
                   }
@@ -470,13 +512,13 @@ export default function RagPanel({
               />
               <button
                 onClick={handleQuery}
-                disabled={loading || !question.trim()}
+                disabled={loading}
                 style={{
                   padding: '8px 16px', borderRadius: 6,
                   background: '#0d9488', color: '#fff',
-                  border: 'none', cursor: loading || !question.trim() ? 'not-allowed' : 'pointer',
+                  border: 'none', cursor: (loading || !question.trim()) ? 'not-allowed' : 'pointer',
                   fontSize: 13, fontWeight: 600,
-                  opacity: (loading || !question.trim()) ? 0.5 : 1,
+                  opacity: loading ? 0.5 : 1,
                 }}
               >
                 {loading ? '提问中…' : '提问'}

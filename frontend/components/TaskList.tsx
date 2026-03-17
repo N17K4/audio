@@ -466,6 +466,9 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     } else {
       setSmoke2Summary(results);
     }
+
+    onFetchJobs();
+
     setSmoke2Running(false);
   }
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
@@ -781,6 +784,15 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试 2</span>
+              {downloadDir && (typeof window !== 'undefined') && (window as any).electronAPI?.openDir && (
+                <button
+                  onClick={() => (window as any).electronAPI.openDir(downloadDir)}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  title={downloadDir}
+                >
+                  打开缓存目录
+                </button>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">高级功能测试（RAG 知识库 · Agent 智能体 · LoRA 微调）</p>
             <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-1 font-mono">

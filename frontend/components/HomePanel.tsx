@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Page } from './layout/Sidebar';
 import type { Job } from '../types';
 import { TOOL_CARDS, type ToolCategory } from '../constants';
@@ -212,6 +212,9 @@ const CATEGORY_TABS: { key: ToolCategory; label: string }[] = [
 export default function HomePanel({ onNavigate, jobs, backendBaseUrl: _backendBaseUrl }: HomePanelProps) {
   const [search, setSearch]     = useState('');
   const [category, setCategory] = useState<ToolCategory>('all');
+  const [mounted, setMounted]   = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const filtered = TOOL_CARDS.filter(t => {
     const matchCat    = category === 'all' || (t.category as readonly string[]).includes(category);
@@ -219,7 +222,7 @@ export default function HomePanel({ onNavigate, jobs, backendBaseUrl: _backendBa
     return matchCat && matchSearch;
   });
 
-  const recent  = jobs.slice(0, 10);
+  const recent  = mounted ? jobs.slice(0, 10) : [];
   const hasJobs = recent.length > 0;
 
   return (
@@ -290,12 +293,11 @@ export default function HomePanel({ onNavigate, jobs, backendBaseUrl: _backendBa
       <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">最近任务</span>
-          {hasJobs && (
-            <button onClick={() => onNavigate('tasks')}
-              className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition-colors">
-              查看全部 →
-            </button>
-          )}
+          <button onClick={() => onNavigate('tasks')}
+            className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+            style={{ visibility: hasJobs ? 'visible' : 'hidden' }}>
+            查看全部 →
+          </button>
         </div>
         {!hasJobs ? (
           <p className="text-xs text-slate-400 dark:text-slate-500">运行一个任务，结果会出现在这里</p>

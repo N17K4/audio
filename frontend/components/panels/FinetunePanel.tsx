@@ -15,7 +15,7 @@
  *   merged  — 合并后的完整模型，可独立加载，体积与基座相同
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FinetuneJob } from '../../types';
 import HowToSteps from '../shared/HowToSteps';
 import ComboSelect from '../shared/ComboSelect';
@@ -61,17 +61,17 @@ const PRESET_MODELS = [
 // ─── 超参数说明（显示在输入框下方，帮助外行理解）──────────────────────────
 const PARAM_TIPS: Record<string, string> = {
   lora_r:
-    'LoRA 秩：控制新增参数的数量，越大学得越细但越慢。外行用默认值 16 即可',
+    'LoRA 秩：控制新增参数的数量，越大学得越细但越慢。默认 4 适合快速验证',
   lora_alpha:
     '缩放系数：一般设为 lora_r 的 2 倍。不需要改动',
   num_epochs:
-    '训练轮次：整个数据集被过几遍。数据少用 5～10 轮，数据多用 3 轮',
+    '训练轮次：整个数据集被过几遍。默认 1 轮快速验证，正式训练可调到 3～10',
   batch_size:
     '每步喂多少条数据：越大越快，但占内存越多。内存紧张时改为 1',
   learning_rate:
     '学习率：每步调整多大幅度。过大会不稳定，过小收敛慢。2e-4 是常见起点',
   max_seq_length:
-    '最大序列长度：每条样本最多处理多少个 token。超过会被截断。512 适合大多数场景',
+    '最大序列长度：每条样本最多处理多少个 token。超过会被截断。默认 64 快速验证，正式训练可调到 256～512',
 };
 
 // ─── 任务状态颜色与标签 ────────────────────────────────────────────────────
@@ -91,18 +91,17 @@ const STATUS_LABELS: Record<string, string> = {
 
 interface Props {
   backendUrl: string;
+  outputDir: string;
+  setOutputDir: (v: string) => void;
   addPendingJob?: (type: string, label: string, provider: string, isLocal: boolean) => string;
   resolveJob?: (id: string, result: { status: 'completed' | 'failed'; error?: string }) => void;
 }
 
-export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }: Props) {
+export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, addPendingJob, resolveJob }: Props) {
   // ── 表单状态 ──────────────────────────────────────────────────────────────
   const [model, setModel] = useState(PRESET_MODELS[0].id);  // 选中的预设模型
   const [customModel, setCustomModel] = useState('');         // 自定义模型 ID（覆盖预设）
   const [dataset, setDataset] = useState<File | null>(null);  // 训练数据文件
-
-  // ── 输出目录（为空时后端自动生成临时目录）─────────────────────────────────
-  const [outputDir, setOutputDir] = useState('/tmp/finetune_output');
 
   // ── HuggingFace 配置（下载基座模型用）─────────────────────────────────────
   // 中国大陆无法直接访问 huggingface.co，需要设置镜像
@@ -110,21 +109,61 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
   const [hfMirror, setHfMirror] = useState('https://hf-mirror.com'); // 镜像地址
 
   // ── 超参数状态（默认值对大多数场景适用）────────────────────────────────────
-  const [loraR, setLoraR] = useState(16);         // LoRA 秩（smoke_test2）
-  const [loraAlpha, setLoraAlpha] = useState(32); // LoRA 缩放系数（smoke_test2）
-  const [numEpochs, setNumEpochs] = useState(3);  // 训练轮次
+  const [loraR, setLoraR] = useState(4);           // LoRA 秩（与 smoke_test2 同步）
+  const [loraAlpha, setLoraAlpha] = useState(8);  // LoRA 缩放系数（与 smoke_test2 同步）
+  const [numEpochs, setNumEpochs] = useState(1);  // 训练轮次（与 smoke_test2 同步）
   const [batchSize, setBatchSize] = useState(2);  // 批大小
   const [lr, setLr] = useState(0.0002);            // 学习率
-  const [maxSeqLen, setMaxSeqLen] = useState(512); // 最大序列长度
+  const [maxSeqLen, setMaxSeqLen] = useState(64);  // 最大序列长度（与 smoke_test2 同步）
   const [exportFmt, setExportFmt] = useState<'adapter' | 'merged'>('adapter'); // 导出格式
 
   // ── 任务状态 ──────────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);        // 是否正在提交
   const [datasets, setDatasets] = useState<File[]>([]);      // 支持多文件
-  const [quickStart, setQuickStart] = useState(false);        // 是否启用快速开始
   const [submitMsg, setSubmitMsg] = useState('');              // 提交反馈消息
 
-  // 注：任务监控已移至 TaskList 页面，此处仅负责提交任务
+  // ── 任务监控 ────────────────────────────────────────────────────────────
+  const [activeJobId, setActiveJobId] = useState('');
+  const [pendingJobId, setPendingJobId] = useState('');  // TaskList 中的 job id
+  const [jobStatus, setJobStatus] = useState<FinetuneJob | null>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  // 轮询当前任务状态
+  useEffect(() => {
+    if (!activeJobId) return;
+    let cancelled = false;
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const res = await fetch(`${backendUrl}/finetune/jobs/${activeJobId}`);
+          if (res.ok) {
+            const data: FinetuneJob = await res.json();
+            if (!cancelled) {
+              setJobStatus(data);
+              if (data.status === 'done' || data.status === 'error' || data.status === 'cancelled') {
+                // 同步更新 TaskList 状态
+                if (pendingJobId && resolveJob) {
+                  resolveJob(pendingJobId, {
+                    status: data.status === 'done' ? 'completed' : 'failed',
+                    error: data.status === 'error' ? (data.log_tail?.slice(-1)[0] || '训练失败') : undefined,
+                  });
+                }
+                break;
+              }
+            }
+          }
+        } catch { /* 静默 */ }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [activeJobId, backendUrl, pendingJobId, resolveJob]);
+
+  // 日志自动滚动到底部
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [jobStatus?.log_tail]);
 
   // ── 提交微调任务 ──────────────────────────────────────────────────────────
   // POST /finetune/start（multipart/form-data）
@@ -133,26 +172,8 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
     setSubmitting(true);
     setSubmitMsg('');
     try {
-      // 如果启用快速开始且未上传数据，生成示例数据
-      let datasetsToSubmit = datasets;
-      if (quickStart && datasets.length === 0) {
-        const sampleData = [
-          { instruction: "什么是 AI？", output: "AI 是人工智能，指由人制造出来的机器所表现出来的智能。" },
-          { instruction: "Python 是什么？", output: "Python 是一种高级编程语言，以其简洁易读的语法著称。" },
-          { instruction: "如何学习编程？", output: "学习编程的最好方法是通过大量的实践和项目开发。" },
-          { instruction: "云计算有什么优势？", output: "云计算提供弹性扩展、成本优化和高可用性。" },
-          { instruction: "深度学习是什么？", output: "深度学习是机器学习的一个分支，使用多层神经网络。" },
-          { instruction: "数据库的作用是什么？", output: "数据库用于存储、管理和检索大量的结构化数据。" },
-          { instruction: "前端和后端的区别？", output: "前端处理用户界面，后端处理业务逻辑和数据。" },
-          { instruction: "什么是 API？", output: "API 是应用程序编程接口，允许不同应用间通信。" },
-        ];
-        const jsonlContent = sampleData.map(d => JSON.stringify(d)).join('\n');
-        const blob = new Blob([jsonlContent], { type: 'application/jsonl' });
-        const file = new File([blob], 'sample_train_data.jsonl', { type: 'application/jsonl' });
-        datasetsToSubmit = [file];
-      }
-
-      if (datasetsToSubmit.length === 0) return;
+      if (datasets.length === 0) return;
+      const datasetsToSubmit = datasets;
 
       const form = new FormData();
       const modelId = customModel.trim() || model;
@@ -175,17 +196,22 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
       });
       const data = await res.json();
 
-      // 添加到 TaskList（如果有 addPendingJob）
+      // 开始轮询任务进度
+      if (data.job_id) {
+        setActiveJobId(data.job_id);
+        setJobStatus(null);
+        setSubmitMsg(`已提交！任务 ID：${data.job_id?.slice(0, 8)}…`);
+      }
+
+      // 添加到 TaskList
       if (addPendingJob) {
-        addPendingJob(
+        const pId = addPendingJob(
           'finetune',
           `LoRA 微调 - ${modelId.split('/').pop()}`,
           modelId,
-          false  // 云端任务
+          false
         );
-        setSubmitMsg(`已提交！任务 ID：${data.job_id?.slice(0, 8)}…\n请前往「任务列表」查看进度。`);
-      } else {
-        setSubmitMsg(`已提交！任务 ID：${data.job_id?.slice(0, 8)}…`);
+        setPendingJobId(pId);
       }
     } catch (e: any) {
       setSubmitMsg(`提交失败：${e.message}`);
@@ -247,7 +273,7 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
                   type="password"
                   value={hfToken}
                   onChange={e => setHfToken(e.target.value)}
-                  placeholder="hf_..."
+                  placeholder="公开模型无需填写"
                   className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-[#1A8FE3] focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all outline-none placeholder:text-slate-400"
                 />
               </label>
@@ -283,25 +309,8 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
             </div>
           </div>
 
-          {/* ── 快速开始开关 ── */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 12px', background: '#e8f4f8', borderRadius: 8
-          }}>
-            <input
-              type="checkbox"
-              id="quickStart"
-              checked={quickStart}
-              onChange={e => setQuickStart(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            <label htmlFor="quickStart" style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-              🚀 快速开始（使用示例数据直接训练，无需上传）
-            </label>
-          </div>
-
-          {/* ── 训练数据上传（快速开始时隐藏）── */}
-          {!quickStart && (
+          {/* ── 训练数据上传 ── */}
+          {(
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
                 训练数据（JSONL 格式，支持多文件）
@@ -316,6 +325,32 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
                 emptyLabel="点击或拖拽上传训练数据（可多选）"
                 formatHint='JSONL 格式：每行一条 {"instruction":"问题","output":"答案"}'
               />
+              <button
+                onClick={() => {
+                  const sampleData = [
+                    { instruction: "什么是 AI？", output: "AI 是人工智能，指由人制造出来的机器所表现出来的智能。" },
+                    { instruction: "Python 是什么？", output: "Python 是一种高级编程语言，以其简洁易读的语法著称。" },
+                    { instruction: "如何学习编程？", output: "学习编程的最好方法是通过大量的实践和项目开发。" },
+                    { instruction: "云计算有什么优势？", output: "云计算提供弹性扩展、成本优化和高可用性。" },
+                    { instruction: "深度学习是什么？", output: "深度学习是机器学习的一个分支，使用多层神经网络。" },
+                    { instruction: "数据库的作用是什么？", output: "数据库用于存储、管理和检索大量的结构化数据。" },
+                    { instruction: "前端和后端的区别？", output: "前端处理用户界面，后端处理业务逻辑和数据。" },
+                    { instruction: "什么是 API？", output: "API 是应用程序编程接口，允许不同应用间通信。" },
+                  ];
+                  const jsonlContent = sampleData.map(d => JSON.stringify(d, undefined, undefined)).join('\n');
+                  const blob = new Blob([jsonlContent], { type: 'application/jsonl' });
+                  const file = new File([blob], `sample_train_${datasets.length + 1}.jsonl`, { type: 'application/jsonl' });
+                  setDatasets(prev => [...prev, file]);
+                }}
+                style={{
+                  fontSize: 12, background: 'none',
+                  border: '1px dashed #d97706', borderRadius: 6,
+                  padding: '6px 12px', cursor: 'pointer', color: '#d97706', fontWeight: 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                + 导入样例数据
+              </button>
               {/* 数据格式说明 */}
               <div style={{
                 fontSize: 11, color: '#888', background: '#f9f9f9',
@@ -447,7 +482,7 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
 
           {/* ── 输出目录（必填）── */}
           <OutputDirRow
-            required={true}
+            required
             outputDir={outputDir}
             setOutputDir={setOutputDir}
             fieldCls="block text-xs font-medium text-slate-700"
@@ -458,16 +493,16 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
           {/* ── 提交按钮 ── */}
           <button
             onClick={handleStart}
-            disabled={submitting || (!quickStart && datasets.length === 0) || !outputDir.trim()}
+            disabled={submitting || datasets.length === 0 || !outputDir.trim()}
             style={{
               padding: '10px', borderRadius: 8,
               background: '#4f46e5', color: '#fff',
               border: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600,
-              opacity: (submitting || (!quickStart && datasets.length === 0) || !outputDir.trim()) ? 0.5 : 1,
+              opacity: (submitting || datasets.length === 0 || !outputDir.trim()) ? 0.5 : 1,
             }}
           >
-            {submitting ? '提交中...' : quickStart ? '🚀 开始快速训练' : '开始微调'}
+            {submitting ? '提交中...' : '开始微调'}
           </button>
 
           {/* ── 提交反馈消息 ── */}
@@ -484,6 +519,104 @@ export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }:
           )}
         </div>
       </div>
+
+      {/* ━━ 任务监控区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {jobStatus && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 12,
+          border: '1px solid #e0e0e0', borderRadius: 8, padding: 16,
+          background: '#fafafa'
+        }}>
+          {/* 标题 + 状态 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
+              训练监控
+              <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
+                {jobStatus.model}
+              </span>
+            </h4>
+            <span style={{
+              fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+              color: '#fff',
+              background: STATUS_COLORS[jobStatus.status] || '#718096'
+            }}>
+              {STATUS_LABELS[jobStatus.status] || jobStatus.status}
+            </span>
+          </div>
+
+          {/* 进度条 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              flex: 1, height: 8, background: '#e0e0e0', borderRadius: 4, overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${Math.round(jobStatus.progress * 100)}%`,
+                height: '100%', background: STATUS_COLORS[jobStatus.status] || '#3182ce',
+                borderRadius: 4, transition: 'width 0.3s'
+              }} />
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#555', minWidth: 40 }}>
+              {Math.round(jobStatus.progress * 100)}%
+            </span>
+          </div>
+
+          {/* Loss 曲线（简易文本图表） */}
+          {jobStatus.loss_curve && jobStatus.loss_curve.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Loss 曲线</label>
+              <div style={{
+                display: 'flex', alignItems: 'flex-end', gap: 1,
+                height: 60, background: '#fff', borderRadius: 4, padding: '4px 6px',
+                border: '1px solid #e8e8e8'
+              }}>
+                {(() => {
+                  const curve = jobStatus.loss_curve;
+                  const max = Math.max(...curve);
+                  const min = Math.min(...curve);
+                  const range = max - min || 1;
+                  // 最多显示 80 个点
+                  const step = Math.max(1, Math.floor(curve.length / 80));
+                  const sampled = curve.filter((_, i) => i % step === 0 || i === curve.length - 1);
+                  return sampled.map((v, i) => (
+                    <div
+                      key={i}
+                      title={`step ${i * step}: loss=${v.toFixed(4)}`}
+                      style={{
+                        flex: 1, minWidth: 2, maxWidth: 6,
+                        height: `${Math.max(4, ((v - min) / range) * 100)}%`,
+                        background: '#d97706', borderRadius: 1,
+                        transition: 'height 0.2s'
+                      }}
+                    />
+                  ));
+                })()}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#999' }}>
+                <span>loss: {jobStatus.loss_curve[jobStatus.loss_curve.length - 1]?.toFixed(4)}</span>
+                <span>{jobStatus.loss_curve.length} steps</span>
+              </div>
+            </div>
+          )}
+
+          {/* 日志 */}
+          {jobStatus.log_tail && jobStatus.log_tail.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>日志（最近 {jobStatus.log_tail.length} 行）</label>
+              <div style={{
+                maxHeight: 150, overflowY: 'auto',
+                background: '#1e1e1e', color: '#d4d4d4', borderRadius: 6,
+                padding: '8px 10px', fontSize: 11, fontFamily: 'monospace',
+                lineHeight: 1.6, whiteSpace: 'pre-wrap'
+              }}>
+                {jobStatus.log_tail.map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 使用步骤引导（与 VcPanel 风格一致）── */}
       <HowToSteps steps={FINETUNE_STEPS} />

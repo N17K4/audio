@@ -258,6 +258,10 @@ export default function Home() {
 
   // ─── Hooks ────────────────────────────────────────────────────────────────
   const backend = useBackend();
+  // 首次加载时：如果 outputDir 为空，用后端返回的系统下载目录作为默认值
+  useEffect(() => {
+    if (!outputDir && backend.downloadDir) setOutputDir(backend.downloadDir);
+  }, [backend.downloadDir]);
   // Sync vchatVoiceId from backend hook into voice chat if backend hook manages it separately
   // Actually useBackend manages selectedVoiceId & vchatVoiceId, use them directly
 
@@ -958,6 +962,8 @@ export default function Home() {
                 cloudEndpoint={cloudEndpoint}
                 setCloudEndpoint={setCloudEndpoint}
                 status={status}
+                outputDir={outputDir}
+                setOutputDir={setOutputDir}
                 imageGenProvider={misc.imageGenProvider}
                 onImageGenProviderChange={misc.handleImageGenProviderChange}
                 imageGenPrompt={misc.imageGenPrompt}
@@ -1569,6 +1575,8 @@ export default function Home() {
                 {advancedSubPage === 'finetune' && (
                   <FinetunePanel
                     backendUrl={backend.backendBaseUrl}
+                    outputDir={outputDir}
+                    setOutputDir={setOutputDir}
                     addPendingJob={addPendingJob}
                     resolveJob={resolveJob}
                   />

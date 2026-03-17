@@ -3,6 +3,7 @@ import ComboSelect from '../shared/ComboSelect';
 import ModelInput, { INPUT_CLS } from '../shared/ModelInput';
 import FileDrop from '../shared/FileDrop';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+import OutputDirRow from '../shared/OutputDirRow';
 import type { MiscSubPage, Status, ChatMessage } from '../../types';
 import {
   IMAGE_UNDERSTAND_PROVIDERS, IMAGE_UNDERSTAND_PROVIDER_LABELS, IMAGE_UNDERSTAND_MODELS,
@@ -135,6 +136,9 @@ interface MiscPanelProps {
   lipsyncLocalUrl: string;
   setLipsyncLocalUrl: (u: string) => void;
   onRunLipsync: () => void;
+  // output
+  outputDir: string;
+  setOutputDir: (v: string) => void;
   // style
   fieldCls: string;
   fileCls: string;
@@ -366,6 +370,7 @@ export default function MiscPanel({
   lipsyncModel, setLipsyncModel,
   lipsyncLocalUrl, setLipsyncLocalUrl,
   onRunLipsync,
+  outputDir, setOutputDir,
   fieldCls, fileCls, labelCls, btnSec,
   allowedSubPages,
 }: MiscPanelProps) {
@@ -725,6 +730,7 @@ export default function MiscPanel({
               <label className={labelCls}>图像描述（提示词）</label>
               <textarea rows={4} className={fieldCls} value={imgGenPrompt} onChange={e => setImgGenPrompt(e.target.value)} placeholder="描述你想生成的图像内容，越详细越好..." />
             </div>
+            <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
             <button className={`${btnPrimary} !bg-pink-600 hover:!bg-pink-700`} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={onRunImgGen}>
               {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成图像'}
             </button>
@@ -813,6 +819,7 @@ export default function MiscPanel({
               <label className={labelCls}>变化强度 {imgI2iStrength.toFixed(2)}（0 = 几乎不变，1 = 完全重绘）</label>
               <input type="range" min={0} max={1} step={0.05} value={imgI2iStrength} onChange={e => setImgI2iStrength(Number(e.target.value))} className="w-full accent-rose-500" />
             </div>
+            <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
             <button className={`${btnPrimary} !bg-rose-600 hover:!bg-rose-700`} disabled={busy || !imgI2iSourceFile || isUnsupported} onClick={onRunImgI2i}>
               {busy ? '处理中...' : isUnsupported ? '暂不支持' : '开始换脸换图'}
             </button>
@@ -910,6 +917,7 @@ export default function MiscPanel({
               <label className={labelCls}>视频描述（提示词）</label>
               <textarea rows={4} className={fieldCls} value={videoGenPrompt} onChange={e => setVideoGenPrompt(e.target.value)} placeholder="描述视频内容和动作，越详细越好..." />
             </div>
+            <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
             <button
               className={btnPrimary}
               disabled={busy || isUnsupported || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
@@ -1050,6 +1058,7 @@ export default function MiscPanel({
                 emptyLabel={lipsyncProvider === 'liveportrait' ? '点击或拖拽驱动视频' : '点击或拖拽音频文件'}
               />
             </div>
+            <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
             <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile || isUnsupported} onClick={onRunLipsync}>
               {busy ? '处理中...' : isUnsupported ? '暂不支持' : '开始口型同步'}
             </button>

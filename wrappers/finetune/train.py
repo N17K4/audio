@@ -34,23 +34,31 @@ def main():
 
     print(json.dumps({"step": 0, "total": args.num_epochs, "status": "loading_model"}), flush=True)
 
-    # QLoRA config
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    )
+    # QLoRA 4-bit 量化仅在 CUDA 上可用（bitsandbytes 不支持 MPS）
+    use_bnb = torch.cuda.is_available()
+    if use_bnb:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+    else:
+        bnb_config = None
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model,
-        quantization_config=bnb_config,
-        device_map="auto",
-        trust_remote_code=True,
-    )
+    load_kwargs = dict(trust_remote_code=True)
+    if bnb_config:
+        load_kwargs["quantization_config"] = bnb_config
+        load_kwargs["device_map"] = "auto"
+    else:
+        # Mac / CPU：不量化，float32 + CPU
+        load_kwargs["dtype"] = torch.float32
+        load_kwargs["device_map"] = "cpu"
+
+    model = AutoModelForCausalLM.from_pretrained(args.model, **load_kwargs)
 
     lora_config = LoraConfig(
         r=args.lora_r,
@@ -92,17 +100,33 @@ def main():
                     "global_step": state.global_step,
                 }), flush=True)
 
-    training_args = SFTConfig(
+    import inspect
+
+    # macOS MPS 不支持 fp16/bf16 mixed precision（需 PyTorch >= 2.6/2.8）
+    # CUDA 可用时开 fp16，否则关闭所有混合精度
+    has_cuda = torch.cuda.is_available()
+
+    sft_kwargs = dict(
         output_dir=args.output_dir,
         num_train_epochs=args.num_epochs,
         per_device_train_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
-        max_seq_length=args.max_seq_length,
         logging_steps=1,
         save_strategy="epoch",
-        fp16=True,
+        fp16=has_cuda,
+        bf16=False,
         report_to="none",
     )
+    # Mac/CPU：强制禁用 MPS，避免 accelerate 自动检测 MPS 后开 bf16
+    if not has_cuda:
+        sft_kwargs["use_cpu"] = True
+
+    sig_params = inspect.signature(SFTConfig.__init__).parameters
+    # max_seq_length 仅部分版本的 SFTConfig 支持
+    if "max_seq_length" in sig_params:
+        sft_kwargs["max_seq_length"] = args.max_seq_length
+
+    training_args = SFTConfig(**sft_kwargs)
 
     trainer = SFTTrainer(
         model=model,

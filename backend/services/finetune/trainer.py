@@ -3,11 +3,13 @@ import json
 import uuid
 import os
 import shutil
+import time as _time
 from pathlib import Path
 from datetime import datetime
 import logging
 from config import MODEL_ROOT, APP_ROOT
 from utils.engine import get_embedded_python
+from job_queue import JOBS
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ def start_finetune_job(
         "--export_format", export_format,
     ]
 
+    now = _time.time()
     _jobs[job_id] = {
         "job_id": job_id,
         "status": "running",
@@ -63,6 +66,14 @@ def start_finetune_job(
         "export_format": export_format,
         "created_at": datetime.utcnow().isoformat(),
         "_process": None,
+    }
+    JOBS[job_id] = {
+        "id": job_id, "type": "toolbox",
+        "label": f"LoRA 微调 — {model}", "provider": "lora",
+        "is_local": True, "status": "running",
+        "created_at": now, "started_at": now, "completed_at": None,
+        "result_url": None, "result_text": None, "error": None,
+        "_params": {"model": model},
     }
 
     # 构建子进程环境变量：继承当前环境，再覆盖 HF 相关变量
@@ -98,13 +109,24 @@ def start_finetune_job(
             proc.wait()
             if proc.returncode != 0 and _jobs[job_id]["status"] != "done":
                 _jobs[job_id]["status"] = "error"
+                if job_id in JOBS:
+                    JOBS[job_id]["status"] = "failed"
+                    JOBS[job_id]["completed_at"] = _time.time()
+                    JOBS[job_id]["error"] = _jobs[job_id]["log_tail"][-1] if _jobs[job_id]["log_tail"] else "训练失败"
             elif _jobs[job_id]["status"] != "done":
                 _jobs[job_id]["status"] = "done"
                 _jobs[job_id]["progress"] = 1.0
+            if _jobs[job_id]["status"] == "done" and job_id in JOBS:
+                JOBS[job_id]["status"] = "completed"
+                JOBS[job_id]["completed_at"] = _time.time()
         except Exception as e:
             _jobs[job_id]["status"] = "error"
             _jobs[job_id]["log_tail"].append(str(e))
             logger.error(f"微调任务失败: {e}")
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["completed_at"] = _time.time()
+                JOBS[job_id]["error"] = str(e)
 
     import threading
     threading.Thread(target=run, daemon=True).start()

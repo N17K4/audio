@@ -1,4 +1,5 @@
 import asyncio
+import time as _time
 import uuid
 import shutil
 from pathlib import Path
@@ -9,6 +10,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from logging_setup import logger
+from job_queue import JOBS
+
 router = APIRouter(prefix="/rag", tags=["rag"])
 
 # Simple in-memory job store for build jobs
@@ -57,14 +60,30 @@ async def build_collection(
             saved_paths.append(dest)
 
         job_id = str(uuid.uuid4())
+        now = _time.time()
         _build_jobs[job_id] = {"status": "running", "name": name}
+        JOBS[job_id] = {
+            "id": job_id, "type": "doc",
+            "label": f"RAG 创建知识库 — {name}", "provider": "rag",
+            "is_local": True, "status": "running",
+            "created_at": now, "started_at": now, "completed_at": None,
+            "result_url": None, "result_text": None, "error": None,
+            "_params": {"name": name},
+        }
 
         def run():
             try:
                 result = build_collection(name, saved_paths)
                 _build_jobs[job_id].update({"status": "done", "result": result})
+                if job_id in JOBS:
+                    JOBS[job_id]["status"] = "completed"
+                    JOBS[job_id]["completed_at"] = _time.time()
             except Exception as e:
                 _build_jobs[job_id].update({"status": "error", "error": str(e)})
+                if job_id in JOBS:
+                    JOBS[job_id]["status"] = "failed"
+                    JOBS[job_id]["completed_at"] = _time.time()
+                    JOBS[job_id]["error"] = str(e)
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -104,14 +123,30 @@ async def init_sample_kb():
 
     # 异步构建
     job_id = str(uuid.uuid4())
+    now = _time.time()
     _build_jobs[job_id] = {"status": "running", "name": sample_name}
+    JOBS[job_id] = {
+        "id": job_id, "type": "doc",
+        "label": f"RAG 创建知识库 — {sample_name}", "provider": "rag",
+        "is_local": True, "status": "running",
+        "created_at": now, "started_at": now, "completed_at": None,
+        "result_url": None, "result_text": None, "error": None,
+        "_params": {"name": sample_name},
+    }
 
     def run():
         try:
             result = build_collection(sample_name, [str(sample_doc)])
             _build_jobs[job_id].update({"status": "done", "result": result})
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "completed"
+                JOBS[job_id]["completed_at"] = _time.time()
         except Exception as e:
             _build_jobs[job_id].update({"status": "error", "error": str(e)})
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["completed_at"] = _time.time()
+                JOBS[job_id]["error"] = str(e)
 
     asyncio.get_event_loop().run_in_executor(None, run)
     return {"job_id": job_id, "status": "running", "name": sample_name}
@@ -120,6 +155,17 @@ async def init_sample_kb():
 @router.post("/query")
 async def query_rag(req: QueryRequest):
     from services.rag.querier import query_collection
+
+    job_id = str(uuid.uuid4())
+    now = _time.time()
+    JOBS[job_id] = {
+        "id": job_id, "type": "doc",
+        "label": f"RAG 知识库提问 — {req.collection}", "provider": "rag",
+        "is_local": True, "status": "running",
+        "created_at": now, "started_at": now, "completed_at": None,
+        "result_url": None, "result_text": None, "error": None,
+        "_params": {"collection": req.collection, "question": req.question},
+    }
 
     async def generate():
         try:
@@ -132,8 +178,16 @@ async def query_rag(req: QueryRequest):
                     ollama_url=req.ollama_url,
                 )
             )
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "completed"
+                JOBS[job_id]["completed_at"] = _time.time()
+                JOBS[job_id]["result_text"] = answer[:200] if answer else None
             yield f"data: {answer}\n\n"
         except Exception as e:
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["completed_at"] = _time.time()
+                JOBS[job_id]["error"] = str(e)
             yield f"data: [错误] {e}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

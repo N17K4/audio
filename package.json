@@ -5,7 +5,7 @@
   "scripts": {
     "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
-    "setup": "mise install && pnpm install && cd frontend && pnpm install && cd ../backend && (poetry install || (poetry lock && poetry install)) && cd .. && mise exec -- python3 scripts/setup_base.py",
+    "setup": "mise install && pnpm install && cd frontend && pnpm install && cd ../backend && (mise exec -- poetry install || (mise exec -- poetry lock && mise exec -- poetry install)) && cd .. && mise exec -- python3 scripts/setup_base.py",
     "setup:extra": "mise exec -- python3 scripts/setup_extra.py",
     "ml": "runtime/mac/python/bin/python3 scripts/ml_base.py",
     "ml:extra": "runtime/mac/python/bin/python3 scripts/ml_extra.py",

@@ -27,6 +27,10 @@ models/**/*.index
 models/voices/user/*
 !models/voices/user/.gitkeep
 
+# ─── 微调输出（运行时数据，不跟踪） ──────────────────────────────────────────
+models/finetune/*
+!models/finetune/.gitkeep
+
 # ─── 用户创建的知识库（RAG，运行时数据，不跟踪） ─────────────────────────────────
 models/rag/user/*
 !models/rag/user/.gitkeep

@@ -1,3 +1,5 @@
+import React from 'react';
+
 interface Step {
   title: string;
   desc: string;
@@ -15,8 +17,8 @@ export default function HowToSteps({ steps }: HowToStepsProps) {
       </h3>
       <div className="flex items-start gap-2">
         {steps.map((step, i) => (
-          <>
-            <div key={i} className="flex flex-col items-center gap-2 flex-1 min-w-0">
+          <React.Fragment key={i}>
+            <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
               <div
                 className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 text-white"
                 style={{ backgroundColor: '#1A8FE3' }}>
@@ -32,11 +34,11 @@ export default function HowToSteps({ steps }: HowToStepsProps) {
               </div>
             </div>
             {i < steps.length - 1 && (
-              <svg key={`arrow-${i}`} className="shrink-0 mt-3 text-slate-300 dark:text-slate-600" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <svg className="shrink-0 mt-3 text-slate-300 dark:text-slate-600" width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M3 8 L13 8 M9 4 L13 8 L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             )}
-          </>
+          </React.Fragment>
         ))}
       </div>
     </div>

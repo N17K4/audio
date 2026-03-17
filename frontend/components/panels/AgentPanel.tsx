@@ -130,7 +130,9 @@ export default function AgentPanel({
   // ── 执行智能体任务 ────────────────────────────────────────────────────────
   // POST /agent/run → SSE 流，每条 data 是一个 JSON 步骤对象
   const runAgent = async () => {
-    if (!task.trim() || selectedTools.length === 0 || !llmModel) return;
+    const taskToRun = task.trim() || '计算 10 + 5 的结果';
+
+    if (selectedTools.length === 0 || !llmModel) return;
 
     setSteps([]);   // 清空上次的执行记录
     setRunning(true);
@@ -139,12 +141,12 @@ export default function AgentPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          task,
+          task: taskToRun,
           tools: selectedTools,
           provider: selectedProvider,
           model: llmModel,
           api_key: apiKey,
-          ollama_url: selectedProvider === 'ollama' ? cloudEndpoint : 'http://127.0.0.1:11434',
+          ollama_url: selectedProvider === 'ollama' ? (cloudEndpoint || 'http://127.0.0.1:11434') : 'http://127.0.0.1:11434',
         }),
       });
 
@@ -264,20 +266,17 @@ export default function AgentPanel({
             </div>
           </div>
 
-          {/* ── 任务描述 ── */}
+          {/* ── 任务描述（留空则使用默认示例）── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
               任务描述
+              <span style={{ fontSize: 11, color: '#999', fontWeight: 400, marginLeft: 6 }}>留空则使用 placeholder 默认任务</span>
             </label>
             <textarea
               rows={5}
               value={task}
               onChange={e => setTask(e.target.value)}
-              placeholder={
-                '用自然语言描述任务，例如：\n' +
-                '「搜索近一周 AI 领域的重要新闻，整理成 5 条摘要」\n' +
-                '「计算 100 以内所有质数之和」'
-              }
+              placeholder="计算 10 + 5 的结果"
               style={{
                 padding: '8px 10px', borderRadius: 6,
                 border: '1px solid #ddd', fontSize: 13, resize: 'vertical',
@@ -289,13 +288,13 @@ export default function AgentPanel({
           {/* ── 执行按钮 ── */}
           <button
             onClick={runAgent}
-            disabled={running || !task.trim() || selectedTools.length === 0 || !llmModel}
+            disabled={running || selectedTools.length === 0 || !llmModel}
             style={{
               padding: '10px', borderRadius: 8,
               background: '#4f46e5', color: '#fff',
               border: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600,
-              opacity: (running || !task.trim() || selectedTools.length === 0 || !llmModel) ? 0.5 : 1,
+              opacity: (running || selectedTools.length === 0 || !llmModel) ? 0.5 : 1,
             }}
           >
             {running ? '执行中…（最多 10 轮）' : '开始执行'}

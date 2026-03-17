@@ -525,10 +525,12 @@ async function createWindow() {
   let pyCmd;
   let pyArgs;
   let cwd;
+  let useShell = false;
 
   if (isDev) {
-    pyCmd = 'poetry';
-    pyArgs = ['run', 'uvicorn', 'main:app',
+    // 开发模式：使用 mise exec + poetry run 确保使用正确的 Python 版本和虚拟环境
+    pyCmd = 'mise';
+    pyArgs = ['exec', '--', 'poetry', 'run', 'uvicorn', 'main:app',
       '--reload', '--reload-dir', '.',
       '--host', '127.0.0.1', '--port', backendPort,
     ];
@@ -547,7 +549,7 @@ async function createWindow() {
 
   pyProcess = spawn(pyCmd, pyArgs, {
     cwd,
-    shell: false,
+    shell: isDev, // 开发模式需要 shell 来执行 mise exec
     env: {
       ...process.env,
       BACKEND_HOST: '127.0.0.1',

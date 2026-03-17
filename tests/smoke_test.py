@@ -69,7 +69,10 @@ def create_test_wav() -> bytes:
     return buf.getvalue()
 
 
-def check_backend_running(base_url: str = "http://127.0.0.1:8000") -> bool:
+_BASE_URL = f"http://127.0.0.1:{os.environ.get('BACKEND_PORT', '8000')}"
+
+
+def check_backend_running(base_url: str = _BASE_URL) -> bool:
     """检查后端服务是否运行中。"""
     try:
         import httpx
@@ -107,22 +110,26 @@ class TestBasicFeatures:
                 "text": "烟雾测试文本合成",
                 "provider": "fish_speech",
             }
-            files = {}
+
+            print(f"  📤 POST /tasks/tts")
+            print(f"     请求参数：{data}")
 
             resp = client.post(
-                "http://127.0.0.1:8000/tasks/tts",
+                f"{_BASE_URL}/tasks/tts",
                 data=data,
             )
 
+            print(f"     HTTP {resp.status_code}")
             if resp.status_code == 200:
                 body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
                 if body.get("job_id"):
                     print(f"✅ Fish Speech TTS 已排队 [job_id: {body['job_id']}]")
                 else:
-                    print(f"✅ Fish Speech TTS 响应正常：{body}")
+                    print(f"✅ Fish Speech TTS 响应正常")
             else:
                 print(f"❌ Fish Speech TTS 失败 (HTTP {resp.status_code})")
-                print(f"   详情：{resp.text}")
+                print(f"   响应：{resp.text}")
                 pytest.fail(f"Fish Speech TTS 失败")
 
     def test_faster_whisper_stt(self):
@@ -140,14 +147,20 @@ class TestBasicFeatures:
                 "model": "base",
             }
 
+            print(f"  📤 POST /tasks/stt")
+            print(f"     请求参数：{data}")
+            print(f"     文件：test.wav ({len(wav_data)} bytes)")
+
             resp = client.post(
-                "http://127.0.0.1:8000/tasks/stt",
+                f"{_BASE_URL}/tasks/stt",
                 data=data,
                 files=files,
             )
 
+            print(f"     HTTP {resp.status_code}")
             if resp.status_code == 200:
                 body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
                 if body.get("job_id"):
                     print(f"✅ Faster Whisper STT 已排队 [job_id: {body['job_id']}]")
                 elif body.get("text") or body.get("result_text"):
@@ -156,7 +169,7 @@ class TestBasicFeatures:
                     print(f"✅ Faster Whisper STT 响应正常")
             else:
                 print(f"❌ Faster Whisper STT 失败 (HTTP {resp.status_code})")
-                print(f"   详情：{resp.text}")
+                print(f"   响应：{resp.text}")
                 pytest.fail("Faster Whisper STT 失败")
 
     def test_seed_vc_voice_convert(self):
@@ -178,21 +191,27 @@ class TestBasicFeatures:
                 "output_dir": str(Path(tempfile.gettempdir()) / "ai-workshop-temp" / "download"),
             }
 
+            print(f"  📤 POST /convert")
+            print(f"     请求参数：{data}")
+            print(f"     文件：test.wav ({len(wav_data)} bytes), ref.wav ({len(wav_data)} bytes)")
+
             resp = client.post(
-                "http://127.0.0.1:8000/convert",
+                f"{_BASE_URL}/convert",
                 data=data,
                 files=files,
             )
 
+            print(f"     HTTP {resp.status_code}")
             if resp.status_code == 200:
                 body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
                 if body.get("job_id"):
                     print(f"✅ Seed-VC 已排队 [job_id: {body['job_id']}]")
                 else:
                     print(f"✅ Seed-VC 响应正常")
             else:
                 print(f"❌ Seed-VC 失败 (HTTP {resp.status_code})")
-                print(f"   详情：{resp.text}")
+                print(f"   响应：{resp.text}")
                 pytest.fail("Seed-VC 转换失败")
 
     def test_rvc_voice_convert(self):
@@ -203,21 +222,25 @@ class TestBasicFeatures:
 
         # 先获取可用的 RVC 音色
         with httpx.Client(timeout=10) as client:
-            resp = client.get("http://127.0.0.1:8000/voices")
+            print(f"  📤 GET /voices")
+            resp = client.get(f"{_BASE_URL}/voices")
+            print(f"     HTTP {resp.status_code}")
             if resp.status_code != 200:
+                print(f"     响应：{resp.text}")
                 print("⚠️  无法获取音色列表，跳过 RVC 测试")
                 return
 
             voices_data = resp.json()
             voices = voices_data if isinstance(voices_data, list) else voices_data.get("voices", [])
             rvc_voices = [v for v in voices if v.get("engine") == "rvc"]
+            print(f"     音色总数：{len(voices)}，RVC 音色：{len(rvc_voices)}")
 
             if not rvc_voices:
                 print("⚠️  未找到 RVC 音色，跳过")
                 return
 
             voice_id = rvc_voices[0]["voice_id"]
-            print(f"   使用音色：{voice_id}")
+            print(f"     使用音色：{voice_id}")
 
             # 进行转换
             wav_data = create_test_wav()
@@ -228,21 +251,27 @@ class TestBasicFeatures:
                 "output_dir": str(Path(tempfile.gettempdir()) / "ai-workshop-temp" / "download"),
             }
 
+            print(f"  📤 POST /convert")
+            print(f"     请求参数：{data}")
+            print(f"     文件：test.wav ({len(wav_data)} bytes)")
+
             resp = client.post(
-                "http://127.0.0.1:8000/convert",
+                f"{_BASE_URL}/convert",
                 data=data,
                 files=files,
             )
 
+            print(f"     HTTP {resp.status_code}")
             if resp.status_code == 200:
                 body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
                 if body.get("job_id"):
                     print(f"✅ RVC 已排队 [job_id: {body['job_id']}]")
                 else:
                     print(f"✅ RVC 响应正常")
             else:
                 print(f"❌ RVC 失败 (HTTP {resp.status_code})")
-                print(f"   详情：{resp.text}")
+                print(f"   响应：{resp.text}")
                 pytest.fail("RVC 转换失败")
 
     def test_ffmpeg_media_convert(self):
@@ -260,14 +289,20 @@ class TestBasicFeatures:
                 "output_format": "mp3",
             }
 
+            print(f"  📤 POST /tasks/media-convert")
+            print(f"     请求参数：{data}")
+            print(f"     文件：test.wav ({len(wav_data)} bytes)")
+
             resp = client.post(
-                "http://127.0.0.1:8000/tasks/media-convert",
+                f"{_BASE_URL}/tasks/media-convert",
                 data=data,
                 files=files,
             )
 
+            print(f"     HTTP {resp.status_code}")
             if resp.status_code == 200:
                 body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
                 if body.get("job_id"):
                     print(f"✅ FFmpeg 已排队 [job_id: {body['job_id']}]")
                 elif body.get("result_url"):
@@ -276,7 +311,7 @@ class TestBasicFeatures:
                     print(f"✅ FFmpeg 响应正常")
             else:
                 print(f"❌ FFmpeg 失败 (HTTP {resp.status_code})")
-                print(f"   详情：{resp.text}")
+                print(f"   响应：{resp.text}")
                 pytest.fail("FFmpeg 转换失败")
 
 
