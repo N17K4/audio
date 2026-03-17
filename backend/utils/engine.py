@@ -90,7 +90,7 @@ def get_pandoc_binary() -> str:
 
 def detect_rvc_infer_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # setup-engines.py 自动生成
+        RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # setup_base.py 自动生成
         WRAPPERS_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "tools" / "rvc" / "infer_cli.py",

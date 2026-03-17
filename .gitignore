@@ -27,11 +27,18 @@ models/**/*.index
 models/voices/user/*
 !models/voices/user/.gitkeep
 
+# ─── 用户创建的知识库（RAG，运行时数据，不跟踪） ─────────────────────────────────
+models/rag/user/*
+!models/rag/user/.gitkeep
+
 # ─── runtime 目录（引擎二进制/克隆，不跟踪）─────────────────────────────────────
 runtime/
 
 # ─── checkpoints / 大模型 ──────────────────────────────────────────────────────
 checkpoints/
+
+# ─── 本地开发 ML 包（pnpm run ml / ml:extra 安装到此）──────────────────────
+local_data/
 
 # ─── 运行时数据 ──────────────────────────────────────────────────────────────
 backend/.jobs/

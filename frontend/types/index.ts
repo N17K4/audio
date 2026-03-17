@@ -7,7 +7,7 @@ export type ToolboxSubPage = 'image' | 'qr' | 'text_encoding'; // 保留兼容 u
 export type MediaAction = 'convert' | 'extract_audio' | 'clip' | 'subtitle_convert' | 'subtitle_extract';
 export type VcInputMode = 'record' | 'upload';
 export type DesktopSource = { id: string; name: string };
-export type VoiceInfo = { voice_id: string; name: string; is_ready: boolean; engine: string; sample_rate: number; model_file?: string | null };
+export type VoiceInfo = { voice_id: string; name: string; is_ready: boolean; engine: string; sample_rate: number; model_file?: string | null; is_builtin?: boolean };
 export type CapabilityMap = Record<string, string[]>;
 export type ChatMessage = { role: 'user' | 'assistant'; content: string; ts: number };
 export type VoiceChatStatus = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'speaking';
@@ -19,7 +19,7 @@ export type DiskRow = {
   version?: string;          // 版本号（如 "v1.5"），由前端 badge 展示
   sub?: string;
   size: number;
-  engineKey?: string;        // 对应 download_checkpoints.py --engine 参数，有值才显示安装/卸载按钮
+  engineKey?: string;        // 对应引擎下载 --engine 参数，有值才显示安装/卸载按钮
   ready?: boolean;           // 模型是否已就绪（size > 0 作为代理）
   clearable?: boolean;       // 可直接清空目录，显示「清空」按钮
   estimatedSizeMb?: number;  // 预估体积，始终显示在标签旁
@@ -41,6 +41,7 @@ export type Job = {
   progress?: number;      // 0-100，训练任务进度
   step?: string;          // 当前阶段名称
   step_msg?: string;      // 当前阶段描述
+  params?: Record<string, any>;  // 任务输入参数
 };
 
 export interface RagCollection {

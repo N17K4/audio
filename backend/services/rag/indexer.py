@@ -9,7 +9,7 @@ from config import MODEL_ROOT
 
 logger = logging.getLogger(__name__)
 
-RAG_ROOT = MODEL_ROOT / "rag"
+RAG_ROOT = MODEL_ROOT / "rag" / "user"
 
 
 def _collection_dir(name: str) -> Path:
@@ -71,6 +71,9 @@ def build_collection(name: str, file_paths: list[str]) -> dict:
         storage_context=storage_context,
         embed_model=embed_model,
     )
+
+    # 显式保存 FAISS 索引文件
+    faiss.write_index(faiss_index, str(coll_dir / "vector_store.faiss"))
     storage_context.persist(persist_dir=str(coll_dir))
 
     meta = {

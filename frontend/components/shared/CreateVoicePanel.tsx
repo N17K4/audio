@@ -52,8 +52,21 @@ export default function CreateVoicePanel({
       <div className="flex gap-3 flex-wrap">
         <label className="flex-1 min-w-[120px]">
           <span className={labelCls}>音色名称</span>
-          <input className={fieldCls}
-            value={newVoiceName} onChange={e => setNewVoiceName(e.target.value)} placeholder="我的音色" />
+          <input
+            className={fieldCls}
+            value={newVoiceName}
+            onChange={e => setNewVoiceName(e.target.value)}
+            placeholder="请输入音色名称（如 my_voice_001）"
+            style={{
+              borderColor: !newVoiceName.trim() ? '#4f46e5' : undefined,
+              backgroundColor: !newVoiceName.trim() ? '#f0f0ff' : undefined,
+            }}
+          />
+          {!newVoiceName.trim() && (
+            <div style={{ fontSize: 11, color: '#4f46e5', fontWeight: 500, marginTop: 4 }}>
+              ⚠️ 必须输入音色名称
+            </div>
+          )}
         </label>
         {!engine && (
           <label className="flex-1 min-w-[120px]">
@@ -115,8 +128,11 @@ export default function CreateVoicePanel({
         />
       </div>
 
-      <button className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-        onClick={onCreateVoice} disabled={creatingVoice}>
+      <button
+        className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+        onClick={onCreateVoice}
+        disabled={creatingVoice || !newVoiceName.trim() || !modelFile}
+      >
         {creatingVoice ? '创建中...' : '确认创建'}
       </button>
     </div>

@@ -498,14 +498,12 @@ export default function MiscPanel({
           <div className="flex flex-wrap gap-3 items-end">
             <label className="flex flex-col gap-1 min-w-[140px] flex-1">
               <span className={labelCls}>服务商</span>
-              <select
-                className={INPUT_CLS}
+              <ComboSelect
                 value={translateProvider}
-                onChange={e => { setTranslateProvider(e.target.value); setTranslateModel(DEFAULT_MODELS.llm?.[e.target.value] || ''); }}>
-                {TRANSLATE_PROVIDERS.map(p => (
-                  <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>
-                ))}
-              </select>
+                onChange={v => { setTranslateProvider(v); setTranslateModel(DEFAULT_MODELS.llm?.[v] || ''); }}
+                options={TRANSLATE_PROVIDERS.map(p => ({ value: p, label: PROVIDER_LABELS[p] || p }))}
+                placeholder="选择服务商"
+              />
             </label>
             <label className="flex flex-col gap-1 min-w-[160px] flex-1">
               <span className={labelCls}>模型（可选）</span>
@@ -568,14 +566,12 @@ export default function MiscPanel({
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-3 items-end">
             <label className="flex flex-col gap-1 min-w-[140px] flex-1">
               <span className={labelCls}>服务商</span>
-              <select
-                className={INPUT_CLS}
+              <ComboSelect
                 value={codeProvider}
-                onChange={e => { setCodeProvider(e.target.value); setCodeModel(DEFAULT_MODELS.llm?.[e.target.value] || ''); }}>
-                {CODE_PROVIDERS.map(p => (
-                  <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>
-                ))}
-              </select>
+                onChange={v => { setCodeProvider(v); setCodeModel(DEFAULT_MODELS.llm?.[v] || ''); }}
+                options={CODE_PROVIDERS.map(p => ({ value: p, label: PROVIDER_LABELS[p] || p }))}
+                placeholder="选择服务商"
+              />
             </label>
             <label className="flex flex-col gap-1 min-w-[160px] flex-1">
               <span className={labelCls}>模型（可选）</span>

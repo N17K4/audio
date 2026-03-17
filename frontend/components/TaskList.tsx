@@ -196,6 +196,11 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     const log = (msg: string) => setSmokeLog(prev => [...prev, msg]);
     const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
 
+    log('═══════════════════════════════════════════════════════════');
+    log(`烟雾测试 1 启动… [${new Date().toLocaleString('zh-CN')}]`);
+    log('═══════════════════════════════════════════════════════════');
+    log('');
+
     async function postForm(url: string, fd: FormData): Promise<{ ok: true; data: any } | { ok: false; errMsg: string }> {
       const r = await fetch(url, { method: 'POST', body: fd });
       let body: any;
@@ -258,6 +263,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('provider', 'seed_vc');
       fd.append('mode', 'local');
       fd.append('reference_audio', testWav, 'ref.wav');
+      if (downloadDir) fd.append('output_dir', downloadDir);
 
       const res = await postForm(`${backendBaseUrl}/convert`, fd);
       if (res.ok === false) { log(`✗ Seed-VC 换声失败: ${res.errMsg}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
@@ -272,7 +278,8 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         fd.append('file', testWav, 'test.wav');
         fd.append('voice_id', rvcVoiceId);
         fd.append('mode', 'local');
-  
+        if (downloadDir) fd.append('output_dir', downloadDir);
+
         const res = await postForm(`${backendBaseUrl}/convert`, fd);
         if (res.ok === false) { log(`✗ RVC 换声失败: ${res.errMsg}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
         else if (res.data?.job_id) { log(`✓ RVC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 换声', status: 'passed' }); }
@@ -347,11 +354,14 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     setSmoke2Log([]);
     setSmoke2Summary([]);
 
-    const log = (msg: string) => setSmoke2Log(prev => [...prev, msg]);
+    const allLines: string[] = [];
+    const log = (msg: string) => { allLines.push(msg); setSmoke2Log(prev => [...prev, msg]); };
     let hasError = false;
 
     try {
-      log('烟雾测试 2 启动…');
+      log('═══════════════════════════════════════════════════════════');
+      log(`烟雾测试 2 启动… [${new Date().toLocaleString('zh-CN')}]`);
+      log('═══════════════════════════════════════════════════════════');
       log('');
 
       const response = await fetch(`${backendBaseUrl}/smoketest2/run`, {
@@ -398,8 +408,8 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
               const data = JSON.parse(jsonStr);
               if (data.log) {
                 log(data.log);
-                // 检测错误信息
-                if (data.log.includes('❌') || data.log.includes('失败')) {
+                // 只检测最终的失败状态（不检测中途的警告❌）
+                if (data.log.includes('烟雾测试 2 执行失败')) {
                   hasError = true;
                 }
               }
@@ -417,7 +427,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           const data = JSON.parse(jsonStr);
           if (data.log) {
             log(data.log);
-            if (data.log.includes('❌') || data.log.includes('失败')) {
+            if (data.log.includes('烟雾测试 2 执行失败')) {
               hasError = true;
             }
           }
@@ -431,11 +441,31 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       hasError = true;
     }
 
-    // 根据是否有错误设置结果状态
-    setSmoke2Summary([{
-      name: 'RAG/Agent/LoRA 测试',
-      status: hasError ? 'failed' : 'passed'
-    }]);
+    // 从日志中解析结果汇总（使用本地 allLines，避免 stale closure）
+    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
+    const summaryStart = allLines.findIndex(line => line.includes('📊 测试结果汇总'));
+    if (summaryStart >= 0) {
+      for (let i = summaryStart + 2; i < allLines.length; i++) {
+        const line = allLines[i];
+        if (line.includes('✅ 通过')) {
+          const match = line.match(/✅ 通过\s*—\s*(\S+)/);
+          if (match) results.push({ name: match[1], status: 'passed' });
+        } else if (line.includes('❌ 失败')) {
+          const match = line.match(/❌ 失败\s*—\s*(\S+)/);
+          if (match) results.push({ name: match[1], status: 'failed' });
+        }
+      }
+    }
+
+    // 如果没有解析到结果，按整体状态判断
+    if (results.length === 0) {
+      setSmoke2Summary([{
+        name: 'RAG/Agent/LoRA 测试',
+        status: hasError ? 'failed' : 'passed'
+      }]);
+    } else {
+      setSmoke2Summary(results);
+    }
     setSmoke2Running(false);
   }
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
@@ -541,8 +571,12 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     );
   }
 
+  const [expandedParamJobId, setExpandedParamJobId] = useState<string | null>(null);
+
   function JobRow({ job }: { job: Job }) {
+    const hasParams = job.params && Object.keys(job.params).length > 0;
     return (
+      <>
       <div className="flex items-start gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
         <div className="mt-0.5"><TypeBadge job={job} /></div>
         <div className="flex-1 min-w-0">
@@ -596,27 +630,45 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500 whitespace-nowrap">
             {fmtDateTime(job.created_at)}
           </span>
-          {(job.status === 'queued' || job.status === 'running') ? (
-            <button
-              className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-800/50 px-2.5 py-1 text-xs text-orange-500 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
-              onClick={async () => {
-                await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
-                setJobs(prev => prev.filter(j => j.id !== job.id));
-              }}>
-              中断
-            </button>
-          ) : (
-            <button
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-rose-500 transition-colors"
-              onClick={async () => {
-                await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
-                setJobs(prev => prev.filter(j => j.id !== job.id));
-              }}>
-              删除
-            </button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {hasParams && (
+              <button
+                className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/50 px-2.5 py-1 text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors whitespace-nowrap"
+                onClick={() => setExpandedParamJobId(expandedParamJobId === job.id ? null : job.id)}>
+                参数
+              </button>
+            )}
+            {(job.status === 'queued' || job.status === 'running') ? (
+              <button
+                className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-800/50 px-2.5 py-1 text-xs text-orange-500 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+                onClick={async () => {
+                  await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+                  setJobs(prev => prev.filter(j => j.id !== job.id));
+                }}>
+                中断
+              </button>
+            ) : (
+              <button
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-rose-500 transition-colors"
+                onClick={async () => {
+                  await fetch(`${backendBaseUrl}/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+                  setJobs(prev => prev.filter(j => j.id !== job.id));
+                }}>
+                删除
+              </button>
+            )}
+          </div>
         </div>
       </div>
+      {expandedParamJobId === job.id && hasParams && (
+        <div className="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 px-5 py-3">
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">任务参数</p>
+          <pre className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 rounded p-3 overflow-x-auto max-h-48 overflow-y-auto">
+            {JSON.stringify(job.params, null, 2)}
+          </pre>
+        </div>
+      )}
+    </>
     );
   }
 
@@ -738,7 +790,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             </div>
             <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-2">⚠️ 前置要求：</p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-3">• ollama serve 运行中</p>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-3">• pnpm run setup:ml 已执行</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-3">• pnpm run ml 已执行</p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">💡 需要网络连接（首次拉取较慢，可能 5-10 分钟）</p>
           </div>
           <button

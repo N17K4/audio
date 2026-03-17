@@ -18,7 +18,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FinetuneJob } from '../../types';
 import HowToSteps from '../shared/HowToSteps';
+import ComboSelect from '../shared/ComboSelect';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+import OutputDirRow from '../shared/OutputDirRow';
+import FileDrop from '../shared/FileDrop';
 
 // ─── 实际运行流程（QLoRA 微调管道）──────────────────────────────────────────
 const FINETUNE_FLOW: FlowStep[] = [
@@ -88,13 +91,18 @@ const STATUS_LABELS: Record<string, string> = {
 
 interface Props {
   backendUrl: string;
+  addPendingJob?: (type: string, label: string, provider: string, isLocal: boolean) => string;
+  resolveJob?: (id: string, result: { status: 'completed' | 'failed'; error?: string }) => void;
 }
 
-export default function FinetunePanel({ backendUrl }: Props) {
+export default function FinetunePanel({ backendUrl, addPendingJob, resolveJob }: Props) {
   // ── 表单状态 ──────────────────────────────────────────────────────────────
   const [model, setModel] = useState(PRESET_MODELS[0].id);  // 选中的预设模型
   const [customModel, setCustomModel] = useState('');         // 自定义模型 ID（覆盖预设）
   const [dataset, setDataset] = useState<File | null>(null);  // 训练数据文件
+
+  // ── 输出目录（为空时后端自动生成临时目录）─────────────────────────────────
+  const [outputDir, setOutputDir] = useState('/tmp/finetune_output');
 
   // ── HuggingFace 配置（下载基座模型用）─────────────────────────────────────
   // 中国大陆无法直接访问 huggingface.co，需要设置镜像
@@ -102,8 +110,8 @@ export default function FinetunePanel({ backendUrl }: Props) {
   const [hfMirror, setHfMirror] = useState('https://hf-mirror.com'); // 镜像地址
 
   // ── 超参数状态（默认值对大多数场景适用）────────────────────────────────────
-  const [loraR, setLoraR] = useState(16);         // LoRA 秩
-  const [loraAlpha, setLoraAlpha] = useState(32); // LoRA 缩放系数
+  const [loraR, setLoraR] = useState(16);         // LoRA 秩（smoke_test2）
+  const [loraAlpha, setLoraAlpha] = useState(32); // LoRA 缩放系数（smoke_test2）
   const [numEpochs, setNumEpochs] = useState(3);  // 训练轮次
   const [batchSize, setBatchSize] = useState(2);  // 批大小
   const [lr, setLr] = useState(0.0002);            // 学习率
@@ -111,53 +119,45 @@ export default function FinetunePanel({ backendUrl }: Props) {
   const [exportFmt, setExportFmt] = useState<'adapter' | 'merged'>('adapter'); // 导出格式
 
   // ── 任务状态 ──────────────────────────────────────────────────────────────
-  const [jobs, setJobs] = useState<FinetuneJob[]>([]);       // 全部任务列表
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null); // 当前查看的任务
   const [submitting, setSubmitting] = useState(false);        // 是否正在提交
+  const [datasets, setDatasets] = useState<File[]>([]);      // 支持多文件
+  const [quickStart, setQuickStart] = useState(false);        // 是否启用快速开始
+  const [submitMsg, setSubmitMsg] = useState('');              // 提交反馈消息
 
-  // ── 拉取任务列表 ─────────────────────────────────────────────────────────
-  // 调用 GET /finetune/jobs，返回当前进程内所有微调任务（重启后清空）
-  const fetchJobs = useCallback(async () => {
-    try {
-      const res = await fetch(`${backendUrl}/finetune/jobs`);
-      if (res.ok) setJobs(await res.json());
-    } catch {
-      // 后端未就绪时静默失败
-    }
-  }, [backendUrl]);
-
-  // 页面加载时拉取一次
-  useEffect(() => { fetchJobs(); }, [fetchJobs]);
-
-  // ── 自动轮询运行中的任务（每 2 秒刷新一次进度）────────────────────────────
-  // 只有选中的任务处于 running 状态时才启动轮询
-  useEffect(() => {
-    const selected = jobs.find(j => j.job_id === selectedJobId);
-    if (selected?.status !== 'running') return;
-
-    const timer = setInterval(async () => {
-      const res = await fetch(`${backendUrl}/finetune/jobs/${selectedJobId}`);
-      if (!res.ok) return;
-      const job: FinetuneJob = await res.json();
-      // 用新数据替换列表中的对应条目
-      setJobs(prev => prev.map(j => j.job_id === selectedJobId ? job : j));
-      // 训练结束时停止轮询
-      if (job.status !== 'running') clearInterval(timer);
-    }, 2000);
-
-    return () => clearInterval(timer);
-  }, [selectedJobId, jobs, backendUrl]);
+  // 注：任务监控已移至 TaskList 页面，此处仅负责提交任务
 
   // ── 提交微调任务 ──────────────────────────────────────────────────────────
   // POST /finetune/start（multipart/form-data）
+  // 支持多个数据集文件，后端会合并处理
   const handleStart = async () => {
-    if (!dataset) return;
     setSubmitting(true);
+    setSubmitMsg('');
     try {
+      // 如果启用快速开始且未上传数据，生成示例数据
+      let datasetsToSubmit = datasets;
+      if (quickStart && datasets.length === 0) {
+        const sampleData = [
+          { instruction: "什么是 AI？", output: "AI 是人工智能，指由人制造出来的机器所表现出来的智能。" },
+          { instruction: "Python 是什么？", output: "Python 是一种高级编程语言，以其简洁易读的语法著称。" },
+          { instruction: "如何学习编程？", output: "学习编程的最好方法是通过大量的实践和项目开发。" },
+          { instruction: "云计算有什么优势？", output: "云计算提供弹性扩展、成本优化和高可用性。" },
+          { instruction: "深度学习是什么？", output: "深度学习是机器学习的一个分支，使用多层神经网络。" },
+          { instruction: "数据库的作用是什么？", output: "数据库用于存储、管理和检索大量的结构化数据。" },
+          { instruction: "前端和后端的区别？", output: "前端处理用户界面，后端处理业务逻辑和数据。" },
+          { instruction: "什么是 API？", output: "API 是应用程序编程接口，允许不同应用间通信。" },
+        ];
+        const jsonlContent = sampleData.map(d => JSON.stringify(d)).join('\n');
+        const blob = new Blob([jsonlContent], { type: 'application/jsonl' });
+        const file = new File([blob], 'sample_train_data.jsonl', { type: 'application/jsonl' });
+        datasetsToSubmit = [file];
+      }
+
+      if (datasetsToSubmit.length === 0) return;
+
       const form = new FormData();
-      // 自定义模型 ID 优先；否则用预设
-      form.append('model', customModel.trim() || model);
-      form.append('dataset', dataset);
+      const modelId = customModel.trim() || model;
+      form.append('model', modelId);
+      datasetsToSubmit.forEach(f => form.append('datasets', f));
       form.append('lora_r',        String(loraR));
       form.append('lora_alpha',    String(loraAlpha));
       form.append('num_epochs',    String(numEpochs));
@@ -165,6 +165,7 @@ export default function FinetunePanel({ backendUrl }: Props) {
       form.append('learning_rate', String(lr));
       form.append('max_seq_length', String(maxSeqLen));
       form.append('export_format', exportFmt);
+      if (outputDir) form.append('output_dir', outputDir);
       if (hfToken) form.append('hf_token', hfToken);
       if (hfMirror) form.append('hf_mirror', hfMirror);
 
@@ -173,23 +174,25 @@ export default function FinetunePanel({ backendUrl }: Props) {
         body: form,
       });
       const data = await res.json();
-      setSelectedJobId(data.job_id);  // 自动切换到新任务
-      await fetchJobs();               // 刷新列表
+
+      // 添加到 TaskList（如果有 addPendingJob）
+      if (addPendingJob) {
+        addPendingJob(
+          'finetune',
+          `LoRA 微调 - ${modelId.split('/').pop()}`,
+          modelId,
+          false  // 云端任务
+        );
+        setSubmitMsg(`已提交！任务 ID：${data.job_id?.slice(0, 8)}…\n请前往「任务列表」查看进度。`);
+      } else {
+        setSubmitMsg(`已提交！任务 ID：${data.job_id?.slice(0, 8)}…`);
+      }
+    } catch (e: any) {
+      setSubmitMsg(`提交失败：${e.message}`);
     } finally {
       setSubmitting(false);
     }
   };
-
-  // ── 终止并删除任务 ────────────────────────────────────────────────────────
-  // DELETE /finetune/jobs/{job_id}：终止子进程 + 删除输出目录
-  const handleCancel = async (jobId: string) => {
-    await fetch(`${backendUrl}/finetune/jobs/${jobId}`, { method: 'DELETE' });
-    setJobs(prev => prev.filter(j => j.job_id !== jobId));
-    if (selectedJobId === jobId) setSelectedJobId(null);
-  };
-
-  // 当前查看的任务详情
-  const selectedJob = jobs.find(j => j.job_id === selectedJobId) || null;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -198,12 +201,12 @@ export default function FinetunePanel({ backendUrl }: Props) {
       {/* ── 实际运行流程可视化 ── */}
       <ProcessFlow steps={FINETUNE_FLOW} color="#d97706" />
 
-      {/* ── 主体：左右两栏 ── */}
-      <div style={{ display: 'flex', gap: 24, flex: 1, minHeight: 0 }}>
+      {/* ── 主体：配置 → 任务监控（纵向） ── */}
+      <div style={{ display: 'flex', gap: 24, flex: 1, minHeight: 0, flexDirection: 'column' }}>
 
-        {/* ━━ 左栏：配置区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* ━━ 配置区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <div style={{
-          width: 300, display: 'flex', flexDirection: 'column',
+          display: 'flex', flexDirection: 'column',
           gap: 14, overflowY: 'auto', paddingRight: 4
         }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
@@ -213,108 +216,125 @@ export default function FinetunePanel({ backendUrl }: Props) {
             </span>
           </h3>
 
-          {/* ── HuggingFace 配置 ── */}
-          {/* 基座模型从 HuggingFace 下载，中国用户需配置镜像，私有模型需要 Token */}
-          <div style={{
-            padding: 12, background: '#f9f9f9', borderRadius: 8,
-            border: '1px solid #e8e8e8', display: 'flex', flexDirection: 'column', gap: 10,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#555' }}>
+          {/* ── HuggingFace 配置（一行三列） ── */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex flex-col gap-4">
+            <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
               HuggingFace 配置
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>
-                镜像地址
-                <span style={{ fontWeight: 400, color: '#999', marginLeft: 6 }}>（中国大陆推荐）</span>
+            {/* 三列并排：镜像 / Token / 基座模型 */}
+            <div className="flex gap-3">
+              {/* 镜像地址 */}
+              <label className="flex flex-col gap-1 flex-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">镜像</span>
+                <ComboSelect
+                  value={hfMirror}
+                  onChange={setHfMirror}
+                  options={[
+                    { value: 'https://hf-mirror.com', label: 'hf-mirror.com' },
+                    { value: 'https://huggingface.co', label: 'huggingface.co' },
+                    { value: '', label: '不设置' },
+                  ]}
+                  placeholder="选择镜像"
+                  compact={true}
+                />
               </label>
-              <select
-                value={hfMirror}
-                onChange={e => setHfMirror(e.target.value)}
-                style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 12 }}
-              >
-                <option value="https://hf-mirror.com">hf-mirror.com（国内镜像，推荐）</option>
-                <option value="https://huggingface.co">huggingface.co（官方）</option>
-                <option value="">不设置（使用系统环境变量）</option>
-              </select>
+
+              {/* HF Token */}
+              <label className="flex flex-col gap-1 flex-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Token</span>
+                <input
+                  type="password"
+                  value={hfToken}
+                  onChange={e => setHfToken(e.target.value)}
+                  placeholder="hf_..."
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-[#1A8FE3] focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all outline-none placeholder:text-slate-400"
+                />
+              </label>
+
+              {/* 基座模型 */}
+              <label className="flex flex-col gap-1 flex-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">基座模型</span>
+                <ComboSelect
+                  value={customModel || model}
+                  onChange={v => {
+                    const preset = PRESET_MODELS.find(m => m.id === v);
+                    if (preset) {
+                      setModel(v);
+                      setCustomModel('');
+                    } else {
+                      setCustomModel(v);
+                    }
+                  }}
+                  options={[
+                    ...PRESET_MODELS.map(m => ({ value: m.id, label: m.label })),
+                    { value: 'custom', label: '─ 自定义 ID ─' },
+                  ]}
+                  placeholder="选择模型"
+                  allowCustom={true}
+                  compact={true}
+                />
+              </label>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>
-                HF Token
-                <span style={{ fontWeight: 400, color: '#999', marginLeft: 6 }}>（可选，私有模型需要）</span>
+            {/* 提示 */}
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              💡 自定义格式：<code className="text-slate-700 dark:text-slate-300">Qwen/Qwen2.5-7B</code> | Token：<code className="text-slate-700 dark:text-slate-300">huggingface.co/settings/tokens</code>
+            </div>
+          </div>
+
+          {/* ── 快速开始开关 ── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', background: '#e8f4f8', borderRadius: 8
+          }}>
+            <input
+              type="checkbox"
+              id="quickStart"
+              checked={quickStart}
+              onChange={e => setQuickStart(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <label htmlFor="quickStart" style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              🚀 快速开始（使用示例数据直接训练，无需上传）
+            </label>
+          </div>
+
+          {/* ── 训练数据上传（快速开始时隐藏）── */}
+          {!quickStart && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
+                训练数据（JSONL 格式，支持多文件）
               </label>
-              <input
-                type="password"
-                value={hfToken}
-                onChange={e => setHfToken(e.target.value)}
-                placeholder="hf_..."
-                style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 12 }}
+              <FileDrop
+                files={datasets}
+                onAdd={fs => setDatasets([...datasets, ...fs])}
+                onRemove={i => setDatasets(datasets.filter((_, j) => j !== i))}
+                accept=".jsonl,.json"
+                multiple
+                iconType="file"
+                emptyLabel="点击或拖拽上传训练数据（可多选）"
+                formatHint='JSONL 格式：每行一条 {"instruction":"问题","output":"答案"}'
               />
-              <div style={{ fontSize: 11, color: '#999' }}>
-                在 huggingface.co/settings/tokens 获取，公开模型无需填写
+              {/* 数据格式说明 */}
+              <div style={{
+                fontSize: 11, color: '#888', background: '#f9f9f9',
+                borderRadius: 4, padding: '6px 8px', lineHeight: 1.6
+              }}>
+                至少准备 50～200 条，数据质量比数量更重要
               </div>
             </div>
-          </div>
+          )}
 
-          {/* ── 基座模型选择 ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
-              基座模型
-            </label>
-            <select
-              value={model}
-              onChange={e => setModel(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
-            >
-              {PRESET_MODELS.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-            {/* 自定义 HuggingFace 模型 ID，填写后覆盖上方下拉框 */}
-            <input
-              placeholder="或输入 HuggingFace 模型 ID，如 Qwen/Qwen2.5-7B"
-              value={customModel}
-              onChange={e => setCustomModel(e.target.value)}
-              style={{
-                padding: '6px 10px', borderRadius: 6,
-                border: '1px solid #ddd', fontSize: 12, color: '#666'
-              }}
-            />
-          </div>
-
-          {/* ── 训练数据上传 ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
-              训练数据（JSONL 格式）
-            </label>
-            <input
-              type="file"
-              accept=".jsonl,.json"
-              onChange={e => setDataset(e.target.files?.[0] || null)}
-              style={{ fontSize: 12 }}
-            />
-            {/* 数据格式说明 */}
-            <div style={{
-              fontSize: 11, color: '#888', background: '#f9f9f9',
-              borderRadius: 4, padding: '6px 8px', lineHeight: 1.6
-            }}>
-              每行一条：<code>{"{"}"instruction": "问题", "output": "答案"{"}"}</code>
-              <br />至少准备 50～200 条，数据质量比数量更重要
-            </div>
-          </div>
-
-          {/* ── 超参数网格：4 个常用参数 2×2 排列 ── */}
+          {/* ── 常用参数网格：训练轮次 + Batch Size ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {[
-              { key: 'lora_r',     label: 'LoRA Rank', val: loraR,      set: setLoraR,      step: 4  },
-              { key: 'lora_alpha', label: 'LoRA Alpha', val: loraAlpha,  set: setLoraAlpha,  step: 8  },
               { key: 'num_epochs', label: '训练轮次',   val: numEpochs,  set: setNumEpochs,  step: 1  },
               { key: 'batch_size', label: 'Batch Size', val: batchSize,   set: setBatchSize,  step: 1  },
             ].map(({ key, label, val, set, step }) => (
               <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <label
-                  title={PARAM_TIPS[key]}  // 悬停显示详细说明
+                  title={PARAM_TIPS[key]}
                   style={{ fontSize: 11, fontWeight: 600, color: '#555', cursor: 'help' }}
                 >
                   {label} ❓
@@ -331,257 +351,135 @@ export default function FinetunePanel({ backendUrl }: Props) {
             ))}
           </div>
 
-          {/* ── 学习率 ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label
-              title={PARAM_TIPS['learning_rate']}
-              style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'help' }}
-            >
-              学习率 ❓
-            </label>
-            <input
-              type="number"
-              value={lr}
-              step={0.00001}
-              min={0.000001}
-              onChange={e => setLr(Number(e.target.value))}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
-            />
-          </div>
+          {/* ── 高级设置（可折叠） ── */}
+          <details style={{
+            border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden'
+          }}>
+            <summary style={{
+              fontSize: 12, fontWeight: 600, color: '#555',
+              padding: '10px 12px', cursor: 'pointer',
+              background: '#fafafa', userSelect: 'none',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <span>高级设置</span>
+              <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
 
-          {/* ── 最大序列长度 ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label
-              title={PARAM_TIPS['max_seq_length']}
-              style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'help' }}
-            >
-              最大序列长度 ❓
-            </label>
-            <input
-              type="number"
-              value={maxSeqLen}
-              step={64}
-              min={128}
-              onChange={e => setMaxSeqLen(Number(e.target.value))}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
-            />
-          </div>
+            <div style={{ padding: 12, background: '#fff', borderTop: '1px solid #ddd', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* LoRA Rank 和 Alpha */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { key: 'lora_r',     label: 'LoRA Rank', val: loraR,      set: setLoraR,      step: 4  },
+                  { key: 'lora_alpha', label: 'LoRA Alpha', val: loraAlpha,  set: setLoraAlpha,  step: 8  },
+                ].map(({ key, label, val, set, step }) => (
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label
+                      title={PARAM_TIPS[key]}
+                      style={{ fontSize: 11, fontWeight: 600, color: '#555', cursor: 'help' }}
+                    >
+                      {label} ❓
+                    </label>
+                    <input
+                      type="number"
+                      value={val}
+                      step={step}
+                      min={1}
+                      onChange={e => set(Number(e.target.value))}
+                      style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                    />
+                  </div>
+                ))}
+              </div>
 
-          {/* ── 导出格式 ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>导出格式</label>
-            <select
-              value={exportFmt}
-              onChange={e => setExportFmt(e.target.value as 'adapter' | 'merged')}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
-            >
-              {/* adapter：只存 LoRA 层，体积小（几 MB），但每次推理需要加载基座+adapter */}
-              <option value="adapter">仅 LoRA Adapter（体积小，几 MB）</option>
-              {/* merged：把 LoRA 合并进基座，得到完整模型，可直接用 Ollama 加载 */}
-              <option value="merged">合并为完整模型（可直接部署）</option>
-            </select>
-          </div>
+              {/* 学习率 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  title={PARAM_TIPS['learning_rate']}
+                  style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'help' }}
+                >
+                  学习率 ❓
+                </label>
+                <input
+                  type="number"
+                  value={lr}
+                  step={0.00001}
+                  min={0.000001}
+                  onChange={e => setLr(Number(e.target.value))}
+                  style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                />
+              </div>
+
+              {/* 最大序列长度 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  title={PARAM_TIPS['max_seq_length']}
+                  style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'help' }}
+                >
+                  最大序列长度 ❓
+                </label>
+                <input
+                  type="number"
+                  value={maxSeqLen}
+                  step={64}
+                  min={128}
+                  onChange={e => setMaxSeqLen(Number(e.target.value))}
+                  style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                />
+              </div>
+
+              {/* 导出格式 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>导出格式</label>
+                <ComboSelect
+                  value={exportFmt}
+                  onChange={v => setExportFmt(v as 'adapter' | 'merged')}
+                  options={[
+                    { value: 'adapter', label: '仅 LoRA Adapter（体积小，几 MB）' },
+                    { value: 'merged', label: '合并为完整模型（可直接部署）' },
+                  ]}
+                  placeholder="选择导出格式"
+                />
+              </div>
+            </div>
+          </details>
+
+          {/* ── 输出目录（必填）── */}
+          <OutputDirRow
+            required={true}
+            outputDir={outputDir}
+            setOutputDir={setOutputDir}
+            fieldCls="block text-xs font-medium text-slate-700"
+            labelCls="text-xs font-semibold text-slate-700 block mb-2"
+            btnSec="shrink-0"
+          />
 
           {/* ── 提交按钮 ── */}
           <button
             onClick={handleStart}
-            disabled={submitting || !dataset}
+            disabled={submitting || (!quickStart && datasets.length === 0) || !outputDir.trim()}
             style={{
               padding: '10px', borderRadius: 8,
               background: '#4f46e5', color: '#fff',
               border: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600,
-              opacity: (submitting || !dataset) ? 0.5 : 1,
+              opacity: (submitting || (!quickStart && datasets.length === 0) || !outputDir.trim()) ? 0.5 : 1,
             }}
           >
-            {submitting ? '提交中...' : '开始微调'}
+            {submitting ? '提交中...' : quickStart ? '🚀 开始快速训练' : '开始微调'}
           </button>
-        </div>
 
-        {/* ━━ 右栏：任务监控 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-
-          {/* 标题 + 刷新按钮 */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-              微调任务
-              <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
-                Jobs · Training Monitor
-              </span>
-            </h3>
-            <button
-              onClick={fetchJobs}
-              style={{
-                fontSize: 12, background: 'none',
-                border: '1px solid #ddd', borderRadius: 4,
-                padding: '3px 8px', cursor: 'pointer'
-              }}
-            >
-              刷新
-            </button>
-          </div>
-
-          {/* 任务卡片列表（横向排列，可多选查看）*/}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {jobs.length === 0 && (
-              <div style={{ color: '#999', fontSize: 13, padding: 8 }}>
-                暂无微调任务，点击左侧「开始微调」创建第一个
-              </div>
-            )}
-            {jobs.map(job => (
-              <div
-                key={job.job_id}
-                onClick={() => setSelectedJobId(job.job_id)}
-                style={{
-                  padding: '10px 14px', borderRadius: 8,
-                  border: `2px solid ${selectedJobId === job.job_id ? '#4f46e5' : '#e0e0e0'}`,
-                  cursor: 'pointer',
-                  background: selectedJobId === job.job_id ? '#f0f0ff' : '#fff',
-                  minWidth: 180,
-                }}
-              >
-                {/* 任务 ID（前 8 位）*/}
-                <div style={{ fontSize: 11, color: '#999', fontFamily: 'monospace' }}>
-                  {job.job_id.slice(0, 8)}…
-                </div>
-                {/* 模型名（取最后一段，如 Qwen2.5-0.5B）*/}
-                <div style={{ fontSize: 13, fontWeight: 600, margin: '4px 0' }}>
-                  {job.model.split('/').pop()}
-                </div>
-                {/* 状态文字 */}
-                <div style={{ fontSize: 12, color: STATUS_COLORS[job.status] || '#666' }}>
-                  {STATUS_LABELS[job.status] || job.status}
-                </div>
-                {/* 训练中时显示进度条 */}
-                {job.status === 'running' && (
-                  <div style={{ marginTop: 6, background: '#e0e0e0', borderRadius: 4, height: 6 }}>
-                    <div style={{
-                      width: `${Math.round(job.progress * 100)}%`,
-                      background: '#4f46e5', height: '100%', borderRadius: 4,
-                      transition: 'width 0.5s ease',
-                    }} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* ── 选中任务的详情面板 ── */}
-          {selectedJob && (
+          {/* ── 提交反馈消息 ── */}
+          {submitMsg && (
             <div style={{
-              flex: 1, padding: 16, background: '#f9f9f9',
-              borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 16,
-              overflowY: 'auto', border: '1px solid #e8e8e8'
+              fontSize: 12, color: submitMsg.includes('失败') ? '#e53e3e' : '#38a169',
+              background: submitMsg.includes('失败') ? '#fff5f5' : '#f0fff4',
+              padding: '10px 12px', borderRadius: 6,
+              border: `1px solid ${submitMsg.includes('失败') ? '#feb2b2' : '#9ae6b4'}`,
+              whiteSpace: 'pre-line', lineHeight: 1.5
             }}>
-              {/* 任务头：模型名 + 进度 + 终止按钮 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{selectedJob.model}</div>
-                  <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                    进度：{Math.round(selectedJob.progress * 100)}%
-                    &nbsp;·&nbsp;导出格式：{selectedJob.export_format === 'merged' ? '完整模型' : 'Adapter'}
-                  </div>
-                </div>
-                {selectedJob.status === 'running' && (
-                  <button
-                    onClick={() => handleCancel(selectedJob.job_id)}
-                    style={{
-                      padding: '6px 12px', borderRadius: 6,
-                      background: '#e53e3e', color: '#fff',
-                      border: 'none', cursor: 'pointer', fontSize: 13
-                    }}
-                  >
-                    终止训练
-                  </button>
-                )}
-              </div>
-
-              {/* ── Loss 曲线（简易柱状图）── */}
-              {/* Loss 是衡量模型学习效果的指标，曲线持续下降说明训练正常 */}
-              {selectedJob.loss_curve.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
-                    Loss 曲线
-                    <span style={{ fontSize: 11, fontWeight: 400, color: '#888', marginLeft: 8 }}>
-                      （持续下降为正常，最终趋于平稳）
-                    </span>
-                  </div>
-                  {/* 柱状图：每根柱子高度 = loss 值 / 最大 loss * 70px */}
-                  <div style={{
-                    height: 80, display: 'flex',
-                    alignItems: 'flex-end', gap: 2, padding: '0 4px'
-                  }}>
-                    {selectedJob.loss_curve.map((loss, i) => {
-                      const maxLoss = Math.max(...selectedJob.loss_curve);
-                      const h = maxLoss > 0 ? (loss / maxLoss) * 70 : 0;
-                      return (
-                        <div
-                          key={i}
-                          title={`Step ${i + 1}：loss = ${loss}`}
-                          style={{
-                            flex: 1, maxWidth: 20, minWidth: 4,
-                            height: `${h}px`,
-                            // 颜色渐变：早期橙色（高 loss）→ 后期蓝色（低 loss）
-                            background: i < selectedJob.loss_curve.length * 0.3
-                              ? '#f6ad55'  // 前 30% 橙色
-                              : '#4f46e5', // 后 70% 蓝色
-                            borderRadius: '2px 2px 0 0',
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>
-                    初始 loss：{selectedJob.loss_curve[0]?.toFixed(4)}
-                    &nbsp;→&nbsp;
-                    当前 loss：{selectedJob.loss_curve[selectedJob.loss_curve.length - 1]?.toFixed(4)}
-                    &nbsp;（共 {selectedJob.loss_curve.length} 步）
-                  </div>
-                </div>
-              )}
-
-              {/* ── 最新日志（最后 20 行）── */}
-              {selectedJob.log_tail.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>训练日志</div>
-                  <div style={{
-                    background: '#1a1a1a', color: '#e0e0e0',
-                    padding: '10px 12px', borderRadius: 6,
-                    fontSize: 11, fontFamily: 'monospace',
-                    maxHeight: 200, overflowY: 'auto', lineHeight: 1.6
-                  }}>
-                    {selectedJob.log_tail.slice(-20).map((line, i) => (
-                      <div key={i}>{line}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 完成提示 */}
-              {selectedJob.status === 'done' && (
-                <div style={{
-                  padding: '10px 14px', background: '#f0fff4',
-                  borderRadius: 8, border: '1px solid #9ae6b4',
-                  fontSize: 13, color: '#276749'
-                }}>
-                  ✅ 训练完成！模型已保存至：
-                  <code style={{ fontSize: 11, display: 'block', marginTop: 4, color: '#555' }}>
-                    {selectedJob.output_dir}
-                  </code>
-                </div>
-              )}
-
-              {/* 失败提示 */}
-              {selectedJob.status === 'error' && (
-                <div style={{
-                  padding: '10px 14px', background: '#fff5f5',
-                  borderRadius: 8, border: '1px solid #feb2b2',
-                  fontSize: 13, color: '#9b2c2c'
-                }}>
-                  ❌ 训练失败，请查看上方日志了解原因。
-                  <br />常见问题：数据格式不对、内存不足（降低 Batch Size 或换更小的模型）。
-                </div>
-              )}
+              {submitMsg}
             </div>
           )}
         </div>

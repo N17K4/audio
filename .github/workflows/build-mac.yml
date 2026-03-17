@@ -28,13 +28,13 @@ jobs:
         run: npm install -g pnpm
 
       # ── 3. 安装 Node 依赖 + 嵌入式 Python + 后端依赖 + 引擎依赖 ────────────────
-      # setup-runtime.js 自动下载 standalone Python（python-build-standalone 3.12），
+      # setup_base.py 自动下载 standalone Python（python-build-standalone 3.12），
       # 再装 backend pip 依赖和引擎 pip_packages + FFmpeg
-      - name: 安装依赖（pnpm install + setup-runtime）
+      - name: 安装依赖（pnpm install + setup）
         run: |
           pnpm install
           cd frontend && pnpm install && cd ..
-          node scripts/setup-runtime.js
+          python3 scripts/setup_base.py
 
       # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
       - name: 构建前端

@@ -22,7 +22,7 @@ def set_local_concurrency(n: int) -> None:
     LOCAL_SEM = asyncio.Semaphore(max(1, n))
 
 
-def _make_job(job_type: str, label: str, provider: str, is_local: bool) -> Dict:
+def _make_job(job_type: str, label: str, provider: str, is_local: bool, params: Dict = None) -> Dict:
     import time as _t
     job_id = str(uuid.uuid4())
     job: Dict = {
@@ -38,14 +38,18 @@ def _make_job(job_type: str, label: str, provider: str, is_local: bool) -> Dict:
         "result_url": None,
         "result_text": None,
         "error": None,
+        "_params": params or {},
     }
     JOBS[job_id] = job
     return job
 
 
 def _job_public(job: Dict) -> Dict:
-    """返回不含内部字段的 job 副本。"""
-    return {k: v for k, v in job.items() if not k.startswith("_")}
+    """返回不含内部字段的 job 副本，但包含 _params。"""
+    result = {k: v for k, v in job.items() if not k.startswith("_")}
+    if "_params" in job:
+        result["params"] = job["_params"]
+    return result
 
 
 def _cleanup_old_jobs() -> None:

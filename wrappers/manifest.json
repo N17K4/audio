@@ -326,7 +326,8 @@
         }
       ],
       "pip_packages": [
-        "rvc-python"
+        "rvc-python",
+        "setuptools"
       ],
       "runtime_pip_packages": [
         "torch",
@@ -464,7 +465,7 @@
       "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
       "pip_packages": [],
       "runtime_pip_packages": [],
-      "_setup_note": "FaceFusion 3.x clone https://github.com/facefusion/facefusion.git tag 3.5.4 到 runtime/facefusion/engine/（由 setup-engines.py 自动完成）。pip 依赖由首次启动引导下载时 setup_facefusion_engine() 从引擎自身 requirements.txt 安装，不在构建期装。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
+      "_setup_note": "FaceFusion 3.x clone https://github.com/facefusion/facefusion.git tag 3.5.4 到 runtime/facefusion/engine/（由 setup_base.py 自动完成）。pip 依赖由首次启动引导下载时 setup_facefusion_engine() 从引擎自身 requirements.txt 安装，不在构建期装。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
       "env_key": "FACEFUSION_CHECKPOINT_DIR",
       "checkpoint_files": [
         {
@@ -671,6 +672,7 @@
       "runtime_pip_packages": [
         "llama-index-core", "llama-index-embeddings-ollama",
         "llama-index-vector-stores-faiss", "faiss-cpu",
+        "llama-index-llms-ollama", "llama-index-llms-openai", "llama-index-llms-gemini",
         "pypdf", "docx2txt", "openpyxl"
       ]
     },

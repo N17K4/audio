@@ -243,7 +243,7 @@ export default function Home() {
   const [creatingVoice, setCreatingVoice] = useState(false);
 
   // ─── 训练状态 ─────────────────────────────────────────────────────────────
-  const [trainVoiceName, setTrainVoiceName] = useState('我的音色');
+  const [trainVoiceName, setTrainVoiceName] = useState('');
   const [trainFiles, setTrainFiles] = useState<File[]>([]);
   // 训练高级参数
   const [trainEpochs, setTrainEpochs] = useState(0);
@@ -1540,9 +1540,39 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                {advancedSubPage === 'rag' && <RagPanel backendUrl={backend.backendBaseUrl} />}
-                {advancedSubPage === 'agent' && <AgentPanel backendUrl={backend.backendBaseUrl} />}
-                {advancedSubPage === 'finetune' && <FinetunePanel backendUrl={backend.backendBaseUrl} />}
+                {advancedSubPage === 'rag' && (
+                  <RagPanel
+                    backendUrl={backend.backendBaseUrl}
+                    capabilities={backend.capabilities}
+                    selectedProvider={providerMap['rag'] || 'ollama'}
+                    apiKey={apiKey}
+                    cloudEndpoint={cloudEndpoint}
+                    setProviderMap={setProviderMap}
+                    setApiKey={setApiKey}
+                    setCloudEndpoint={setCloudEndpoint}
+                    addPendingJob={addPendingJob}
+                    resolveJob={resolveJob}
+                  />
+                )}
+                {advancedSubPage === 'agent' && (
+                  <AgentPanel
+                    backendUrl={backend.backendBaseUrl}
+                    capabilities={backend.capabilities}
+                    selectedProvider={providerMap['agent'] || 'ollama'}
+                    apiKey={apiKey}
+                    cloudEndpoint={cloudEndpoint}
+                    setProviderMap={setProviderMap}
+                    setApiKey={setApiKey}
+                    setCloudEndpoint={setCloudEndpoint}
+                  />
+                )}
+                {advancedSubPage === 'finetune' && (
+                  <FinetunePanel
+                    backendUrl={backend.backendBaseUrl}
+                    addPendingJob={addPendingJob}
+                    resolveJob={resolveJob}
+                  />
+                )}
               </div>
             )}
 

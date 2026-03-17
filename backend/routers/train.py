@@ -42,7 +42,7 @@ async def run_rvc_training(
     TRAIN_JOBS[job_id]["started_at"] = datetime.utcnow().isoformat()
     _sync_jobs_status(job_id, "running", started_at=_time.time())
 
-    voice_dir = (VOICES_DIR / voice_subdir / voice_id) if voice_subdir else (VOICES_DIR / voice_id)
+    voice_dir = VOICES_DIR / (voice_subdir or "user") / voice_id
 
     if not _TRAIN_SCRIPT.exists():
         err = f"训练脚本不存在: {_TRAIN_SCRIPT}"

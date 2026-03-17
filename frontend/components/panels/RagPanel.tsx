@@ -14,10 +14,15 @@
  */
 
 import { useState, useEffect } from 'react';
-import { RagCollection } from '../../types';
+import { RagCollection, CapabilityMap } from '../../types';
 import HowToSteps from '../shared/HowToSteps';
-import LlmProviderConfig, { LlmConfig, DEFAULT_LLM_CONFIG } from '../shared/LlmProviderConfig';
+import LlmConfigBar from '../shared/LlmConfigBar';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+import ComboSelect from '../shared/ComboSelect';
+import FileDrop from '../shared/FileDrop';
+import NameInput from '../shared/NameInput';
+
+type KnowledgeBaseTab = 'select' | 'create';
 
 // ─── 实际运行流程（RAG 管道各步骤）──────────────────────────────────────────
 // 每个节点：label=中文动作，tech=实际使用的技术/库
@@ -49,13 +54,35 @@ const RAG_STEPS = [
 
 interface Props {
   backendUrl: string;
+  capabilities: CapabilityMap;
+  selectedProvider: string;
+  apiKey: string;
+  cloudEndpoint: string;
+  setProviderMap: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setApiKey: (v: string) => void;
+  setCloudEndpoint: (v: string) => void;
+  addPendingJob: (type: string, label: string, provider: string, isLocal: boolean) => string;
+  resolveJob: (id: string, result: { status: 'completed' | 'failed'; error?: string }) => void;
 }
 
-export default function RagPanel({ backendUrl }: Props) {
+export default function RagPanel({
+  backendUrl,
+  capabilities,
+  selectedProvider,
+  apiKey,
+  cloudEndpoint,
+  setProviderMap,
+  setApiKey,
+  setCloudEndpoint,
+  addPendingJob,
+  resolveJob,
+}: Props) {
   // ── 状态：知识库列表 ──────────────────────────────────────────────────────
   const [collections, setCollections] = useState<RagCollection[]>([]);
   // 当前选中的知识库名称（用于右侧问答）
   const [selectedCollection, setSelectedCollection] = useState('');
+  // Tab 切换：选择现有知识库 vs 创建新知识库
+  const [kbTab, setKbTab] = useState<KnowledgeBaseTab>('select');
 
   // ── 状态：新建知识库表单 ──────────────────────────────────────────────────
   const [buildName, setBuildName] = useState('');       // 知识库名称输入
@@ -63,9 +90,9 @@ export default function RagPanel({ backendUrl }: Props) {
   const [building, setBuilding] = useState(false);     // 是否正在提交构建请求
   const [buildMsg, setBuildMsg] = useState('');         // 构建结果提示信息
 
-  // ── 状态：LLM 配置（provider / model / apiKey / ollamaUrl）──────────────
+  // ── 状态：LLM 模型选择 ────────────────────────────────────────────────────
   // RAG 查询时需要语言模型将检索到的片段组织成自然语言回答
-  const [llmConfig, setLlmConfig] = useState<LlmConfig>(DEFAULT_LLM_CONFIG);
+  const [llmModel, setLlmModel] = useState('qwen2.5:0.5b');
 
   // ── 状态：问答区 ─────────────────────────────────────────────────────────
   const [question, setQuestion] = useState('');         // 用户输入的问题
@@ -106,17 +133,56 @@ export default function RagPanel({ backendUrl }: Props) {
       });
       const data = await res.json();
 
+      if (!data.job_id) {
+        setBuildMsg('构建失败：后端未返回任务 ID');
+        setBuilding(false);
+        return;
+      }
+
+      // 创建待处理任务，加入 TaskList
+      const jobId = addPendingJob('rag', buildName.trim(), 'rag_indexer', true);
+
       setBuildMsg(
         `已提交！任务 ID：${data.job_id?.slice(0, 8)}…\n` +
-        `后台正在处理，请等待 10～60 秒后点击「刷新」查看结果。`
+        `后台正在处理，请前往「任务列表」查看进度。`
       );
       // 清空表单，准备下一次构建
       setBuildName('');
       setBuildFiles([]);
-      // 3 秒后自动刷新一次列表（小文件通常这时已完成）
-      setTimeout(fetchCollections, 3000);
+      setBuilding(false);
+
+      // 后台异步轮询（不阻塞 UI）
+      (async () => {
+        let completed = false;
+        const deadline = Date.now() + 30 * 60 * 1000; // 30 分钟超时
+        while (Date.now() < deadline && !completed) {
+          await new Promise(r => setTimeout(r, 2000)); // 每 2 秒查询一次
+          try {
+            const jobRes = await fetch(`${backendUrl}/rag/collections/jobs/${data.job_id}`);
+            if (!jobRes.ok) continue;
+            const jobData = await jobRes.json();
+
+            if (jobData.status === 'done') {
+              resolveJob(jobId, { status: 'completed' });
+              fetchCollections(); // 刷新知识库列表
+              completed = true;
+            } else if (jobData.status === 'error') {
+              resolveJob(jobId, { status: 'failed', error: jobData.error || '知识库构建失败' });
+              completed = true;
+            }
+          } catch (e) {
+            // 继续轮询
+          }
+        }
+
+        if (!completed) {
+          // 超时
+          resolveJob(jobId, { status: 'failed', error: '任务超时（30 分钟）' });
+        }
+      })();
     } catch (e: any) {
       setBuildMsg(`构建失败：${e.message}。请确认 Ollama 已启动且已安装 nomic-embed-text 模型。`);
+      setBuilding(false);
     } finally {
       setBuilding(false);
     }
@@ -139,8 +205,10 @@ export default function RagPanel({ backendUrl }: Props) {
   // POST /rag/query，后端用 SSE（Server-Sent Events）流式返回答案
   // SSE 格式：每行 "data: <文本片段>\n\n"
   const handleQuery = async () => {
-    if (!selectedCollection || !question.trim()) return;
+    if (!selectedCollection || !question.trim() || !llmModel) return;
 
+    const userQuestion = question;
+    setQuestion('');  // 立即清空输入框，便于连续提问
     setAnswer('');
     setLoading(true);
     try {
@@ -149,12 +217,12 @@ export default function RagPanel({ backendUrl }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           collection: selectedCollection,
-          question,
+          question: userQuestion,
           top_k: 5,
-          provider: llmConfig.provider,
-          model: llmConfig.model,
-          api_key: llmConfig.apiKey,
-          ollama_url: llmConfig.ollamaUrl,
+          provider: selectedProvider,
+          model: llmModel,
+          api_key: apiKey,
+          ollama_url: selectedProvider === 'ollama' ? cloudEndpoint : 'http://127.0.0.1:11434',
         }),
       });
 
@@ -188,49 +256,161 @@ export default function RagPanel({ backendUrl }: Props) {
       {/* ── 实际运行流程可视化 ── */}
       <ProcessFlow steps={RAG_FLOW} color="#0d9488" />
 
-      {/* ── 主体：左右两栏布局 ── */}
-      <div style={{ display: 'flex', gap: 24, flex: 1, minHeight: 0 }}>
+      {/* ━━ 顶部配置栏（LLM 服务商和模型）━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <LlmConfigBar
+        task="rag"
+        capabilities={capabilities}
+        selectedProvider={selectedProvider}
+        llmModel={llmModel}
+        apiKey={apiKey}
+        cloudEndpoint={cloudEndpoint}
+        onProviderChange={v => setProviderMap(prev => ({ ...prev, rag: v }))}
+        onModelChange={setLlmModel}
+        onApiKeyChange={setApiKey}
+        onCloudEndpointChange={setCloudEndpoint}
+      />
 
-        {/* ━━ 左栏：知识库管理 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-            知识库管理
-            <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
-              RAG
-            </span>
-          </h3>
+      {/* ── 知识库管理区 ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
+          知识库管理
+          <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
+            RAG
+          </span>
+        </h3>
 
-          {/* ── 新建知识库表单 ── */}
+        {/* ── Tab 栏：选择知识库 vs 创建知识库 ── */}
+        <div style={{
+          display: 'flex', gap: 0, borderRadius: '8px',
+          border: '1px solid #ddd', overflow: 'hidden', fontSize: 13, backgroundColor: '#f5f5f5'
+        }}>
+          {(['select', 'create'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setKbTab(tab)}
+              style={{
+                flex: 1, padding: '10px 12px', fontSize: 13, fontWeight: 500,
+                border: 'none', cursor: 'pointer',
+                background: kbTab === tab ? '#4f46e5' : '#f5f5f5',
+                color: kbTab === tab ? '#fff' : '#666',
+                transition: 'all 0.2s'
+              }}
+            >
+              {tab === 'select' ? '选择知识库' : '创建知识库'}
+            </button>
+          ))}
+        </div>
+
+        {/* ── 选择知识库 Tab ── */}
+        {kbTab === 'select' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#666', textTransform: 'uppercase' }}>
+                选择知识库
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${backendUrl}/rag/init-sample`, {
+                        method: 'POST',
+                      });
+                      const data = await res.json();
+                      if (data.status === 'already_exists') {
+                        alert('示例知识库已存在');
+                      } else if (data.status === 'running') {
+                        alert('正在创建示例知识库，请稍候...');
+                      }
+                      setTimeout(fetchCollections, 1000);
+                    } catch (e: any) {
+                      alert(`创建失败：${e.message}`);
+                    }
+                  }}
+                  style={{
+                    fontSize: 12, background: 'none',
+                    border: '1px solid #0d9488', borderRadius: 4,
+                    padding: '3px 8px', cursor: 'pointer', color: '#0d9488', fontWeight: 500
+                  }}
+                >
+                  示例库
+                </button>
+                <button
+                  onClick={fetchCollections}
+                  style={{
+                    fontSize: 12, background: 'none',
+                    border: '1px solid #ddd', borderRadius: 4,
+                    padding: '3px 8px', cursor: 'pointer'
+                  }}
+                >
+                  刷新
+                </button>
+              </div>
+            </div>
+            <ComboSelect
+              value={selectedCollection}
+              onChange={setSelectedCollection}
+              options={collections.map(c => ({
+                value: c.name,
+                label: `${c.name} (${c.doc_count} 文档 · ${c.size_mb} MB)`
+              }))}
+              placeholder="-- 请选择知识库 --"
+            />
+            {selectedCollection && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
+                <button
+                  onClick={() => handleDelete(selectedCollection)}
+                  style={{ fontSize: 12, fontWeight: 600, color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  删除知识库
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 创建知识库 Tab ── */}
+        {kbTab === 'create' && (
           <div style={{
             background: '#f5f5f5', borderRadius: 8, padding: 16,
             display: 'flex', flexDirection: 'column', gap: 10
           }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>新建知识库</div>
 
+            {/* 大小参考提示 */}
+            <div style={{
+              fontSize: 11, color: '#666', background: '#fff',
+              padding: 8, borderRadius: 4, borderLeft: '3px solid #0d9488',
+              lineHeight: 1.5
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>知识库大小参考：</div>
+              <div>小（1-10 MB）：FAQ、单篇文档</div>
+              <div>中（10-100 MB）：产品手册、技术文档集合</div>
+              <div>大（100+ MB）：整本书、大型文档库</div>
+            </div>
+
             {/* 名称：只用英文、数字、下划线，避免路径问题 */}
-            <input
+            <NameInput
               placeholder="知识库名称（如 company_docs）"
               value={buildName}
-              onChange={e => setBuildName(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+              onChange={setBuildName}
             />
-
-            {/* 文件选择：支持 PDF / DOCX / TXT / XLSX */}
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>
-              支持格式：PDF、Word (.docx)、纯文本 (.txt)、Excel (.xlsx)
-            </div>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.txt,.docx,.xlsx"
-              onChange={e => setBuildFiles(Array.from(e.target.files || []))}
-              style={{ fontSize: 12 }}
-            />
-            {buildFiles.length > 0 && (
-              <div style={{ fontSize: 12, color: '#555' }}>
-                已选 {buildFiles.length} 个文件：{buildFiles.map(f => f.name).join('、')}
+            {!buildName.trim() && (
+              <div style={{ fontSize: 11, color: '#4f46e5', fontWeight: 500 }}>
+                ⚠️ 必须输入知识库名称才能构建
               </div>
             )}
+
+            {/* 文件选择：支持 PDF / DOCX / TXT / XLSX */}
+            <FileDrop
+              files={buildFiles}
+              onAdd={fs => setBuildFiles([...buildFiles, ...fs])}
+              onRemove={i => setBuildFiles(buildFiles.filter((_, j) => j !== i))}
+              accept=".pdf,.txt,.docx,.xlsx"
+              multiple
+              iconType="file"
+              emptyLabel="点击或拖拽上传文件（可多选）"
+              formatHint="支持 PDF、Word (.docx)、纯文本 (.txt)、Excel (.xlsx)"
+            />
 
             {/* 构建按钮：两个条件都满足才可点击 */}
             <button
@@ -253,146 +433,82 @@ export default function RagPanel({ backendUrl }: Props) {
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          {/* ── 语言模型配置（始终可见，问答时使用）── */}
-          {/* Embedding 固定用 Ollama nomic-embed-text；此处配置的是"生成回答"的模型 */}
-          <div style={{ padding: 14, background: '#f9f9f9', borderRadius: 8, border: '1px solid #e8e8e8' }}>
-            <LlmProviderConfig config={llmConfig} onChange={setLlmConfig} title="回答语言模型" />
-          </div>
-
-          {/* ── 已有知识库列表 ── */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>已有知识库</div>
-            <button
-              onClick={fetchCollections}
-              style={{
-                fontSize: 12, background: 'none',
-                border: '1px solid #ddd', borderRadius: 4,
-                padding: '3px 8px', cursor: 'pointer'
-              }}
-            >
-              刷新
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {collections.length === 0 && (
-              <div style={{ fontSize: 13, color: '#999', textAlign: 'center', padding: 16 }}>
-                暂无知识库，请先新建
-              </div>
-            )}
-            {collections.map(c => (
-              /* 点击卡片 → 选中该知识库，用于右侧问答 */
-              <div
-                key={c.name}
-                onClick={() => setSelectedCollection(c.name)}
-                style={{
-                  padding: '10px 12px', borderRadius: 8,
-                  border: `2px solid ${selectedCollection === c.name ? '#4f46e5' : '#e0e0e0'}`,
-                  cursor: 'pointer',
-                  background: selectedCollection === c.name ? '#f0f0ff' : '#fff',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: '#666' }}>
-                    {c.doc_count} 个文档 · {c.size_mb} MB
-                  </div>
-                </div>
-                {/* 删除按钮：stopPropagation 防止触发选中 */}
-                <button
-                  onClick={e => { e.stopPropagation(); handleDelete(c.name); }}
-                  title="删除此知识库"
-                  style={{
-                    background: 'none', border: 'none',
-                    color: '#e53e3e', cursor: 'pointer', fontSize: 18, lineHeight: 1
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ━━ 右栏：问答区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+      {/* ── 问答区（仅在选择知识库 Tab 时显示）── */}
+      {kbTab === 'select' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
             知识库问答
             <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
-              Query · Answer Generation
+              Answer Generation
             </span>
           </h3>
 
+          {/* 问题输入区 */}
+          {selectedCollection && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                placeholder="输入你的问题…"
+                value={question}
+                onChange={e => setQuestion(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey && question.trim()) {
+                    e.preventDefault();
+                    handleQuery();
+                  }
+                }}
+                disabled={loading}
+                style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6,
+                  border: '1px solid #ddd', fontSize: 13,
+                  background: loading ? '#f5f5f5' : '#fff',
+                  color: loading ? '#999' : '#000',
+                  cursor: loading ? 'not-allowed' : 'text'
+                }}
+              />
+              <button
+                onClick={handleQuery}
+                disabled={loading || !question.trim()}
+                style={{
+                  padding: '8px 16px', borderRadius: 6,
+                  background: '#0d9488', color: '#fff',
+                  border: 'none', cursor: loading || !question.trim() ? 'not-allowed' : 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                  opacity: (loading || !question.trim()) ? 0.5 : 1,
+                }}
+              >
+                {loading ? '提问中…' : '提问'}
+              </button>
+            </div>
+          )}
+
+          {/* 流式回答展示区 */}
+          {selectedCollection && (answer || loading) && (
+            <div style={{
+              flex: 1, padding: 16, background: '#f9f9f9',
+              borderRadius: 8, fontSize: 13, lineHeight: 1.8,
+              overflowY: 'auto', whiteSpace: 'pre-wrap',
+              border: '1px solid #e8e8e8'
+            }}>
+              {answer || (loading && '正在检索文档并生成回答，请稍候…')}
+            </div>
+          )}
+
           {/* 未选中知识库时的空状态提示 */}
-          {!selectedCollection ? (
+          {!selectedCollection && (
             <div style={{
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#999', flexDirection: 'column', gap: 8
             }}>
               <div style={{ fontSize: 32 }}>📚</div>
-              <div style={{ fontSize: 14 }}>请先在左侧选择一个知识库</div>
-              <div style={{ fontSize: 12, color: '#bbb' }}>如果还没有，先新建一个</div>
+              <div style={{ fontSize: 14 }}>请先选择一个知识库</div>
+              <div style={{ fontSize: 12, color: '#bbb' }}>如果还没有，请先创建一个</div>
             </div>
-          ) : (
-            <>
-              {/* 当前知识库标识 */}
-              <div style={{
-                fontSize: 13, color: '#4f46e5', fontWeight: 600,
-                padding: '4px 10px', background: '#f0f0ff', borderRadius: 6, display: 'inline-block'
-              }}>
-                📖 {selectedCollection}
-              </div>
-
-              {/* 问题输入框 + 提问按钮 */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  placeholder="输入问题，按回车提交…"
-                  value={question}
-                  onChange={e => setQuestion(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleQuery()}
-                  style={{
-                    flex: 1, padding: '8px 12px',
-                    borderRadius: 8, border: '1px solid #ddd', fontSize: 13
-                  }}
-                />
-                <button
-                  onClick={handleQuery}
-                  disabled={loading || !question.trim()}
-                  style={{
-                    padding: '8px 20px', borderRadius: 8,
-                    background: '#4f46e5', color: '#fff',
-                    border: 'none', cursor: 'pointer', fontSize: 13,
-                    opacity: (loading || !question.trim()) ? 0.5 : 1,
-                  }}
-                >
-                  {loading ? '查询中…' : '提问'}
-                </button>
-              </div>
-
-              {/* 流式回答展示区 */}
-              {answer && (
-                <div style={{
-                  flex: 1, padding: 16, background: '#f9f9f9',
-                  borderRadius: 8, fontSize: 13, lineHeight: 1.8,
-                  overflowY: 'auto', whiteSpace: 'pre-wrap',
-                  border: '1px solid #e8e8e8'
-                }}>
-                  {answer}
-                </div>
-              )}
-
-              {/* 等待回答时的骨架提示 */}
-              {loading && !answer && (
-                <div style={{ color: '#999', fontSize: 13, padding: 16 }}>
-                  正在检索文档并生成回答，请稍候…
-                </div>
-              )}
-            </>
           )}
         </div>
-      </div>
+      )}
 
       {/* ── 使用步骤引导（与 VcPanel 风格一致）── */}
       <HowToSteps steps={RAG_STEPS} />

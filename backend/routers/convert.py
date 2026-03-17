@@ -45,6 +45,8 @@ async def convert(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if not output_dir or not output_dir.strip():
+        raise HTTPException(status_code=400, detail="输出目录不能为空。请先选择一个目录。")
 
     ref_audio_tmps: List[Path] = []
     for raf in reference_audio:
@@ -191,7 +193,22 @@ async def convert(
         copy_to_output_dir(output_path, output_dir)
         return result_url
 
-    job = _make_job("vc", f"音色转换 · {filename_label}", prov, is_local=True)
+    params = {
+        "voice_id": voice_id,
+        "provider": prov,
+        "mode": mode,
+        "pitch_shift": pitch_shift,
+        "diffusion_steps": diffusion_steps,
+        "f0_condition": f0_condition,
+        "cfg_rate": cfg_rate,
+        "enable_postprocess": enable_postprocess,
+        "f0_method": f0_method,
+        "filter_radius": filter_radius,
+        "index_rate": index_rate,
+        "rms_mix_rate": rms_mix_rate,
+        "protect": protect,
+    }
+    job = _make_job("vc", f"音色转换 · {filename_label}", prov, is_local=True, params=params)
     job_id = job["id"]
     all_ref_tmps = [str(t) for t in ref_audio_tmps]
     if concat_ref_tmp:

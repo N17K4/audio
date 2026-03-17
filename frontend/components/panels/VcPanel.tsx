@@ -8,6 +8,7 @@ import VoiceSelector from '../shared/VoiceSelector';
 import CreateVoicePanel from '../shared/CreateVoicePanel';
 import HowToSteps from '../shared/HowToSteps';
 import FileDrop from '../shared/FileDrop';
+import NameInput from '../shared/NameInput';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
 
 // ─── Seed-VC 音色转换流程 ─────────────────────────────────────────────────────
@@ -335,18 +336,22 @@ export default function VcPanel({
                       </div>
                     ) : (
                       <div className="flex justify-end gap-3">
-                        <button className="text-xs font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
-                          onClick={() => {
-                            const v = voices.find(x => x.voice_id === selectedVoiceId);
-                            setRenameValue(v?.name || '');
-                            setRenamingId(selectedVoiceId);
-                          }}>
-                          重命名
-                        </button>
-                        <button className="text-xs font-medium text-rose-500 hover:text-rose-600 transition-colors"
-                          onClick={() => onDeleteVoice(selectedVoiceId)}>
-                          删除音色
-                        </button>
+                        {!voices.find(v => v.voice_id === selectedVoiceId)?.is_builtin && (
+                          <button className="text-xs font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
+                            onClick={() => {
+                              const v = voices.find(x => x.voice_id === selectedVoiceId);
+                              setRenameValue(v?.name || '');
+                              setRenamingId(selectedVoiceId);
+                            }}>
+                            重命名
+                          </button>
+                        )}
+                        {!voices.find(v => v.voice_id === selectedVoiceId)?.is_builtin && (
+                          <button className="text-xs font-medium text-rose-500 hover:text-rose-600 transition-colors"
+                            onClick={() => onDeleteVoice(selectedVoiceId)}>
+                            删除音色
+                          </button>
+                        )}
                       </div>
                     )}
                   </>
@@ -379,7 +384,7 @@ export default function VcPanel({
               <div className="space-y-4">
                 <label className="block">
                   <span className={labelCls}>音色名称</span>
-                  <input className={fieldCls} value={trainVoiceName} onChange={e => setTrainVoiceName(e.target.value)} placeholder="我的音色" />
+                  <NameInput value={trainVoiceName} onChange={setTrainVoiceName} placeholder="请输入音色名称（如 my_trained_voice）" />
                 </label>
                 <div>
                   <span className={labelCls}>训练数据集（ZIP 压缩包或多个音频文件）</span>

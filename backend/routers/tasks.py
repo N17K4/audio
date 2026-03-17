@@ -152,7 +152,15 @@ async def task_tts(
             )
 
     label = (text[:30] + "…") if len(text) > 30 else text
-    job = _make_job("tts", f"TTS · {label}", p, is_local=is_local)
+    params = {
+        "text": text,
+        "provider": p,
+        "model": model,
+        "voice": voice,
+        "voice_id": voice_id_str,
+        "api_key": "***" if api_key else "",
+    }
+    job = _make_job("tts", f"TTS · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
     job["_ref_audio_tmps"] = [str(t) for t in ref_audio_tmps]
 
@@ -907,7 +915,15 @@ async def task_image_gen(
     p = provider.strip().lower()
     label = (prompt[:30] + "…") if len(prompt) > 30 else prompt
     is_local = p in ("comfyui", "flux", "sd_local")
-    job = _make_job("image_gen", f"图像生成 · {label}", p, is_local=is_local)
+    params = {
+        "prompt": prompt,
+        "provider": p,
+        "model": model,
+        "size": size,
+        "aspect_ratio": aspect_ratio,
+        "api_key": "***" if api_key else "",
+    }
+    job = _make_job("image_gen", f"图像生成 · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
 
     async def _do():
@@ -970,7 +986,16 @@ async def task_image_i2i(
         ref_tmp.write_bytes(ref_content)
 
     label = source_image.filename[:30]
-    job = _make_job("image_i2i", f"换脸换图 · {label}", p, is_local=is_local)
+    params = {
+        "provider": p,
+        "prompt": prompt,
+        "model": model,
+        "strength": strength,
+        "source_image": source_image.filename,
+        "reference_image": reference_image.filename if reference_image else None,
+        "api_key": "***" if api_key else "",
+    }
+    job = _make_job("image_i2i", f"换脸换图 · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
     job["_source_tmp"] = str(source_tmp)
     if ref_tmp:
@@ -1055,7 +1080,16 @@ async def task_video_gen(
         image_tmp.write_bytes(image_bytes)
 
     label = (prompt[:30] + "…") if len(prompt) > 30 else (prompt or "视频生成")
-    job = _make_job("video_gen", f"视频生成 · {label}", p, is_local=is_local)
+    params = {
+        "prompt": prompt,
+        "provider": p,
+        "model": model,
+        "duration": duration,
+        "mode": mode,
+        "image": image_filename,
+        "api_key": "***" if api_key else "",
+    }
+    job = _make_job("video_gen", f"视频生成 · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
     if image_tmp:
         job["_image_tmp"] = str(image_tmp)
@@ -1114,7 +1148,13 @@ async def task_ocr(
     if p not in ("got_ocr", "openai", "gemini", "claude"):
         raise HTTPException(status_code=400, detail=f"Unsupported OCR provider: {provider}")
 
-    job = _make_job("ocr", f"OCR · {label}", p, is_local=is_local)
+    params = {
+        "provider": p,
+        "model": model,
+        "file": filename,
+        "api_key": "***" if api_key else "",
+    }
+    job = _make_job("ocr", f"OCR · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
 
     async def _do():
@@ -1177,7 +1217,14 @@ async def task_lipsync(
     aud_tmp.write_bytes(await audio.read())
 
     label = video.filename[:30]
-    job = _make_job("lipsync", f"口型同步 · {label}", p, is_local=is_local)
+    params = {
+        "provider": p,
+        "model": model,
+        "video": video.filename,
+        "audio": audio.filename,
+        "api_key": "***" if api_key else "",
+    }
+    job = _make_job("lipsync", f"口型同步 · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
     job["_vid_tmp"] = str(vid_tmp)
     job["_aud_tmp"] = str(aud_tmp)

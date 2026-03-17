@@ -1,6 +1,6 @@
 import type { ChatMessage, CapabilityMap } from '../../types';
-import { PROVIDER_LABELS } from '../../constants';
-import ModelInput, { INPUT_CLS } from '../shared/ModelInput';
+import { INPUT_CLS } from '../shared/ModelInput';
+import LlmConfigBar from '../shared/LlmConfigBar';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
 
 // ─── LLM 聊天实际流程 ─────────────────────────────────────────────────────────
@@ -64,42 +64,18 @@ export default function LlmPanel({
     <ProcessFlow steps={LLM_FLOW} color="#4f46e5" />
     <section className="rounded-2xl border border-slate-200/80 bg-white shadow-panel flex flex-col dark:bg-slate-900 dark:border-slate-700/80" style={{ height: 'calc(100vh - 256px)', minHeight: '480px', maxHeight: '720px' }}>
       {/* 顶部配置栏（始终可见） */}
-      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-3 items-end">
-        {/* 服务商下拉 */}
-        <label className="flex flex-col gap-1 min-w-[160px] flex-1">
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">服务商</span>
-          <select
-            className={INPUT_CLS}
-            value={selectedProvider}
-            onChange={e => setProviderMap(prev => ({ ...prev, [taskType]: e.target.value }))}
-          >
-            {(capabilities[taskType] ?? []).map(p => (
-              <option key={p} value={p}>{PROVIDER_LABELS[p] ?? p}</option>
-            ))}
-          </select>
-        </label>
-        {/* 模型 */}
-        <label className="flex flex-col gap-1 min-w-[160px] flex-1">
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">模型（可选）</span>
-          <ModelInput value={llmModel} onChange={setLlmModel} task="llm" provider={selectedProvider} />
-        </label>
-        {/* API 密钥 */}
-        {needsAuth && (
-          <label className="flex flex-col gap-1 min-w-[180px] flex-1">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">API 密钥</span>
-            <input type="password" className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-[#1A8FE3] focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all outline-none placeholder:text-slate-400"
-              value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="服务商 API 密钥" />
-          </label>
-        )}
-        {/* 服务地址 */}
-        {isUrlOnly && (
-          <label className="flex flex-col gap-1 min-w-[180px] flex-1">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">服务地址</span>
-            <input className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:border-[#1A8FE3] focus:ring-2 focus:ring-[#1A8FE3]/15 transition-all outline-none placeholder:text-slate-400"
-              value={cloudEndpoint} onChange={e => setCloudEndpoint(e.target.value)} placeholder="http://localhost:11434" />
-          </label>
-        )}
-      </div>
+      <LlmConfigBar
+        task={taskType}
+        capabilities={capabilities}
+        selectedProvider={selectedProvider}
+        llmModel={llmModel}
+        apiKey={apiKey}
+        cloudEndpoint={cloudEndpoint}
+        onProviderChange={v => setProviderMap(prev => ({ ...prev, [taskType]: v }))}
+        onModelChange={setLlmModel}
+        onApiKeyChange={setApiKey}
+        onCloudEndpointChange={setCloudEndpoint}
+      />
 
       {/* 消息列表 */}
       <div ref={llmScrollRef} className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}>

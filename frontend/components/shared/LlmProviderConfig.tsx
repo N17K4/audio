@@ -22,9 +22,9 @@ const PROVIDERS: Record<string, ProviderDef> = {
   // ── 本地 ──────────────────────────────────────────────────────────────────
   ollama: {
     label: 'Ollama（本地）',
-    models: ['qwen2.5:7b', 'qwen2.5:14b', 'qwen3:8b', 'qwen3:14b',
+    models: ['qwen2.5:0.5b', 'qwen2.5:7b', 'qwen2.5:14b', 'qwen3:8b', 'qwen3:14b',
              'llama3.2:3b', 'llama3.3:70b', 'deepseek-r1:7b', 'mistral:7b', 'gemma3:9b'],
-    defaultModel: 'qwen2.5:7b',
+    defaultModel: 'qwen2.5:0.5b',  // 与 smoke_test2 保持一致
     needsKey: false,
     needsUrl: true,
   },
@@ -151,7 +151,7 @@ export interface LlmConfig {
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
   provider: 'ollama',
   ollamaUrl: 'http://127.0.0.1:11434',
-  model: 'qwen2.5:7b',
+  model: 'qwen2.5:0.5b',  // 与 smoke_test2 保持一致
   customModel: '',
   apiKey: '',
 };

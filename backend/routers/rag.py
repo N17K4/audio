@@ -83,6 +83,40 @@ async def get_build_job(job_id: str):
     return job
 
 
+@router.post("/init-sample")
+async def init_sample_kb():
+    """初始化样例知识库（如果不存在）"""
+    from services.rag.indexer import list_collections, build_collection
+
+    sample_name = "示例知识库"
+
+    # 检查是否已存在
+    collections = list_collections()
+    if any(c['name'] == sample_name for c in collections):
+        return {"status": "already_exists", "name": sample_name}
+
+    # 获取样例文档路径（从 models/rag/sample/ 目录）
+    from config import MODEL_ROOT
+    sample_doc = MODEL_ROOT / "rag" / "sample" / "documents" / "sample.txt"
+
+    if not sample_doc.exists():
+        raise HTTPException(status_code=404, detail=f"样例文档不存在: {sample_doc}")
+
+    # 异步构建
+    job_id = str(uuid.uuid4())
+    _build_jobs[job_id] = {"status": "running", "name": sample_name}
+
+    def run():
+        try:
+            result = build_collection(sample_name, [str(sample_doc)])
+            _build_jobs[job_id].update({"status": "done", "result": result})
+        except Exception as e:
+            _build_jobs[job_id].update({"status": "error", "error": str(e)})
+
+    asyncio.get_event_loop().run_in_executor(None, run)
+    return {"job_id": job_id, "status": "running", "name": sample_name}
+
+
 @router.post("/query")
 async def query_rag(req: QueryRequest):
     from services.rag.querier import query_collection

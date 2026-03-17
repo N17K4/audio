@@ -69,6 +69,7 @@ TASK_CAPABILITIES = {
     "asr": ["faster_whisper", "whisper", "openai", "gemini", "groq", "deepgram", "dashscope"],
     "llm": ["gemini", "openai", "claude", "groq", "deepseek", "mistral", "xai", "ollama", "github",
             "qwen", "doubao", "hunyuan", "glm", "moonshot", "spark", "minimax", "baichuan"],
+    "agent": ["ollama", "gemini", "openai", "deepseek", "groq", "mistral", "xai", "qwen", "doubao", "hunyuan", "glm", "moonshot", "minimax"],
     "vc":  ["seed_vc", "local_rvc", "elevenlabs"],
 }
 

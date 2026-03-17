@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
-构建期：安装各引擎 pip_packages（轻量依赖）+ 引擎源码 + FFmpeg 静态二进制到嵌入式 Python。
-由 CI workflow 和 pnpm run setup 阶段调用。
+开发环境一站式初始化 — 下载嵌入式 Python + 安装 backend 依赖 + 基础引擎。
 
-用法：
-    # 构建期（CI/setup）：安装所有引擎依赖
-    python scripts/setup-engines.py
+Base 引擎：Fish Speech、RVC、Seed-VC、Faster Whisper、FaceFusion
 
-    # 只安装指定引擎源码（按需克隆）
-    python scripts/setup-engines.py --engine fish_speech
+用法（开发全量）：
+    python3 scripts/setup_base.py
 
-runtime_pip_packages（torch 等重型 ML 包）由独立脚本 install-runtime-deps.py 负责，
-在用户首次启动时安装到 userData/python-packages/。
+用法（只安装指定引擎，供 main.js app:downloadEngine 调用）：
+    python3 scripts/setup_base.py --engine fish_speech
 """
 
 from __future__ import annotations
@@ -21,6 +18,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -36,23 +34,55 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-def get_embedded_python(project_root: Path) -> str:
-    """返回嵌入式 Python 可执行路径，找不到返回空串。"""
-    if platform.system() == "Windows":
-        p = project_root / "runtime" / "win" / "python" / "python.exe"
-    else:
-        p = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
-    return str(p) if p.exists() else ""
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 配置常量
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+# macOS: python-build-standalone 版本
+MAC_PBS_RELEASE = "20250317"
+MAC_PY_VERSION = "3.12.9"
 
-# ─── HuggingFace 资产仓库（引擎源码 zip + 内置音色）────────────────────────────
+# Windows: python.org 嵌入式包版本
+WIN_PY_VERSION = "3.10.11"
 
+# 基础引擎集合
+BASE_ENGINES = {"fish_speech", "seed_vc", "rvc", "faster_whisper", "facefusion"}
+
+# HuggingFace 资产仓库
 HF_ASSETS_REPO = "N17K4/ai-workshop-assets"
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 工具函数
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_IS_TTY: bool = sys.stdout.isatty()
+_LAST_PCT: list[int] = [-1]
+
+
+def _reporthook(count: int, block_size: int, total_size: int) -> None:
+    if total_size <= 0:
+        return
+    mb = count * block_size / 1024 / 1024
+    pct = min(100, int(count * block_size * 100 / total_size))
+    if _IS_TTY:
+        print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
+    elif pct // 10 != _LAST_PCT[0]:
+        _LAST_PCT[0] = pct // 10
+        print(f"  {pct}% ({mb:.1f} MB)", flush=True)
+
+
+def get_embedded_python(root: Path) -> str:
+    """返回嵌入式 Python 可执行路径，找不到返回空串。"""
+    if platform.system() == "Windows":
+        p = root / "runtime" / "win" / "python" / "python.exe"
+    else:
+        p = root / "runtime" / "mac" / "python" / "bin" / "python3"
+    return str(p) if p.exists() else ""
+
+
 def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
-    """从 HF dataset 仓库下载引擎 zip 并解压到 engine_dir，成功返回 True。"""
-    import shutil
+    """从 HF dataset 仓库下载引擎 zip 并解压到 engine_dir。"""
     try:
         from huggingface_hub import hf_hub_download
         print(f"  [HF] 尝试从 {HF_ASSETS_REPO} 下载 {filename} ...")
@@ -66,7 +96,6 @@ def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
             shutil.rmtree(tmp)
         with zipfile.ZipFile(zip_path) as zf:
             zf.extractall(tmp)
-        # zip 内有唯一顶层目录时直接用它，否则把 tmp 本身作为来源
         extracted = list(tmp.iterdir())
         src = extracted[0] if len(extracted) == 1 and extracted[0].is_dir() else tmp
         if engine_dir.exists():
@@ -79,11 +108,176 @@ def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
         return False
 
 
-# ─── JSON Lines 输出（给 Electron IPC 用）────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 第一步：下载嵌入式 Python
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# ─── 构建期 pip 安装（安装到嵌入式 Python）────────────────────────────────────
+def _download_mac_python(dest_dir: Path) -> None:
+    """下载 python-build-standalone 到 dest_dir。"""
+    import struct
+    arch = "aarch64" if struct.calcsize("P") * 8 == 64 and platform.machine() == "arm64" else "x86_64"
+    filename = f"cpython-{MAC_PY_VERSION}+{MAC_PBS_RELEASE}-{arch}-apple-darwin-install_only.tar.gz"
+    url = f"https://github.com/astral-sh/python-build-standalone/releases/download/{MAC_PBS_RELEASE}/{filename}"
+    runtime_dir = dest_dir.parent.parent  # runtime/mac/python -> runtime/
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    tmp_tar = runtime_dir / "_python_tmp.tar.gz"
+
+    print(f"  下载: {url}")
+    urllib.request.urlretrieve(url, str(tmp_tar), _reporthook)
+    if _IS_TTY:
+        print()
+
+    print("  解压 standalone Python...")
+    tmp_extract = runtime_dir / "_python_extract_tmp"
+    tmp_extract.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(tmp_tar, "r:gz") as tf:
+        tf.extractall(tmp_extract)
+    tmp_tar.unlink()
+
+    extracted_python = tmp_extract / "python"
+    if not extracted_python.exists():
+        raise RuntimeError(f"解压后未找到 python/ 目录: {tmp_extract}")
+
+    dest_dir.parent.mkdir(parents=True, exist_ok=True)
+    if dest_dir.exists():
+        shutil.rmtree(dest_dir)
+    shutil.move(str(extracted_python), str(dest_dir))
+    shutil.rmtree(tmp_extract, ignore_errors=True)
+    print(f"  ✓ macOS standalone Python {MAC_PY_VERSION} 已就绪: {dest_dir}")
+
+
+def _download_win_python(dest_dir: Path) -> None:
+    """下载 Windows 嵌入式 Python 并启用 site-packages + pip。"""
+    url = f"https://www.python.org/ftp/python/{WIN_PY_VERSION}/python-{WIN_PY_VERSION}-embed-amd64.zip"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    tmp_zip = dest_dir.parent / "_python_tmp.zip"
+
+    print(f"  下载: {url}")
+    urllib.request.urlretrieve(url, str(tmp_zip), _reporthook)
+    if _IS_TTY:
+        print()
+
+    print("  解压 Windows 嵌入式 Python...")
+    with zipfile.ZipFile(tmp_zip, "r") as zf:
+        zf.extractall(dest_dir)
+    tmp_zip.unlink()
+
+    # 启用 site-packages
+    ver_short = WIN_PY_VERSION.replace(".", "")[:3]
+    pth_file = dest_dir / f"python{ver_short}._pth"
+    if pth_file.exists():
+        content = pth_file.read_text(encoding="utf-8")
+        content = content.replace("#import site", "import site")
+        content += "\n../../../app/backend\n"
+        pth_file.write_text(content, encoding="utf-8")
+
+    # 安装 pip
+    get_pip_path = dest_dir / "get-pip.py"
+    urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", str(get_pip_path))
+    py_exe = str(dest_dir / "python.exe")
+    subprocess.run([py_exe, str(get_pip_path), "--quiet"], check=True)
+    get_pip_path.unlink()
+    subprocess.run([py_exe, "-m", "pip", "install", "setuptools", "wheel", "tomli", "--quiet"], check=True)
+    print(f"  ✓ Windows 嵌入式 Python {WIN_PY_VERSION} 已就绪: {dest_dir}")
+
+
+def ensure_embedded_python(project_root: Path) -> str:
+    """确保嵌入式 Python 存在，返回可执行路径。"""
+    py = get_embedded_python(project_root)
+    if py:
+        return py
+
+    system = platform.system()
+    if system == "Darwin":
+        dest = project_root / "runtime" / "mac" / "python"
+        print(f"\n[setup] macOS standalone Python 不存在，开始下载 {MAC_PY_VERSION}...")
+        _download_mac_python(dest)
+    elif system == "Windows":
+        dest = project_root / "runtime" / "win" / "python"
+        print(f"\n[setup] Windows 嵌入式 Python 不存在，开始下载 {WIN_PY_VERSION}...")
+        _download_win_python(dest)
+    else:
+        print(f"✗ 不支持的平台: {system}")
+        sys.exit(1)
+
+    py = get_embedded_python(project_root)
+    if not py:
+        print("✗ Python 下载后仍找不到可执行文件")
+        sys.exit(1)
+    return py
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 第二步：安装 backend 依赖
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_PARSE_PYPROJECT_SCRIPT = """\
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+import sys, json
+with open(sys.argv[1], 'rb') as f:
+    data = tomllib.load(f)
+deps = data['tool']['poetry']['dependencies']
+for name, spec in deps.items():
+    if name == 'python':
+        continue
+    if isinstance(spec, str):
+        ver = spec.replace('^', '>=').replace('~', '~=')
+        print(f'{name}{ver}' if ver != '*' else name)
+    elif isinstance(spec, dict):
+        version = spec.get('version', '').replace('^', '>=').replace('~', '~=')
+        extras = spec.get('extras', [])
+        pkg = f'{name}[{",".join(extras)}]' if extras else name
+        print(f'{pkg}{version}' if version else pkg)
+"""
+
+
+def install_backend_deps(project_root: Path, py: str) -> bool:
+    """用嵌入式 Python 的 pip 安装 backend/pyproject.toml 的依赖。"""
+    pyproject = project_root / "backend" / "pyproject.toml"
+    if not pyproject.exists():
+        print(f"  ⚠ {pyproject} 不存在，跳过 backend 依赖安装")
+        return True
+
+    # 用嵌入式 Python 解析 pyproject.toml（它有 tomli/tomllib）
+    result = subprocess.run(
+        [py, "-c", _PARSE_PYPROJECT_SCRIPT, str(pyproject)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"  ✗ 解析 pyproject.toml 失败: {result.stderr.strip()[:300]}")
+        return False
+
+    reqs = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+    if not reqs:
+        print("  ⚠ pyproject.toml 无依赖")
+        return True
+
+    print(f"  共 {len(reqs)} 个 backend 依赖")
+    req_file = project_root / "backend" / "_requirements_tmp.txt"
+    req_file.write_text("\n".join(reqs), encoding="utf-8")
+    try:
+        r = subprocess.run(
+            [py, "-m", "pip", "install", "-r", str(req_file), "--quiet"],
+            text=True, timeout=600,
+        )
+        if r.returncode != 0:
+            print("  ✗ backend 依赖安装失败")
+            return False
+        print("  ✓ backend 依赖安装完成")
+        return True
+    finally:
+        req_file.unlink(missing_ok=True)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 第三步：安装引擎 pip_packages
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
+    """安装引擎的 pip_packages 到嵌入式 Python。"""
     if not packages:
         return True
     all_ok = True
@@ -106,52 +300,9 @@ def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
     return all_ok
 
 
-# ─── Flux 专项安装（需根据平台选择 diffusers GGUF 依赖）───────────────────────
-
-def setup_flux_engine(project_root: Path, packages: list[str], py: str) -> bool:
-    """安装 Flux GGUF 推理依赖。
-    diffusers >= 0.32 原生支持 GGUF 量化，仅需安装 gguf + diffusers。
-    Mac MPS 和 CUDA 均通过相同的 pip 依赖支持。
-    """
-    print("  [flux] 安装 Flux GGUF 推理依赖")
-    all_ok = True
-    for pkg in packages:
-        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
-        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True)
-        if check.returncode == 0:
-            print(f"  ✓ {pkg}  (已安装)")
-            continue
-        print(f"  [pip] 安装 {pkg} ...")
-        result = subprocess.run(
-            [py, "-m", "pip", "install", pkg, "--quiet"],
-            capture_output=True, text=True, timeout=600,
-        )
-        if result.returncode == 0:
-            print(f"    ✓ 安装成功: {pkg}")
-        else:
-            print(f"    ✗ 安装失败: {result.stderr.strip()[:200]}")
-            all_ok = False
-
-    # 验证 GGUF 加载能力
-    test_script = (
-        "from diffusers import FluxTransformer2DModel\n"
-        "try:\n"
-        "    from diffusers.quantizers.gguf import GGUFQuantizationConfig\n"
-        "    print('gguf_quant: ok')\n"
-        "except ImportError:\n"
-        "    print('gguf_quant: not available (diffusers may need upgrade)')\n"
-    )
-    check = subprocess.run([py, "-c", test_script], capture_output=True, text=True)
-    if check.returncode == 0:
-        print(f"  ✓ Flux diffusers GGUF 支持验证通过")
-        print(f"    {check.stdout.strip()}")
-    else:
-        print(f"  ⚠ Flux 验证警告: {check.stderr.strip()[:200]}")
-        # 非致命错误，不影响 all_ok
-    return all_ok
-
-
-# ─── RVC 专项安装 ─────────────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# RVC 引擎安装
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _patch_fairseq_for_py312(py: str) -> None:
     """修补 fairseq 以兼容 Python 3.12 + 新版 omegaconf。"""
@@ -207,21 +358,10 @@ def _patch_fairseq_for_py312(py: str) -> None:
 
 
 def _install_fairseq_windows(py: str) -> bool:
-    """Windows 专用：下载 fairseq 0.12.2 源码，注入 monkey-patch 禁用所有 C 扩展后安装。
-
-    嵌入式 Python 不含 Python.h 头文件，无法编译 Cython/C 扩展。
-    RVC 推理只用到 fairseq 的纯 Python 部分（checkpoint_utils、hubert 模型类）。
-    策略：
-      1. 在 setup.py 顶部注入代码，覆盖 setuptools.setup 使其忽略 ext_modules
-      2. 提供 no-op cythonize 和假 numpy（避免 import 失败中断 setup.py 解析）
-      3. 移除 setup.py 中 Cython 导入行，防止在无 Cython 环境中 ImportError
-      4. --no-build-isolation：跳过 pip 隔离环境，不让 pip 单独安装 Cython 后再触发编译
-    """
+    """Windows 专用：下载 fairseq 0.12.2 源码，注入 monkey-patch 禁用所有 C 扩展后安装。"""
     _FAIRSEQ_SDIST = (
         "https://files.pythonhosted.org/packages/source/f/fairseq/fairseq-0.12.2.tar.gz"
     )
-
-    # 注入到 setup.py 文件顶部的 monkey-patch
     _INJECT = """\
 # === 以下由安装器注入：强制纯 Python 安装（禁用所有 C/Cython 扩展）===
 import setuptools as _st_inject
@@ -230,12 +370,9 @@ def _no_ext_setup(**kw):
     kw.pop('ext_modules', None)
     return _orig_st_setup(**kw)
 _st_inject.setup = _no_ext_setup
-# no-op cythonize（替代 from Cython.Build import cythonize）
 def cythonize(*_a, **_kw): return []
-# no-op Extension（若 setup.py 在 from setuptools import 之前引用了 Extension）
 class Extension:
     def __init__(self, *_a, **_kw): pass
-# 假 numpy：避免 setup.py 顶层 import numpy 失败（只需 get_include 返回空串即可）
 try:
     import numpy as _np_check  # noqa: F401
 except ImportError:
@@ -271,13 +408,9 @@ except ImportError:
         setup_py = fairseq_src / "setup.py"
         if setup_py.exists():
             original = setup_py.read_text(encoding="utf-8")
-            # 移除原有 Cython 导入行（防止在无 Cython 的主环境中 ImportError 中断执行）
             patched = re.sub(r"^(from|import)\s+Cython[^\n]*\n", "", original, flags=re.MULTILINE)
-            # 在文件顶部注入 monkey-patch
             setup_py.write_text(_INJECT + patched, encoding="utf-8")
-            print("    ✓ setup.py 已注入 no-ext monkey-patch")
 
-        # --no-build-isolation：不让 pip 创建隔离环境去安装 Cython，避免重新触发 C 编译
         r = subprocess.run(
             [py, "-m", "pip", "install", str(fairseq_src),
              "--no-build-isolation", "--no-deps", "--quiet"],
@@ -349,7 +482,7 @@ def setup_rvc_engine(project_root: Path) -> bool:
         infer_script.write_text(
             '''#!/usr/bin/env python3
 """RVC 推理脚本（使用 rvc-python 库）
-由 setup-engines.py 自动生成，请勿手动修改。
+由 setup_base.py 自动生成，请勿手动修改。
 """
 import argparse
 import os
@@ -359,8 +492,6 @@ from pathlib import Path
 if not os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK"):
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
-# PyTorch 2.6 将 torch.load 的 weights_only 默认值从 False 改为 True，
-# 导致 fairseq 内部调用 torch.load 时无法加载含自定义类（如 Dictionary）的 checkpoint。
 import torch as _torch
 _orig_torch_load = _torch.load
 def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_only=False, mmap=None, **kwargs):
@@ -368,9 +499,6 @@ def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_onl
                             weights_only=weights_only, mmap=mmap, **kwargs)
 _torch.load = _patched_torch_load
 
-# macOS ARM：rvc-python 内部检测设备时忽略 device="cpu" 参数，强制使用 MPS；
-# 而 HuBERT conv1d 的输出通道数超过 MPS 上限（>65536），导致 NotImplementedError。
-# 在 rvc_python 加载 configs 之前 patch 掉 MPS 可用性，强制走 CPU 推理。
 if _torch.backends.mps.is_available():
     _torch.backends.mps.is_available = lambda: False
 
@@ -438,18 +566,18 @@ if __name__ == "__main__":
     return rvc_ok
 
 
-# ─── Fish Speech engine 源码 ─────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Fish Speech 引擎源码
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 _FISH_SPEECH_TAG = "v1.5.0"
 _FISH_SPEECH_REPO = "https://github.com/fishaudio/fish-speech"
 
-# clone 后需删除的目录（训练/服务/数据，推理不需要）
 _FISH_SPEECH_RM_DIRS = [
     "tools/server", "tools/webui", "tools/sensevoice",
     "fish_speech/datasets", "fish_speech/callbacks",
     "fish_speech/models/dac",
 ]
-# 只保留这些顶层目录/文件
 _FISH_SPEECH_KEEP = ["fish_speech", "tools", ".project-root"]
 
 _FISH_SPEECH_UTILS_INIT = """\
@@ -510,10 +638,33 @@ def set_seed(seed: int):
 """
 
 
+def _patch_fish_speech_generate(engine_dir: Path) -> None:
+    """修复 MPS torch.isin dtype 不匹配问题。"""
+    target1 = engine_dir / "tools" / "llama" / "generate.py"
+    if target1.exists():
+        text = target1.read_text(encoding="utf-8")
+        patched = text.replace(
+            "semantic_ids_tensor = torch.tensor(semantic_ids, device=codebooks.device)",
+            "semantic_ids_tensor = torch.tensor(semantic_ids, device=codebooks.device, dtype=codebooks.dtype)",
+        )
+        if patched != text:
+            target1.write_text(patched, encoding="utf-8")
+            print("  ✓ generate.py MPS dtype 补丁已应用")
+
+    target2 = engine_dir / "fish_speech" / "models" / "text2semantic" / "llama.py"
+    if target2.exists():
+        text = target2.read_text(encoding="utf-8")
+        patched = text.replace(
+            "self.semantic_token_ids, device=inp.device\n        )",
+            "self.semantic_token_ids, device=inp.device, dtype=inp.dtype\n        )",
+        )
+        if patched != text:
+            target2.write_text(patched, encoding="utf-8")
+            print("  ✓ llama.py MPS dtype 补丁已应用")
+
+
 def setup_fish_speech_engine(project_root: Path) -> bool:
     """克隆 fish-speech v1.5.0 并精简到推理所需文件。"""
-    import shutil
-
     engine_dir = project_root / "runtime" / "fish_speech" / "engine"
     sentinel = engine_dir / "tools" / "inference_engine" / "__init__.py"
 
@@ -521,7 +672,6 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
         print(f"  ✓ fish_speech engine 已存在（{sentinel}）")
         return True
 
-    # 优先从 HuggingFace 下载预打包 zip
     if _download_engine_zip_from_hf("fish_speech_v1.5.0.zip", engine_dir):
         _patch_fish_speech_generate(engine_dir)
         n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
@@ -544,7 +694,6 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
 
     engine_dir.mkdir(parents=True, exist_ok=True)
 
-    # 只复制推理需要的顶层条目
     for item in _FISH_SPEECH_KEEP:
         src = tmp_dir / item
         dst = engine_dir / item
@@ -555,16 +704,12 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
         elif src.is_file():
             shutil.copy2(src, dst)
 
-    # 删除训练专用目录
     for rel in _FISH_SPEECH_RM_DIRS:
         p = engine_dir / rel
         if p.exists():
             shutil.rmtree(p)
 
-    # 删除训练专用 utils 文件，替换为推理精简版
     utils_dir = engine_dir / "fish_speech" / "utils"
-    # spectrogram.py 保留：vqgan/inference.py 通过 hydra 实例化 LogMelSpectrogram
-    # file.py (utils/file.py) 保留检查：tools/file.py 是单独文件，utils/file.py 训练专用可删
     for fname in ["braceexpand.py", "instantiators.py",
                   "logging_utils.py", "rich_utils.py"]:
         (utils_dir / fname).unlink(missing_ok=True)
@@ -572,8 +717,6 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
     (utils_dir / "logger.py").write_text(_FISH_SPEECH_LOGGER, encoding="utf-8")
     (utils_dir / "utils.py").write_text(_FISH_SPEECH_UTILS, encoding="utf-8")
 
-    # MPS 兼容补丁：torch.isin 要求两个张量 dtype 相同
-    # codebooks 是 torch.int，但 semantic_ids_tensor 默认创建为 int64，在 MPS 上触发错误
     _patch_fish_speech_generate(engine_dir)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -583,270 +726,24 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
     return True
 
 
-def _patch_fish_speech_generate(engine_dir: Path) -> None:
-    """修复 MPS torch.isin dtype 不匹配问题（需要两个张量 dtype 一致）。"""
-    # 1) tools/llama/generate.py — decode_one_token_ar_agent / decode_one_token_naive_agent
-    target1 = engine_dir / "tools" / "llama" / "generate.py"
-    if target1.exists():
-        text = target1.read_text(encoding="utf-8")
-        patched = text.replace(
-            "semantic_ids_tensor = torch.tensor(semantic_ids, device=codebooks.device)",
-            "semantic_ids_tensor = torch.tensor(semantic_ids, device=codebooks.device, dtype=codebooks.dtype)",
-        )
-        if patched != text:
-            target1.write_text(patched, encoding="utf-8")
-            print("  ✓ generate.py MPS dtype 补丁已应用")
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Seed-VC 引擎源码
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    # 2) fish_speech/models/text2semantic/llama.py — embed() 中 semantic_token_ids_tensor
-    target2 = engine_dir / "fish_speech" / "models" / "text2semantic" / "llama.py"
-    if target2.exists():
-        text = target2.read_text(encoding="utf-8")
-        patched = text.replace(
-            "self.semantic_token_ids, device=inp.device\n        )",
-            "self.semantic_token_ids, device=inp.device, dtype=inp.dtype\n        )",
-        )
-        if patched != text:
-            target2.write_text(patched, encoding="utf-8")
-            print("  ✓ llama.py MPS dtype 补丁已应用")
-
-
-# ─── FaceFusion engine 源码 ──────────────────────────────────────────────────
-
-_FACEFUSION_REPO = "https://github.com/facefusion/facefusion"
-_FACEFUSION_TAG  = "3.5.4"
-
-# 只复制推理所需的顶层条目（排除大型示例/文档/测试）
-_FACEFUSION_KEEP = ["facefusion", "facefusion.py"]
-_FACEFUSION_RM   = [".github", "tests", "docs", "assets"]
-
-
-def setup_facefusion_engine(project_root: Path) -> bool:
-    """克隆 FaceFusion 并精简到推理所需文件。"""
-    import shutil
-
-    engine_dir = project_root / "runtime" / "facefusion" / "engine"
-    sentinel = engine_dir / "facefusion.py"
-
-    if sentinel.exists():
-        print(f"  ✓ facefusion engine 已存在（{sentinel}）")
-        return True
-
-    # 优先从 HuggingFace 下载预打包 zip
-    if _download_engine_zip_from_hf("facefusion_3.5.4.zip", engine_dir):
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ facefusion engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
-    print(f"  [facefusion] 克隆 {_FACEFUSION_REPO} @ {_FACEFUSION_TAG} ...")
-    tmp_dir = project_root / "runtime" / "facefusion" / "_engine_tmp"
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
-
-    r = subprocess.run(
-        ["git", "clone", "--depth", "1", "--branch", _FACEFUSION_TAG,
-         _FACEFUSION_REPO, str(tmp_dir)],
-        capture_output=True, text=True,
-    )
-    if r.returncode != 0:
-        print(f"  ✗ clone 失败: {r.stderr.strip()[:300]}")
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return False
-
-    engine_dir.mkdir(parents=True, exist_ok=True)
-
-    for item in _FACEFUSION_KEEP:
-        src = tmp_dir / item
-        dst = engine_dir / item
-        if src.is_dir():
-            if dst.exists():
-                shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-        elif src.is_file():
-            shutil.copy2(src, dst)
-
-    for rel in _FACEFUSION_RM:
-        p = engine_dir / rel
-        if p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
-        elif p.is_file():
-            p.unlink(missing_ok=True)
-
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
-    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-    print(f"  ✓ facefusion engine 就绪（{n} 个文件）")
-    return True
-
-
-# ─── LivePortrait engine 源码 ────────────────────────────────────────────────
-
-_LIVEPORTRAIT_REPO = "https://github.com/KlingAIResearch/LivePortrait"
-# 固定到已验证 commit（2026-03-02，docs: update star-history links）
-_LIVEPORTRAIT_COMMIT = "49784e879821538ecda5c8e4ca0472f4cb6236cf"
-
-# 只复制推理所需的顶层条目
-_LIVEPORTRAIT_KEEP = ["liveportrait", "inference.py", "src", "configs"]
-# 克隆后删除不需要的目录
-_LIVEPORTRAIT_RM = ["assets", "docs", "scripts", ".github"]
-
-
-def setup_liveportrait_engine(project_root: Path) -> bool:
-    """克隆 LivePortrait 并精简到推理所需文件。"""
-    import shutil
-
-    engine_dir = project_root / "runtime" / "liveportrait" / "engine"
-    sentinel = engine_dir / "liveportrait" / "__init__.py"
-
-    if sentinel.exists():
-        print(f"  ✓ liveportrait engine 已存在（{sentinel}）")
-        return True
-
-    # 优先从 HuggingFace 下载预打包 zip
-    if _download_engine_zip_from_hf("liveportrait_49784e87.zip", engine_dir):
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ liveportrait engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
-    print(f"  [liveportrait] 克隆 {_LIVEPORTRAIT_REPO} @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
-    sys.stdout.flush()
-    tmp_dir = project_root / "runtime" / "liveportrait" / "_engine_tmp"
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
-    # init+fetch 固定到指定 commit（GitHub 不支持 clone --depth 1 <sha>）
-    cmds = [
-        ["git", "-C", str(tmp_dir), "init"],
-        ["git", "-C", str(tmp_dir), "remote", "add", "origin", _LIVEPORTRAIT_REPO],
-        ["git", "-C", str(tmp_dir), "fetch", "--depth", "1", "origin", _LIVEPORTRAIT_COMMIT],
-        ["git", "-C", str(tmp_dir), "checkout", "FETCH_HEAD"],
-    ]
-    for cmd in cmds:
-        print(f"  $ {' '.join(cmd)}")
-        sys.stdout.flush()
-        r = subprocess.run(cmd, capture_output=False, text=True)
-        if r.returncode != 0:
-            print(f"  ✗ 命令失败（exit {r.returncode}）")
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return False
-
-    engine_dir.mkdir(parents=True, exist_ok=True)
-
-    for item in _LIVEPORTRAIT_KEEP:
-        src = tmp_dir / item
-        dst = engine_dir / item
-        if src.is_dir():
-            if dst.exists():
-                shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-        elif src.is_file():
-            shutil.copy2(src, dst)
-
-    for rel in _LIVEPORTRAIT_RM:
-        p = engine_dir / rel
-        if p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
-        elif p.is_file():
-            p.unlink(missing_ok=True)
-
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
-    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-    print(f"  ✓ liveportrait engine 就绪（{n} 个文件）")
-    return True
-
-
-# ─── Seed-VC engine 源码 ──────────────────────────────────────────────────────
-
-# 无 tag，固定到已验证的 commit SHA（无法用 --branch，改用 init+fetch）
 _SEED_VC_REPO = "https://github.com/Plachtaa/seed-vc"
 _SEED_VC_COMMIT = "51383efd921027683c89e5348211d93ff12ac2a8"
 
-# clone 后删除的目录/文件（v2 API、openvoice后处理、astral量化、CUDA C++源码）
 _SEED_VC_RM = [
-    "modules/openvoice",
-    "modules/astral_quantization",
-    "modules/v2",
+    "modules/openvoice", "modules/astral_quantization", "modules/v2",
     "modules/bigvgan/alias_free_activation/cuda",
-    # encodec.py 保留：wavenet.py → encodec.SConv1d
-    "configs/v2",
-    "configs/astral_quantization",
-    "inference_v2.py",
-    "seed_vc_wrapper.py",
+    "configs/v2", "configs/astral_quantization",
+    "inference_v2.py", "seed_vc_wrapper.py",
 ]
-# 只复制这些顶层条目
 _SEED_VC_KEEP = ["modules", "configs", "hf_utils.py", "inference.py"]
 
 
-def setup_seed_vc_engine(project_root: Path) -> bool:
-    """克隆 seed-vc 并精简到推理所需文件。"""
-    import shutil
-
-    engine_dir = project_root / "runtime" / "seed_vc" / "engine"
-    sentinel = engine_dir / "inference.py"
-
-    if sentinel.exists():
-        print(f"  ✓ seed_vc engine 已存在（{sentinel}）")
-        return True
-
-    # 优先从 HuggingFace 下载预打包 zip
-    if _download_engine_zip_from_hf("seed_vc_51383efd.zip", engine_dir):
-        _patch_seed_vc_inference(engine_dir)
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ seed_vc engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
-    print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
-    tmp_dir = project_root / "runtime" / "seed_vc" / "_engine_tmp"
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
-    tmp_dir.mkdir(parents=True)
-
-    # seed-vc 无 tag，用 init + fetch 固定到指定 commit（浅克隆）
-    for cmd in [
-        ["git", "init", str(tmp_dir)],
-        ["git", "-C", str(tmp_dir), "remote", "add", "origin", _SEED_VC_REPO],
-        ["git", "-C", str(tmp_dir), "fetch", "--depth", "1", "origin", _SEED_VC_COMMIT],
-        ["git", "-C", str(tmp_dir), "checkout", "FETCH_HEAD"],
-    ]:
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            print(f"  ✗ 失败（{' '.join(cmd[-2:])}）: {r.stderr.strip()[:300]}")
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return False
-
-    engine_dir.mkdir(parents=True, exist_ok=True)
-
-    for item in _SEED_VC_KEEP:
-        src = tmp_dir / item
-        dst = engine_dir / item
-        if src.is_dir():
-            if dst.exists():
-                shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-        elif src.is_file():
-            shutil.copy2(src, dst)
-
-    for rel in _SEED_VC_RM:
-        p = engine_dir / rel
-        if p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
-        elif p.is_file():
-            p.unlink(missing_ok=True)
-
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
-    _patch_seed_vc_inference(engine_dir)
-    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-    print(f"  ✓ seed_vc engine 就绪（{n} 个文件）")
-    return True
-
-
 def _patch_seed_vc_inference(engine_dir: Path) -> None:
-    """在 engine/inference.py 开头插入兼容性补丁：
-    - is_offline_mode shim：部分 transformers 版本从 huggingface_hub 顶层导入
-      is_offline_mode，新版 huggingface_hub (>=0.26) 已移除该导出。
-    """
+    """在 engine/inference.py 插入兼容性补丁。"""
     inf = engine_dir / "inference.py"
     if not inf.exists():
         return
@@ -867,9 +764,7 @@ def _patch_seed_vc_inference(engine_dir: Path) -> None:
         inf.write_text(src, encoding="utf-8")
         print("  ✓ seed_vc engine/inference.py 已补丁（is_offline_mode shim）")
 
-    # bigvgan/_from_pretrained 兼容性修复：
-    # huggingface_hub>=1.3.0 的 ModelHubMixin.from_pretrained 不再向 _from_pretrained
-    # 传递 proxies/resume_download，需将这两个参数改为可选。
+    # bigvgan/_from_pretrained 兼容性修复
     bigvgan_file = engine_dir / "modules" / "bigvgan" / "bigvgan.py"
     if bigvgan_file.exists():
         bsrc = bigvgan_file.read_text(encoding="utf-8")
@@ -879,8 +774,7 @@ def _patch_seed_vc_inference(engine_dir: Path) -> None:
             bigvgan_file.write_text(bsrc, encoding="utf-8")
             print("  ✓ seed_vc modules/bigvgan/bigvgan.py 已补丁（proxies/resume_download 可选化）")
 
-    # MPS BigVGAN 修复：conv_transpose1d 在通道数较大时触发 "Output channels > 65536" 错误，
-    # PYTORCH_ENABLE_MPS_FALLBACK=1 对此 op 无效。改为将 BigVGAN 保持在 CPU 上运行。
+    # MPS BigVGAN 修复
     inf_src = inf.read_text(encoding="utf-8")
     old_bigvgan_device = "        bigvgan_model = bigvgan_model.eval().to(device)\n        vocoder_fn = bigvgan_model"
     new_bigvgan_device = (
@@ -907,7 +801,132 @@ def _patch_seed_vc_inference(engine_dir: Path) -> None:
         print("  ✓ seed_vc engine/inference.py 已补丁（BigVGAN MPS CPU fallback）")
 
 
-# ─── FFmpeg ───────────────────────────────────────────────────────────────────
+def setup_seed_vc_engine(project_root: Path) -> bool:
+    """克隆 seed-vc 并精简到推理所需文件。"""
+    engine_dir = project_root / "runtime" / "seed_vc" / "engine"
+    sentinel = engine_dir / "inference.py"
+
+    if sentinel.exists():
+        print(f"  ✓ seed_vc engine 已存在（{sentinel}）")
+        return True
+
+    if _download_engine_zip_from_hf("seed_vc_51383efd.zip", engine_dir):
+        _patch_seed_vc_inference(engine_dir)
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ seed_vc engine 就绪（{n} 个文件，HF 下载）")
+        return True
+
+    print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
+    tmp_dir = project_root / "runtime" / "seed_vc" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True)
+
+    for cmd in [
+        ["git", "init", str(tmp_dir)],
+        ["git", "-C", str(tmp_dir), "remote", "add", "origin", _SEED_VC_REPO],
+        ["git", "-C", str(tmp_dir), "fetch", "--depth", "1", "origin", _SEED_VC_COMMIT],
+        ["git", "-C", str(tmp_dir), "checkout", "FETCH_HEAD"],
+    ]:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"  ✗ 失败（{' '.join(cmd[-2:])}）: {r.stderr.strip()[:300]}")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+    for item in _SEED_VC_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _SEED_VC_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
+    _patch_seed_vc_inference(engine_dir)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ seed_vc engine 就绪（{n} 个文件）")
+    return True
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# FaceFusion 引擎源码
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_FACEFUSION_REPO = "https://github.com/facefusion/facefusion"
+_FACEFUSION_TAG = "3.5.4"
+_FACEFUSION_KEEP = ["facefusion", "facefusion.py"]
+_FACEFUSION_RM = [".github", "tests", "docs", "assets"]
+
+
+def setup_facefusion_engine(project_root: Path) -> bool:
+    """克隆 FaceFusion 并精简到推理所需文件。"""
+    engine_dir = project_root / "runtime" / "facefusion" / "engine"
+    sentinel = engine_dir / "facefusion.py"
+
+    if sentinel.exists():
+        print(f"  ✓ facefusion engine 已存在（{sentinel}）")
+        return True
+
+    if _download_engine_zip_from_hf("facefusion_3.5.4.zip", engine_dir):
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ facefusion engine 就绪（{n} 个文件，HF 下载）")
+        return True
+
+    print(f"  [facefusion] 克隆 {_FACEFUSION_REPO} @ {_FACEFUSION_TAG} ...")
+    tmp_dir = project_root / "runtime" / "facefusion" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+
+    r = subprocess.run(
+        ["git", "clone", "--depth", "1", "--branch", _FACEFUSION_TAG,
+         _FACEFUSION_REPO, str(tmp_dir)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        print(f"  ✗ clone 失败: {r.stderr.strip()[:300]}")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+    for item in _FACEFUSION_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _FACEFUSION_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ facefusion engine 就绪（{n} 个文件）")
+    return True
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# FFmpeg / Pandoc 下载
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def download_ffmpeg(project_root: Path) -> bool:
     """下载 FFmpeg 静态二进制到 runtime/{mac|win}/bin/。"""
@@ -927,7 +946,6 @@ def download_ffmpeg(project_root: Path) -> bool:
 
     if dest.exists():
         size_mb = dest.stat().st_size / 1024 / 1024
-        # 小于 10 MB 说明之前只保存了 zip 壳而非真实二进制，需要重新下载
         if size_mb < 10:
             print(f"  ✗ FFmpeg 文件异常（{size_mb:.1f} MB），重新下载")
             dest.unlink()
@@ -941,27 +959,14 @@ def download_ffmpeg(project_root: Path) -> bool:
     bin_dir.mkdir(parents=True, exist_ok=True)
     tmp_archive = bin_dir / "_ffmpeg_tmp"
 
-    _is_tty = sys.stdout.isatty()
-    _last_pct: list[int] = [-1]
-
-    def _reporthook(count: int, block_size: int, total_size: int) -> None:
-        if total_size > 0:
-            mb = count * block_size / 1024 / 1024
-            pct = min(100, int(count * block_size * 100 / total_size))
-            if _is_tty:
-                print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
-            elif pct // 10 != _last_pct[0]:
-                _last_pct[0] = pct // 10
-                print(f"  {pct}% ({mb:.1f} MB)", flush=True)
-
     try:
         urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
-        print()
+        if _IS_TTY:
+            print()
 
         target_name = "ffmpeg.exe" if system == "Windows" else "ffmpeg"
         if url.endswith(".zip") or url.endswith("/zip"):
             def _extract_from_zip(zip_path: Path, out_path: Path) -> bool:
-                """从 zip 中提取 target_name，若提取结果仍是 zip 则再解一层（evermeet.cx 双层 zip）。"""
                 with zipfile.ZipFile(zip_path, "r") as zf:
                     found = next(
                         (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
@@ -970,9 +975,8 @@ def download_ffmpeg(project_root: Path) -> bool:
                     if not found:
                         print(f"    ✗ 压缩包内未找到 {target_name}")
                         return False
-                    with zf.open(found) as src, open(out_path, "wb") as dst:
-                        dst.write(src.read())
-                # 若提取结果仍是 zip（evermeet.cx 套娃），再解一层
+                    with zf.open(found) as src_f, open(out_path, "wb") as dst_f:
+                        dst_f.write(src_f.read())
                 if zipfile.is_zipfile(out_path):
                     inner_zip = out_path.with_suffix("._inner.zip")
                     out_path.rename(inner_zip)
@@ -996,8 +1000,8 @@ def download_ffmpeg(project_root: Path) -> bool:
                     return False
                 f_obj = tf.extractfile(found_member)
                 if f_obj:
-                    with open(dest, "wb") as dst:
-                        dst.write(f_obj.read())
+                    with open(dest, "wb") as dst_f:
+                        dst_f.write(f_obj.read())
 
         if not dest.exists() or dest.stat().st_size == 0:
             print("    ✗ 提取后文件缺失或为空")
@@ -1051,25 +1055,12 @@ def download_pandoc(project_root: Path) -> bool:
     bin_dir.mkdir(parents=True, exist_ok=True)
     tmp_archive = bin_dir / "_pandoc_tmp.zip"
 
-    _is_tty = sys.stdout.isatty()
-    _last_pct: list[int] = [-1]
-
-    def _reporthook(count: int, block_size: int, total_size: int) -> None:
-        if total_size > 0:
-            mb = count * block_size / 1024 / 1024
-            pct = min(100, int(count * block_size * 100 / total_size))
-            if _is_tty:
-                print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
-            elif pct // 10 != _last_pct[0]:
-                _last_pct[0] = pct // 10
-                print(f"  {pct}% ({mb:.1f} MB)", flush=True)
-
     try:
         urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
-        print()
+        if _IS_TTY:
+            print()
         with zipfile.ZipFile(tmp_archive, "r") as zf:
             if binary_in_zip not in zf.namelist():
-                # 回退：按名称搜索
                 target_name = "pandoc.exe" if system == "Windows" else "pandoc"
                 binary_in_zip = next(
                     (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
@@ -1078,8 +1069,8 @@ def download_pandoc(project_root: Path) -> bool:
                 if not binary_in_zip:
                     print("    ✗ 压缩包内未找到 pandoc 可执行文件")
                     return False
-            with zf.open(binary_in_zip) as src, open(dest, "wb") as dst:
-                dst.write(src.read())
+            with zf.open(binary_in_zip) as src_f, open(dest, "wb") as dst_f:
+                dst_f.write(src_f.read())
 
         if not dest.exists() or dest.stat().st_size == 0:
             print("    ✗ 提取后文件缺失或为空")
@@ -1102,10 +1093,12 @@ def download_pandoc(project_root: Path) -> bool:
                 pass
 
 
-# ─── 主流程：构建期 ───────────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 主流程
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def main_build() -> int:
-    project_root = Path(__file__).resolve().parent.parent
+def main_full_setup(project_root: Path) -> int:
+    """全量 setup：下载 Python + backend 依赖 + 基础引擎 + FFmpeg + pandoc。"""
     manifest_path = project_root / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json: {manifest_path}")
@@ -1114,103 +1107,118 @@ def main_build() -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     engines: dict = manifest.get("engines", {})
 
-    py = get_embedded_python(project_root)
-    if not py:
-        print("✗ 嵌入式 Python 未找到，请先准备 runtime/mac/python 或 runtime/win/python")
-        return 1
-
-    print(f"=== 安装引擎依赖（构建期）===")
-    print(f"嵌入式 Python: {py}\n")
+    # 1. 确保嵌入式 Python
+    print("\n=== 1/4 嵌入式 Python ===")
+    py = ensure_embedded_python(project_root)
+    print(f"嵌入式 Python: {py}")
 
     all_ok = True
-    for engine_name, cfg in engines.items():
+
+    # 2. 安装 backend 依赖
+    print("\n=== 2/4 安装 backend 依赖 ===")
+    if not install_backend_deps(project_root, py):
+        all_ok = False
+
+    # 3. 安装基础引擎 pip_packages + 源码
+    print("\n=== 3/4 安装基础引擎 ===")
+    for engine_name in sorted(BASE_ENGINES):
+        cfg = engines.get(engine_name, {})
         packages: list[str] = cfg.get("pip_packages", [])
-        if not packages:
-            continue
-        if engine_name == "flux":
-            # Flux (~30 GB, 需 HF 账号) 已被 SD-Turbo 替代，默认跳过 pip 安装。
-            # 如需启用，手动运行 pnpm run checkpoints --engine flux
-            print(f"▶ {engine_name}  [已禁用，使用 SD-Turbo 替代]")
-            print()
-            continue
-        print(f"▶ {engine_name}")
+        print(f"\n▶ {engine_name}")
+
         if engine_name == "rvc":
-            ok = setup_rvc_engine(project_root)
+            if not setup_rvc_engine(project_root):
+                all_ok = False
         else:
-            ok = setup_pip_packages(engine_name, packages, py)
-        if not ok:
-            all_ok = False
-        print()
+            if packages:
+                if not setup_pip_packages(engine_name, packages, py):
+                    all_ok = False
 
-    print("▶ fish_speech engine")
-    if not setup_fish_speech_engine(project_root):
-        all_ok = False
-    print()
+        # 引擎源码 setup
+        if engine_name == "fish_speech":
+            if not setup_fish_speech_engine(project_root):
+                all_ok = False
+        elif engine_name == "seed_vc":
+            if not setup_seed_vc_engine(project_root):
+                all_ok = False
+        elif engine_name == "facefusion":
+            if not setup_facefusion_engine(project_root):
+                all_ok = False
 
-    print("▶ seed_vc engine")
-    if not setup_seed_vc_engine(project_root):
-        all_ok = False
-    print()
-
-    print("▶ liveportrait engine")
-    if not setup_liveportrait_engine(project_root):
-        all_ok = False
-    print()
-
-    print("▶ facefusion engine")
-    if not setup_facefusion_engine(project_root):
-        all_ok = False
-    print()
-
-    print("▶ ffmpeg")
+    # 4. FFmpeg + pandoc
+    print("\n=== 4/4 下载工具 ===")
+    print("\n▶ ffmpeg")
     if not download_ffmpeg(project_root):
         all_ok = False
-    print()
-
-    print("▶ pandoc")
+    print("\n▶ pandoc")
     if not download_pandoc(project_root):
         all_ok = False
-    print()
 
+    print()
     if all_ok:
-        print("✓ 引擎依赖安装完成")
+        print("✓ 基础环境初始化完成")
         return 0
     else:
-        print("✗ 部分依赖安装失败，请检查上方日志")
+        print("✗ 部分步骤失败，请检查上方日志")
         return 1
 
 
-# ─── 入口 ─────────────────────────────────────────────────────────────────────
+def main_single_engine(engine: str, project_root: Path) -> int:
+    """只安装指定引擎（pip_packages + 源码），供 main.js app:downloadEngine 调用。"""
+    manifest_path = project_root / "wrappers" / "manifest.json"
+    if not manifest_path.exists():
+        manifest_path = Path(os.getenv("RESOURCES_ROOT", "")) / "wrappers" / "manifest.json"
+    if not manifest_path.exists():
+        print(f"✗ 找不到 manifest.json")
+        return 1
 
-def main_setup_engine(engine: str) -> int:
-    """只克隆/安装指定引擎的源码目录（供 UI 安装按钮按需调用）。"""
-    project_root = Path(__file__).resolve().parent.parent
-    engine_map = {
-        "liveportrait": lambda: setup_liveportrait_engine(project_root),
-        "fish_speech":  lambda: setup_fish_speech_engine(project_root),
-        "seed_vc":      lambda: setup_seed_vc_engine(project_root),
-        "facefusion":   lambda: setup_facefusion_engine(project_root),
-    }
-    fn = engine_map.get(engine)
-    if fn is None:
-        print(f"  [{engine}] 无需单独 setup（无源码克隆步骤）")
-        return 0
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    engines: dict = manifest.get("engines", {})
+
+    py = get_embedded_python(project_root)
+    resources_root = os.getenv("RESOURCES_ROOT", "")
+    if not py and resources_root:
+        py = get_embedded_python(Path(resources_root))
+    if not py:
+        print("✗ 嵌入式 Python 未找到")
+        return 1
+
+    cfg = engines.get(engine, {})
+    packages = cfg.get("pip_packages", [])
+
     print(f"▶ setup engine: {engine}")
-    ok = fn()
+
+    ok = True
+    # pip_packages
+    if packages:
+        if engine == "rvc":
+            ok = setup_rvc_engine(project_root)
+        else:
+            ok = setup_pip_packages(engine, packages, py)
+
+    # 源码 setup
+    engine_source_map = {
+        "fish_speech": lambda: setup_fish_speech_engine(project_root),
+        "seed_vc": lambda: setup_seed_vc_engine(project_root),
+        "facefusion": lambda: setup_facefusion_engine(project_root),
+    }
+    source_fn = engine_source_map.get(engine)
+    if source_fn and not source_fn():
+        ok = False
+
     return 0 if ok else 1
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="安装引擎 pip 依赖 + FFmpeg")
-    parser.add_argument(
-        "--engine", default="",
-        help="只安装指定引擎的源码目录（liveportrait / fish_speech / seed_vc / facefusion）",
-    )
+    parser = argparse.ArgumentParser(description="基础环境初始化（嵌入式 Python + backend + 基础引擎）")
+    parser.add_argument("--engine", default="", help="只安装指定引擎（供 UI 按需调用）")
     args = parser.parse_args()
 
+    project_root = Path(__file__).resolve().parent.parent
+
     if args.engine:
-        return main_setup_engine(args.engine)
-    return main_build()
+        return main_single_engine(args.engine, project_root)
+    return main_full_setup(project_root)
 
 
 if __name__ == "__main__":

@@ -371,8 +371,8 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     return proc;
   }
 
-  const runtimeDepsScript    = path.join(__dirname, 'scripts', 'install-runtime-deps.py');
-  const downloadScript       = path.join(__dirname, 'scripts', 'download_checkpoints.py');
+  const runtimeDepsScript = path.join(__dirname, 'scripts', 'ml_base.py');
+  const downloadScript   = path.join(__dirname, 'scripts', 'checkpoints_base.py');
 
   // 阶段1：安装 runtime_pip_packages（torch 等 ML 包）到 userData/python-packages/
   const enginesArgs = ['--target', userPkgDir, '--json-progress'];
@@ -553,13 +553,15 @@ async function createWindow() {
       BACKEND_HOST: '127.0.0.1',
       BACKEND_PORT: backendPort,
       ...(LOGS_DIR ? { LOGS_DIR } : {}),
-      // 打包后 runtime/ 在 Resources/ 下；checkpoints 在 userData（跨版本持久）
-      // PYTHONPATH 指向 userData/python-packages/（torch 等 ML 包首次启动后安装于此）
       ...(app.isPackaged ? {
+        // 生产模式：PYTHONPATH 指向 userData/python-packages/（torch 等 ML 包首次启动后安装于此）
         RESOURCES_ROOT: process.resourcesPath,
         CHECKPOINTS_DIR: getCheckpointsDir(),
         PYTHONPATH: [path.join(__dirname, 'backend'), getUserPackagesDir()].join(path.delimiter),
-      } : {}),
+      } : {
+        // 开发模式：PYTHONPATH 指向 local_data/python-packages/（pnpm run ml 安装的 ML 包）
+        PYTHONPATH: [path.join(__dirname, 'backend'), path.join(__dirname, 'local_data', 'python-packages')].join(path.delimiter),
+      }),
     },
   });
 
@@ -1046,8 +1048,16 @@ ipcMain.handle('app:clearDiskRow', (_event, key) => {
 });
 
 // ─── IPC：下载单个引擎 checkpoint ────────────────────────────────────────────
-// 需要先克隆源码的引擎（setup-engines.py --engine <name>）
-const ENGINES_NEED_SOURCE_SETUP = new Set(['liveportrait', 'fish_speech', 'seed_vc']);
+// 基础引擎（setup_base.py 处理）vs 额外引擎（setup_extra.py 处理）
+const BASE_ENGINES = new Set(['fish_speech', 'seed_vc', 'rvc', 'faster_whisper', 'facefusion', 'voices']);
+const EXTRA_ENGINES = new Set(['agent_engine', 'finetune_engine', 'flux', 'got_ocr', 'liveportrait', 'rag_engine', 'sd', 'wan', 'whisper']);
+
+// 需要 ML 依赖的引擎及其对应的 group（ml_extra.py --group）
+const ML_INSTALL_GROUPS = {
+  'rag_engine': 'rag',
+  'agent_engine': 'agent',
+  'finetune_engine': 'lora',
+};
 
 ipcMain.handle('app:downloadEngine', (_event, engine) => {
   const isMac = process.platform === 'darwin';
@@ -1058,6 +1068,9 @@ ipcMain.handle('app:downloadEngine', (_event, engine) => {
   const ckptDir = getCheckpointsDir();
   fs.mkdirSync(ckptDir, { recursive: true });
 
+  // Extra 引擎：需要在 userData/python-packages/ 中安装 ML 依赖
+  const userDataDir = app.getPath('userData');
+  const mlPkgDir = path.join(userDataDir, 'python-packages');
   const env = { ...process.env, RESOURCES_ROOT: resRoot, CHECKPOINTS_DIR: ckptDir };
 
   function sendProgress(msg) {
@@ -1074,7 +1087,7 @@ ipcMain.handle('app:downloadEngine', (_event, engine) => {
           try {
             sendProgress(JSON.parse(line));
           } catch {
-            // 非 JSON 行（setup-engines.py 的 print 输出）也当日志转发
+            // 非 JSON 行也当日志转发
             sendProgress({ type: 'log', message: line.trimEnd() });
           }
         }
@@ -1090,19 +1103,33 @@ ipcMain.handle('app:downloadEngine', (_event, engine) => {
   }
 
   return (async () => {
-    // 第一步：如需克隆引擎源码，先跑 setup-engines.py --engine <name>
-    if (ENGINES_NEED_SOURCE_SETUP.has(engine)) {
-      sendProgress({ type: 'log', message: `▶ [${engine}] 克隆引擎源码...` });
-      const setupScript = path.join(__dirname, 'scripts', 'setup-engines.py');
-      const setupResult = await spawnScript(setupScript, ['--engine', engine]);
-      if (!setupResult.ok) {
+    // 第一步：如果需要 ML 依赖，先安装
+    const mlGroup = ML_INSTALL_GROUPS[engine];
+    if (mlGroup) {
+      const groupLabel = { rag: 'RAG 知识库', agent: 'Agent 智能体', lora: 'LoRA 微调' }[mlGroup];
+      sendProgress({ type: 'log', message: `▶ [${engine}] 安装 ${groupLabel} 依赖...` });
+      fs.mkdirSync(mlPkgDir, { recursive: true });
+      const mlScript = path.join(__dirname, 'scripts', 'ml_extra.py');
+      const mlResult = await spawnScript(mlScript, ['--group', mlGroup, '--target', mlPkgDir, '--json-progress']);
+      if (!mlResult.ok) {
         sendProgress({ type: 'all_done', ok: false });
-        return setupResult;
+        return mlResult;
       }
     }
-    // 第二步：下载模型权重（脚本自身会 emit all_done，无需再发）
+
+    // 第二步：pip_packages + 引擎源码（setup_base.py 或 setup_extra.py --engine）
+    const isExtraEngine = EXTRA_ENGINES.has(engine);
+    const setupScript = path.join(__dirname, 'scripts', isExtraEngine ? 'setup_extra.py' : 'setup_base.py');
+    sendProgress({ type: 'log', message: `▶ [${engine}] 安装引擎依赖 + 源码...` });
+    const setupResult = await spawnScript(setupScript, ['--engine', engine]);
+    if (!setupResult.ok) {
+      sendProgress({ type: 'all_done', ok: false });
+      return setupResult;
+    }
+
+    // 第三步：下载模型权重（脚本自身会 emit all_done，无需再发）
     sendProgress({ type: 'log', message: `▶ [${engine}] 下载模型权重...` });
-    const dlScript = path.join(__dirname, 'scripts', 'download_checkpoints.py');
+    const dlScript = path.join(__dirname, 'scripts', isExtraEngine ? 'checkpoints_extra.py' : 'checkpoints_base.py');
     const dlResult = await spawnScript(dlScript, ['--engine', engine, '--json-progress']);
     return dlResult;
   })();

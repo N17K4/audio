@@ -175,6 +175,7 @@ class TestBasicFeatures:
             data = {
                 "provider": "seed_vc",
                 "mode": "local",
+                "output_dir": str(Path(tempfile.gettempdir()) / "ai-workshop-temp" / "download"),
             }
 
             resp = client.post(
@@ -224,6 +225,7 @@ class TestBasicFeatures:
             data = {
                 "voice_id": voice_id,
                 "mode": "local",
+                "output_dir": str(Path(tempfile.gettempdir()) / "ai-workshop-temp" / "download"),
             }
 
             resp = client.post(

@@ -10,7 +10,7 @@ from config import VOICES_DIR, USER_VOICES_DIR
 from logging_setup import logger
 
 
-def read_voice_meta(voice_dir: Path) -> Dict:
+def read_voice_meta(voice_dir: Path, is_builtin: bool = False) -> Dict:
     meta_path = voice_dir / "meta.json"
     meta = {}
     if meta_path.exists():
@@ -54,6 +54,7 @@ def read_voice_meta(voice_dir: Path) -> Dict:
         "index_file": meta.get("index_file", "index.index" if (voice_dir / "index.index").exists() else None),
         "path": str(voice_dir),
         "is_ready": is_ready,
+        "is_builtin": is_builtin,
         "inference_mode": inference_mode,
         "inference_command": inference_command,
         "reference_audio": found_ref,
@@ -64,12 +65,18 @@ def read_voice_meta(voice_dir: Path) -> Dict:
 def list_voices() -> List[Dict]:
     voices = []
     dirs = []
+    # 内置音色（标记为 is_builtin=True）
     if VOICES_DIR.exists():
-        dirs += [p for p in VOICES_DIR.iterdir() if p.is_dir() and p.name != "user"]
+        for p in VOICES_DIR.iterdir():
+            if p.is_dir() and p.name != "user":
+                voices.append(read_voice_meta(p, is_builtin=True))
+    # 用户导入的音色（标记为 is_builtin=False）
     if USER_VOICES_DIR.exists():
-        dirs += [p for p in USER_VOICES_DIR.iterdir() if p.is_dir()]
-    for p in sorted(dirs, key=lambda x: x.name):
-        voices.append(read_voice_meta(p))
+        for p in USER_VOICES_DIR.iterdir():
+            if p.is_dir():
+                voices.append(read_voice_meta(p, is_builtin=False))
+    # 按名称排序
+    voices.sort(key=lambda x: x["name"])
     return voices
 
 

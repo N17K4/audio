@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""
-安装 manifest.json 中各引擎的 runtime_pip_packages（torch、torchaudio 等重型 ML 包）。
+"""安装基础 ML 依赖 — 所有引擎必需的包（torch、torchaudio、transformers 等）。
 
-两种模式：
-    # 开发模式：直接装入嵌入式 Python（pnpm run setup:ml）
-    python scripts/install-runtime-deps.py \
-        [--pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple]
+Base 引擎：Fish Speech、RVC、Seed-VC、Faster Whisper、FaceFusion
 
-    # 用户首次启动模式：装到 userData/python-packages/（由 Electron IPC 调用）
-    python scripts/install-runtime-deps.py \
+运行模式（本地开发）：
+    python scripts/ml_base.py
+    python scripts/ml_base.py --pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple
+
+用户首次启动（由 main.js 调用）：
+    python scripts/ml_base.py \
         --target /path/to/userData/python-packages \
         [--pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple] \
         [--json-progress]
@@ -30,6 +30,15 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# 基础引擎集合（默认安装，所有环境都需要）
+BASE_ENGINES = {
+    "facefusion",
+    "faster_whisper",
+    "fish_speech",
+    "rvc",
+    "seed_vc",
+}
 
 
 def get_embedded_python(root: Path) -> str:
@@ -64,13 +73,7 @@ def _dedup_packages(packages: list[str]) -> list[str]:
     return list(seen.values())
 
 
-def install_packages(
-    packages: list[str],
-    py: str,
-    target: str,        # 空串 = 装入嵌入式 Python 本身
-    mirror: str,
-    json_progress: bool,
-) -> bool:
+def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
     """安装包列表。target 为空时直接 pip install，否则 pip install --target。"""
     if target:
         Path(target).mkdir(parents=True, exist_ok=True)
@@ -79,11 +82,7 @@ def install_packages(
 
     for pkg in packages:
         module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
-        check = subprocess.run(
-            [py, "-c", f"import {module_name}"],
-            capture_output=True,
-            env=env,
-        )
+        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
         if check.returncode == 0:
             _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
             continue
@@ -106,27 +105,19 @@ def install_packages(
     return all_ok
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="安装 runtime_pip_packages")
-    parser.add_argument(
-        "--target", default="",
-        help="pip install --target 目录；省略则直接装入嵌入式 Python（开发模式）",
-    )
-    parser.add_argument(
-        "--pypi-mirror", default="", dest="pypi_mirror",
-        help="PyPI 镜像地址，如 https://pypi.tuna.tsinghua.edu.cn/simple",
-    )
-    parser.add_argument(
-        "--json-progress", action="store_true", dest="json_progress",
-        help="输出 JSON Lines 进度（供 Electron IPC 使用）",
-    )
+def main():
+    """安装基础 ML 包。"""
+    parser = argparse.ArgumentParser(description="安装基础 ML 运行库")
+    parser.add_argument("--target", default="", help="pip install --target 目录；省略则装到 local_data/python-packages/（开发模式）")
+    parser.add_argument("--pypi-mirror", default="", dest="pypi_mirror", help="PyPI 镜像地址")
+    parser.add_argument("--json-progress", action="store_true", dest="json_progress", help="输出 JSON Lines 进度")
     args = parser.parse_args()
 
-    target = args.target
-    mirror = args.pypi_mirror or ""
-    json_progress = args.json_progress
-
     project_root = Path(__file__).resolve().parent.parent
+
+    # 开发模式（无 --target）：默认装到 local_data/python-packages/，不污染嵌入式 Python
+    if not args.target:
+        args.target = str(project_root / "local_data" / "python-packages")
     resources_root_env = os.getenv("RESOURCES_ROOT", "")
     resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
 
@@ -134,45 +125,43 @@ def main() -> int:
     if not manifest_path.exists():
         manifest_path = project_root / "wrappers" / "manifest.json"
     if not manifest_path.exists():
-        _emit({"type": "log", "message": f"✗ 找不到 manifest.json: {manifest_path}"}, json_progress)
+        _emit({"type": "log", "message": f"✗ 找不到 manifest.json"}, args.json_progress)
         return 1
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-    engines: dict = manifest.get("engines", {})
+    engines: dict = {k: v for k, v in manifest.get("engines", {}).items() if k in BASE_ENGINES}
 
     py = get_embedded_python(resources_root) or get_embedded_python(project_root)
     if not py:
-        _emit({"type": "log", "message": "✗ 嵌入式 Python 未找到，请先运行 pnpm run setup"}, json_progress)
+        _emit({"type": "log", "message": "✗ 嵌入式 Python 未找到，请先运行 pnpm run setup"}, args.json_progress)
         return 1
 
-    phase_label = "1/2 正在安装运行库…" if json_progress else "安装 runtime_pip_packages"
-    _emit({"type": "phase", "label": phase_label}, json_progress)
-    if target:
-        _emit({"type": "log", "message": f"目标目录：{target}"}, json_progress)
+    phase_label = "1/2 正在安装运行库…" if args.json_progress else "安装 runtime_pip_packages"
+    _emit({"type": "phase", "label": phase_label}, args.json_progress)
+    if args.target:
+        _emit({"type": "log", "message": f"目标目录：{args.target}"}, args.json_progress)
     else:
-        _emit({"type": "log", "message": f"嵌入式 Python：{py}"}, json_progress)
-    if mirror:
-        _emit({"type": "log", "message": f"PyPI 镜像：{mirror}"}, json_progress)
+        _emit({"type": "log", "message": f"嵌入式 Python：{py}"}, args.json_progress)
+    if args.pypi_mirror:
+        _emit({"type": "log", "message": f"PyPI 镜像：{args.pypi_mirror}"}, args.json_progress)
 
     all_pkgs: list[str] = []
     for cfg in engines.values():
         all_pkgs.extend(cfg.get("runtime_pip_packages", []))
 
     packages = _dedup_packages(all_pkgs)
-
     if not packages:
-        _emit({"type": "log", "message": "无需安装运行时包"}, json_progress)
+        _emit({"type": "log", "message": "无需安装运行时包"}, args.json_progress)
         return 0
 
-    _emit({"type": "log", "message": f"共 {len(packages)} 个包待安装"}, json_progress)
-
-    ok = install_packages(packages, py, target, mirror, json_progress)
+    _emit({"type": "log", "message": f"共 {len(packages)} 个包待安装"}, args.json_progress)
+    ok = install_packages(packages, py, args.target, args.pypi_mirror, args.json_progress)
 
     if ok:
-        _emit({"type": "log", "message": "✓ 运行库安装完成"}, json_progress)
+        _emit({"type": "log", "message": "✓ 运行库安装完成"}, args.json_progress)
         return 0
     else:
-        _emit({"type": "log", "message": "✗ 部分包安装失败，请检查日志"}, json_progress)
+        _emit({"type": "log", "message": "✗ 部分包安装失败，请检查日志"}, args.json_progress)
         return 1
 
 

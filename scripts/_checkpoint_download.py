@@ -4,7 +4,7 @@
 从 runtime/manifest.json 读取文件清单，仅下载缺失的文件。
 下载完成后自动计算 sha256 并写回 manifest.json，后续运行自动校验完整性。
 
-pip 依赖安装和 FFmpeg 下载由 scripts/setup-engines.py 负责（pnpm run setup 阶段）。
+pip 依赖安装和 FFmpeg 下载由 scripts/setup_base.py 负责（pnpm run setup 阶段）。
 
 用法：
     python scripts/download_checkpoints.py                       # 检查并下载所有缺失
@@ -948,6 +948,8 @@ def main() -> int:
                         help="HuggingFace 镜像端点（如 https://hf-mirror.com）")
     parser.add_argument("--pypi-mirror", default="", dest="pypi_mirror",
                         help="PyPI 镜像地址（如 https://pypi.tuna.tsinghua.edu.cn/simple）")
+    parser.add_argument("--engines", default="",
+                        help="逗号分隔的引擎列表（仅处理这些引擎）；省略则处理所有")
     args = parser.parse_args()
     _JSON_MODE = args.json_progress
 
@@ -989,6 +991,15 @@ def main() -> int:
         print(f"✗ 引擎 '{args.engine}' 不在 manifest 中，可用: {list(engines)}")
         return 1
 
+    # 处理 --engines 过滤列表
+    engines_filter = set(e.strip() for e in args.engines.split(",") if e.strip()) if args.engines else None
+    if engines_filter:
+        invalid = engines_filter - set(engines.keys())
+        if invalid:
+            print(f"✗ 无效的引擎: {invalid}，可用: {list(engines)}")
+            return 1
+        engines = {k: v for k, v in engines.items() if k in engines_filter}
+
     mode = "检查" if args.check_only else "检查并下载"
     print(f"=== {mode} checkpoint 文件 ===")
     print(f"resources_root: {resources_root}\n")
@@ -996,8 +1007,8 @@ def main() -> int:
     sha256_updates: dict = {}
     all_ready = True
 
-    # 明确指定 --engine 时视为用户主动请求，required=false 的项目也要下载
-    explicit = bool(args.engine)
+    # 明确指定 --engine 或 --engines 时视为用户主动请求，required=false 的项目也要下载
+    explicit = bool(args.engine or args.engines)
 
     for engine_name, cfg in engines.items():
         if args.engine and engine_name != args.engine:

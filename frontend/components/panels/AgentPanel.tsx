@@ -17,9 +17,9 @@
  */
 
 import { useState } from 'react';
-import { AgentStep } from '../../types';
+import { AgentStep, CapabilityMap } from '../../types';
 import HowToSteps from '../shared/HowToSteps';
-import LlmProviderConfig, { LlmConfig, DEFAULT_LLM_CONFIG } from '../shared/LlmProviderConfig';
+import LlmConfigBar from '../shared/LlmConfigBar';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
 
 // ─── 实际运行流程（ReAct 智能体循环）────────────────────────────────────────
@@ -87,11 +87,27 @@ const STEP_LABELS: Record<string, string> = {
 
 interface Props {
   backendUrl: string;
+  capabilities: CapabilityMap;
+  selectedProvider: string;
+  apiKey: string;
+  cloudEndpoint: string;
+  setProviderMap: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setApiKey: (v: string) => void;
+  setCloudEndpoint: (v: string) => void;
 }
 
-export default function AgentPanel({ backendUrl }: Props) {
-  // ── 配置状态（provider / model / apiKey / ollamaUrl 统一由共享组件管理）──
-  const [llmConfig, setLlmConfig] = useState<LlmConfig>(DEFAULT_LLM_CONFIG);
+export default function AgentPanel({
+  backendUrl,
+  capabilities,
+  selectedProvider,
+  apiKey,
+  cloudEndpoint,
+  setProviderMap,
+  setApiKey,
+  setCloudEndpoint,
+}: Props) {
+  // ── 配置状态（LLM 模型选择） ──────────────────────────────────────────────
+  const [llmModel, setLlmModel] = useState('qwen2.5:0.5b');
 
   // ── 工具选择 ──────────────────────────────────────────────────────────────
   // 初始默认勾选「网络搜索」，最常用
@@ -114,7 +130,7 @@ export default function AgentPanel({ backendUrl }: Props) {
   // ── 执行智能体任务 ────────────────────────────────────────────────────────
   // POST /agent/run → SSE 流，每条 data 是一个 JSON 步骤对象
   const runAgent = async () => {
-    if (!task.trim() || selectedTools.length === 0) return;
+    if (!task.trim() || selectedTools.length === 0 || !llmModel) return;
 
     setSteps([]);   // 清空上次的执行记录
     setRunning(true);
@@ -125,10 +141,10 @@ export default function AgentPanel({ backendUrl }: Props) {
         body: JSON.stringify({
           task,
           tools: selectedTools,
-          provider: llmConfig.provider,
-          model: llmConfig.model,
-          api_key: llmConfig.apiKey,
-          ollama_url: llmConfig.ollamaUrl,
+          provider: selectedProvider,
+          model: llmModel,
+          api_key: apiKey,
+          ollama_url: selectedProvider === 'ollama' ? cloudEndpoint : 'http://127.0.0.1:11434',
         }),
       });
 
@@ -164,12 +180,26 @@ export default function AgentPanel({ backendUrl }: Props) {
       {/* ── 实际运行流程可视化 ── */}
       <ProcessFlow steps={AGENT_FLOW} color="#7c3aed" />
 
-      {/* ── 主体：左右两栏 ── */}
-      <div style={{ display: 'flex', gap: 24, flex: 1, minHeight: 0 }}>
+      {/* ── 主体：配置区 + 执行过程时间线 ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, flex: 1, minHeight: 0 }}>
 
-        {/* ━━ 左栏：配置区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* ━━ 顶部配置栏（并排） ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        <LlmConfigBar
+          task="agent"
+          capabilities={capabilities}
+          selectedProvider={selectedProvider}
+          llmModel={llmModel}
+          apiKey={apiKey}
+          cloudEndpoint={cloudEndpoint}
+          onProviderChange={v => setProviderMap(prev => ({ ...prev, agent: v }))}
+          onModelChange={setLlmModel}
+          onApiKeyChange={setApiKey}
+          onCloudEndpointChange={setCloudEndpoint}
+        />
+
+        {/* ━━ 配置区（工具、任务、按钮） ━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <div style={{
-          width: 300, display: 'flex', flexDirection: 'column',
+          display: 'flex', flexDirection: 'column',
           gap: 16, overflowY: 'auto'
         }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
@@ -179,38 +209,59 @@ export default function AgentPanel({ backendUrl }: Props) {
             </span>
           </h3>
 
-          {/* ── LLM 配置（provider / URL / model / apiKey）── */}
-          <LlmProviderConfig config={llmConfig} onChange={setLlmConfig} />
-
-          {/* ── 工具选择 ── */}
+          {/* ── 工具选择（网格多选 + 副标题说明）── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
-              赋予智能体的工具（至少勾选一个）
+              赋予智能体的工具（至少选一个）
             </label>
-            {Object.entries(TOOL_LABELS).map(([key, label]) => (
-              <label
-                key={key}
-                title={TOOL_TIPS[key]}          // 悬停显示工具详细说明
-                style={{
-                  display: 'flex', alignItems: 'flex-start',
-                  gap: 8, cursor: 'pointer', fontSize: 13
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedTools.includes(key)}
-                  onChange={() => toggleTool(key)}
-                  style={{ marginTop: 2, flexShrink: 0 }}
-                />
-                <div>
-                  <div>{label}</div>
-                  {/* 每个工具下方显示一行简短说明 */}
-                  <div style={{ fontSize: 11, color: '#999', marginTop: 1 }}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12,
+              padding: '10px', borderRadius: 8,
+              background: '#f9f9f9', border: '1px solid #e0e0e0'
+            }}>
+              {Object.entries(TOOL_LABELS).map(([key, label]) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <button
+                    onClick={() => toggleTool(key)}
+                    style={{
+                      padding: '10px 12px', borderRadius: 6,
+                      border: selectedTools.includes(key)
+                        ? '2px solid #4f46e5'
+                        : '1px solid #d0d0d0',
+                      background: selectedTools.includes(key)
+                        ? '#eef2ff'
+                        : '#fff',
+                      color: selectedTools.includes(key) ? '#4f46e5' : '#666',
+                      fontSize: 13, fontWeight: 500,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      textAlign: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!selectedTools.includes(key)) {
+                        e.currentTarget.style.background = '#f5f5f5';
+                        e.currentTarget.style.borderColor = '#999';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!selectedTools.includes(key)) {
+                        e.currentTarget.style.background = '#fff';
+                        e.currentTarget.style.borderColor = '#d0d0d0';
+                      }
+                    }}
+                  >
+                    {label}
+                  </button>
+                  {/* 副标题说明 */}
+                  <div style={{
+                    fontSize: 11, color: '#999', lineHeight: 1.4,
+                    maxHeight: '2.4em', overflow: 'hidden', textOverflow: 'ellipsis',
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'
+                  }}>
                     {TOOL_TIPS[key]}
                   </div>
                 </div>
-              </label>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* ── 任务描述 ── */}
@@ -238,20 +289,20 @@ export default function AgentPanel({ backendUrl }: Props) {
           {/* ── 执行按钮 ── */}
           <button
             onClick={runAgent}
-            disabled={running || !task.trim() || selectedTools.length === 0}
+            disabled={running || !task.trim() || selectedTools.length === 0 || !llmModel}
             style={{
               padding: '10px', borderRadius: 8,
               background: '#4f46e5', color: '#fff',
               border: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600,
-              opacity: (running || !task.trim() || selectedTools.length === 0) ? 0.5 : 1,
+              opacity: (running || !task.trim() || selectedTools.length === 0 || !llmModel) ? 0.5 : 1,
             }}
           >
             {running ? '执行中…（最多 10 轮）' : '开始执行'}
           </button>
         </div>
 
-        {/* ━━ 右栏：执行过程时间线 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* ━━ 执行过程时间线 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           gap: 12, overflowY: 'auto', minWidth: 0

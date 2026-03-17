@@ -1,10 +1,8 @@
 from pathlib import Path
 from config import MODEL_ROOT
-from logging_setup import setup_logging
+from logging_setup import setup_logging, logger
 
-logger = setup_logging(__name__)
-
-RAG_ROOT = MODEL_ROOT / "rag"
+RAG_ROOT = MODEL_ROOT / "rag" / "user"
 
 # 与 agent/graph.py 保持一致：所有 OpenAI 兼容服务商的接口地址
 OPENAI_COMPAT_URLS: dict[str, str] = {

@@ -86,21 +86,42 @@ async def run_smoketest():
     """运行基础功能烟雾测试（smoke_test.py）。"""
     from pathlib import Path
     import sys
+    import platform
+    import os
 
     test_file = Path(__file__).parent.parent.parent / "tests" / "smoke_test.py"
 
     if not test_file.exists():
         return {"ok": False, "error": f"测试文件不存在：{test_file}"}
 
+    # 使用嵌入式 Python（保持环境一致）
+    project_root = Path(__file__).parent.parent.parent
+    if platform.system() == "Windows":
+        py_exe = project_root / "runtime" / "win" / "python" / "python.exe"
+    else:
+        py_exe = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
+
+    if py_exe.exists():
+        py_cmd = str(py_exe)
+    else:
+        py_cmd = sys.executable
+
     def generate():
         """流式输出测试结果。"""
         try:
+            # PYTHONPATH 包含 local_data/python-packages/（开发模式 ML 包）
+            env = os.environ.copy()
+            ml_pkg_dir = str(project_root / "local_data" / "python-packages")
+            existing = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
+
             proc = subprocess.Popen(
-                [sys.executable, str(test_file)],
+                [py_cmd, str(test_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
 
             for line in iter(proc.stdout.readline, ''):
@@ -130,22 +151,42 @@ async def run_smoketest2():
     """运行 RAG / Agent / LoRA 进阶功能测试（smoke_test2.py）。"""
     from pathlib import Path
     import sys
+    import platform
+    import os
 
     test_file = Path(__file__).parent.parent.parent / "tests" / "smoke_test2.py"
 
     if not test_file.exists():
         return {"ok": False, "error": f"测试文件不存在：{test_file}"}
 
+    # 使用嵌入式 Python（以便 ml:extra 安装的包可被找到）
+    project_root = Path(__file__).parent.parent.parent
+    if platform.system() == "Windows":
+        py_exe = project_root / "runtime" / "win" / "python" / "python.exe"
+    else:
+        py_exe = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
+
+    if py_exe.exists():
+        py_cmd = str(py_exe)
+    else:
+        py_cmd = sys.executable
+
     def generate():
         """流式输出测试结果。"""
         try:
-            # 运行 pytest，直接执行测试脚本中的 main 逻辑
+            # PYTHONPATH 包含 local_data/python-packages/（开发模式 ML 包）
+            env = os.environ.copy()
+            ml_pkg_dir = str(project_root / "local_data" / "python-packages")
+            existing = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
+
             proc = subprocess.Popen(
-                [sys.executable, str(test_file)],
+                [py_cmd, str(test_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
 
             # 流式输出 stdout

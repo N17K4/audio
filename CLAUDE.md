@@ -160,24 +160,144 @@ models/
 - Python（开发环境 / backend）：一律用 `poetry`，禁止直接 `pip`
 - Python（runtime 引擎依赖）：各引擎用自己的 `requirements.txt`，通过内置 pip 安装，不走 poetry
 
+---
+
+## Python 环境架构
+
+| 层级 | 位置 | 内容 | 用途 |
+|------|------|------|------|
+| **Poetry 虚拟环境** | `~/.cache/pypoetry/virtualenvs/test001-*/` | backend 依赖（fastapi、uvicorn、httpx 等） | 开发模式后端（`poetry run uvicorn`） |
+| **嵌入式 Python** | `runtime/mac/python/bin/python3` | backend 依赖 + `pip_packages`（轻量：rvc-python 等） | 生产模式后端、ML 脚本运行器 |
+| **本地 ML 包** | `local_data/python-packages/`（开发） | torch、torchaudio、faiss、llama-index 等 | 开发模式 ML 包（gitignored） |
+| **用户 ML 包** | `userData/python-packages/`（生产） | 同上 | 生产模式用户首次启动下载 |
+
+### 核心原则
+
+**嵌入式 Python 保持干净** — 只装轻量 `pip_packages`，不装 GB 级 ML 包。ML 包统一装到外部目录，通过 PYTHONPATH 引用。这样打包体积小，开发/生产环境路径一致。
+
+```
+开发模式：
+  pnpm run setup          # setup_base.py：下载嵌入式 Python + backend 依赖 + pip_packages + 引擎源码 + FFmpeg
+  pnpm run ml / ml:extra  # 装 ML 包到 local_data/python-packages/（不污染嵌入式 Python）
+  npx electron .          # main.js 设 PYTHONPATH=local_data/python-packages/
+
+生产模式（用户下载 .app）：
+  app 启动后端            # PYTHONPATH=userData/python-packages/
+  首次启动引导            # ml_base.py / ml_extra.py --target userData/python-packages/
+```
+
+### PYTHONPATH 配置
+
+**开发模式（main.js）：**
+```javascript
+// PYTHONPATH 指向 local_data/python-packages/（pnpm run ml 安装的 ML 包）
+PYTHONPATH: [
+  path.join(__dirname, 'backend'),
+  path.join(__dirname, 'local_data', 'python-packages')
+].join(path.delimiter)
+```
+
+**生产模式（main.js）：**
+```javascript
+PYTHONPATH: [
+  path.join(__dirname, 'backend'),
+  getUserPackagesDir()  // userData/python-packages/
+].join(path.delimiter)
+```
+
+---
+
+## 脚本分层架构（pnpm scripts）
+
+```bash
+# ─── 环境初始化（用系统 Python 运行）──────────────────────────────────────
+pnpm run setup          # = python3 scripts/setup_base.py
+  # 下载嵌入式 Python + backend 依赖 + 基础引擎 pip_packages + 源码 + FFmpeg + pandoc
+pnpm run setup:extra    # = python3 scripts/setup_extra.py
+  # 额外引擎 pip_packages + 源码（liveportrait 等）
+
+# ─── ML 运行库（用嵌入式 Python 运行）─────────────────────────────────────
+pnpm run ml             # = runtime/.../python3 scripts/ml_base.py
+  # 安装 torch、torchaudio、transformers 等 → local_data/python-packages/
+pnpm run ml:extra       # = runtime/.../python3 scripts/ml_extra.py
+  # 安装 faiss、llama-index、peft 等 → local_data/python-packages/
+  # 支持分组：ml:rag / ml:agent / ml:lora
+
+# ─── 模型权重下载 ──────────────────────────────────────────────────────────
+pnpm run checkpoints       # 基础模型（Fish Speech、RVC、Seed-VC 等）
+pnpm run checkpoints:extra # 额外模型（RAG、Agent 等）
+```
+
+### manifest.json 中的包配置
+- **pip_packages** — 轻量依赖（rvc-python、setuptools 等），`setup_base.py` / `setup_extra.py` 阶段装入嵌入式 Python
+- **runtime_pip_packages** — 重型 ML 包（torch、faiss、transformers 等），`ml_base.py` / `ml_extra.py` 装到 `local_data/python-packages/`（开发）或 `userData/python-packages/`（生产）
+
+---
+
+## 烟雾测试两层架构
+
+| 层级 | 文件 | 功能 | 环境 |
+|------|------|------|------|
+| **基础** | `tests/smoke_test.py` | TTS / STT / VC / 训练 / FFmpeg | 嵌入式 Python |
+| **进阶** | `tests/smoke_test2.py` | RAG / Agent / LoRA | 嵌入式 Python |
+
+### 运行方式
+- 页面：TaskList → "运行烟雾测试 1/2"，前端流式显示日志 + 结果汇总
+- 命令行：`runtime/mac/python/bin/python3 tests/smoke_test.py`
+- Pytest：`poetry run pytest tests/smoke_test.py -v`
+
+### 前端结果展示
+后端返回 SSE 流，前端：
+1. 流式显示所有详细日志
+2. 解析"✅ 通过 — XXX"格式，提取结果汇总
+3. 根据 exit code 判断成功/失败
+
+---
+
 ## 依赖安装时机（强制规范）
 
-**所有 Python 依赖的安装，必须且只能在以下阶段触发：**
-- `pnpm run setup` / `pnpm run setup:backend`（轻量依赖 + 引擎源码）
-- `pnpm run setup:ml`（`scripts/install-runtime-deps.py`，torch 等重型 ML 包，装入嵌入式 Python）
-- `pnpm run checkpoints`（`scripts/download_checkpoints.py`，模型文件下载）
-- `pnpm run dist`（打包阶段）
+### 三阶段分工
 
-**严禁在用户运行时（runtime）动态安装任何依赖。** 具体禁止：
-- 在引擎 CLI 脚本（如 `fish_speech_cli.py`、`inference.py` 等）中执行 `pip install`
+| 阶段 | 时机 | 脚本 | 安装到 | 内容 |
+|------|------|------|--------|------|
+| **CI 构建 / 开发 setup** | 打包前 | `setup_base.py` / `setup_extra.py` | 嵌入式 Python | 引擎源码 + `pip_packages`（轻量：rvc-python、setuptools 等） |
+| **开发 ML** | 本地开发 | `ml_base.py` / `ml_extra.py` | `local_data/python-packages/` | `runtime_pip_packages`（torch、faiss、llama-index 等） |
+| **用户首次启动** | 生产首次 | `ml_base.py` / `ml_extra.py --target userData/` | `userData/python-packages/` | 同上 |
+
+### 开发流程
+
+```bash
+pnpm run setup        # 下载嵌入式 Python + backend 依赖 + 引擎 pip_packages + 源码 + FFmpeg
+pnpm run ml           # torch 等 → local_data/python-packages/
+pnpm run ml:extra     # faiss 等 → local_data/python-packages/（可选）
+pnpm run checkpoints  # 模型权重 → checkpoints/
+```
+
+**打包：** `pnpm run dist`
+```
+安装包只包含：嵌入式 Python（仅 pip_packages，无 ML 包）+ 应用代码
+不包含：local_data/（gitignored）、checkpoints/（gitignored）
+```
+
+**生产用户首次启动：** 引导页面
+```
+阶段 1：ml_base.py --target userData/python-packages/（torch 等）
+阶段 2：checkpoints_base.py（模型权重）
+按需：ml_extra.py --target userData/python-packages/（faiss 等进阶功能）
+```
+
+### 严禁运行时动态安装
+
+**禁止：**
+- 在引擎脚本（`fish_speech_cli.py` 等）中调用 `pip install`
 - 在后端处理请求时安装包
-- 在任何被用户触发的代码路径中调用 `subprocess.run(["pip", "install", ...])`
+- 在用户触发的代码路径中动态装包
 
-如果引擎缺少某个 Python 包，正确做法是：
-1. 在 `wrappers/manifest.json` 对应引擎的 `pip_packages`（轻量）或 `runtime_pip_packages`（torch 等重型）字段中声明
-2. 轻量依赖：`setup-engines.py` 在 CI/setup 阶段装入嵌入式 Python
-3. 重型依赖：`install-runtime-deps.py` 在 `pnpm run setup:ml`（开发）或用户首次启动引导（生产）时安装
-4. 引擎脚本只负责 import，缺包时打印错误信息并以非零退出码退出
+**正确做法：**
+1. 在 `wrappers/manifest.json` 声明依赖：`pip_packages` 或 `runtime_pip_packages`
+2. 轻量依赖在 CI 或 setup 阶段装（开发）
+3. 重型依赖用户首次启动时装到 userData（生产）
+4. 引擎脚本只 import，缺包时打印错误 + 非零退出码
 
 ## 分发架构与下载分工
 
@@ -185,22 +305,22 @@ models/
 
 | 阶段 | 脚本调用 | 装什么 | 存到哪 |
 |---|---|---|---|
-| **CI 构建** | `setup-engines.py`（无参数） | 引擎源码（HF zip / git clone）+ `pip_packages`（轻量依赖） | 嵌入式 Python，打进安装包 |
-| **本地开发（ML 包）** | `pnpm run setup:ml` → `install-runtime-deps.py` | `runtime_pip_packages`（torch、torchaudio 等重型 ML 包） | 嵌入式 Python |
-| **用户首次启动 Phase 1** | `install-runtime-deps.py --target userData/` | 同上 | `userData/python-packages/`，不打包 |
-| **用户首次启动 Phase 2** | `download_checkpoints.py`（无 `--engine`，全量） | 所有 `default_install: true` 引擎的 checkpoint + 内置音色 | `checkpoints/` + `models/voices/` |
-| **本地开发（模型）** | `pnpm run checkpoints` | 同 Phase 2 | 同上 |
+| **CI 构建 / 开发 setup** | `setup_base.py` / `setup_extra.py` | 引擎源码 + `pip_packages`（轻量依赖） | 嵌入式 Python，打进安装包 |
+| **开发 ML** | `pnpm run ml` / `ml:extra` | `runtime_pip_packages`（torch 等重型 ML 包） | `local_data/python-packages/`（gitignored） |
+| **用户首次启动 Phase 1** | `ml_base.py --target userData/` | 同上 | `userData/python-packages/` |
+| **用户首次启动 Phase 2** | `checkpoints_base.py` | 所有 `default_install: true` 引擎的 checkpoint + 内置音色 | `checkpoints/` + `models/voices/` |
+| **开发模型** | `pnpm run checkpoints` | 同 Phase 2 | 同上 |
 
 ### pip_packages vs runtime_pip_packages
 
 `wrappers/manifest.json` 每个引擎有两类依赖字段：
 
-- **`pip_packages`**：轻量依赖（loguru、soundfile、rvc-python 等），CI build 阶段装入嵌入式 Python，打进安装包，用户无需等待
-- **`runtime_pip_packages`**：重型 ML 包（torch、torchaudio、transformers 等），体积几 GB，不打进包，用户首次启动时通过引导窗口按需下载，支持配置 PyPI 镜像
+- **`pip_packages`**：轻量依赖（loguru、soundfile、rvc-python 等），`setup_base.py` / `setup_extra.py` 装入嵌入式 Python，打进安装包
+- **`runtime_pip_packages`**：重型 ML 包（torch、torchaudio、transformers 等），体积几 GB，不打进包，装到外部目录（开发：`local_data/`，生产：`userData/`），通过 PYTHONPATH 引用
 
 ### 内置音色不打进安装包
 
-内置音色（hutao-jp、Ayayaka、tsukuyomi、raiden 等）和其他引擎 checkpoint 一样，走用户首次启动引导下载，不在 CI 阶段下载打包。CI workflow 只跑 `setup-engines.py`，不跑 `download_checkpoints.py`。
+内置音色（hutao-jp、Ayayaka、tsukuyomi、raiden 等）和其他引擎 checkpoint 一样，走用户首次启动引导下载，不在 CI 阶段下载打包。CI workflow 只跑 `setup_base.py`，不跑 `checkpoints_base.py`。
 
 **原因**：安装包体积控制；引导流程已支持全量下载，无需单独处理音色。
 
@@ -234,7 +354,7 @@ wrappers/
 └── wan/                       # inference.py
 ```
 
-`wrappers/manifest.json` 包含 `voices` 引擎定义，内置音色通过 `download_checkpoints.py`（全量）从 HF `N17K4/ai-workshop-assets` dataset 下载到 `models/voices/`，不打包进安装包。
+`wrappers/manifest.json` 包含 `voices` 引擎定义，内置音色通过 `checkpoints_base.py` 从 HF `N17K4/ai-workshop-assets` dataset 下载到 `models/voices/`，不打包进安装包。
 
 ### runtime/ 结构（整个目录 gitignored）
 ```
@@ -242,7 +362,7 @@ runtime/
 ├── mac/、win/                 # embedded Python + ffmpeg + pandoc（setup 阶段安装）
 │   ├── python/                # 嵌入式 Python 解释器
 │   └── bin/                   # ffmpeg、pandoc 二进制（打包时加入 extraResources）
-├── rvc/engine/                # setup-engines.py 生成的 infer.py
+├── rvc/engine/                # setup_base.py 生成的 infer.py
 ├── fish_speech/engine/        # HF zip 下载 或 git clone fishaudio/fish-speech
 ├── seed_vc/engine/            # HF zip 下载 或 git clone seed-vc
 ├── facefusion/engine/         # HF zip 下载 或 git clone facefusion
@@ -262,7 +382,7 @@ runtime/
 | `retinaface_10g.onnx` 等 | FaceFusion 推理模型（4 个 ONNX） |
 | `hutao-jp/`、`Ayayaka/` 等 | 内置音色 `.pth` + `.index` 文件 |
 
-`setup-engines.py` 的 `_download_engine_zip_from_hf()` 优先从 HF 下载引擎 zip，失败时回退 git clone。
+`setup_base.py` / `setup_extra.py` 的 `_download_engine_zip_from_hf()` 优先从 HF 下载引擎 zip，失败时回退 git clone。
 
 ### 版本锁定
 - **fish_speech engine**：HF zip `fish_speech_v1.5.0.zip`（回退：git clone tag `v1.5.0`）
@@ -271,7 +391,7 @@ runtime/
 - **FaceFusion ONNX**：从 `N17K4/ai-workshop-assets` dataset 下载，不再依赖 GitHub Releases
 
 ### MPS 补丁（macOS Apple Silicon）
-`setup-engines.py` 的 `_patch_fish_speech_generate()` 在引擎就绪后自动修补两处 `torch.isin` dtype 不匹配：
+`setup_base.py` 的 `_patch_fish_speech_generate()` 在引擎就绪后自动修补两处 `torch.isin` dtype 不匹配：
 - `tools/llama/generate.py`：`semantic_ids_tensor` 加 `dtype=codebooks.dtype`
 - `fish_speech/models/text2semantic/llama.py`：`semantic_token_ids_tensor` 加 `dtype=inp.dtype`
 
