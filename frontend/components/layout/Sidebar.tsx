@@ -1,7 +1,7 @@
 import { TASK_LABELS } from '../../constants';
 import type { TaskType, Job } from '../../types';
 
-export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert' | 'image_tools' | 'video_tools' | 'text_tools' | 'misc' | 'advanced_tools';
+export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert' | 'image_tools' | 'video_tools' | 'text_tools' | 'misc' | 'advanced_tools' | 'rag' | 'agent';
 
 interface SidebarProps {
   currentPage: Page;
@@ -113,13 +113,27 @@ export default function Sidebar({
               <path d="M7 9h14M7 14h10M7 19h8" stroke="#bae6fd" strokeWidth="2" strokeLinecap="round"/>
             </svg>
           } />
-          <NavItem page="advanced_tools" label="AI 进阶" subtitle="知识库 · 智能体 · 微调" icon={
+          <NavItem page="rag" label="知识库" subtitle="RAG" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#0d9488"/>
+              <path d="M8 8h12M8 12h12M8 16h8M8 20h10" stroke="#99f6e4" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="20" cy="12" r="3" fill="none" stroke="#99f6e4" strokeWidth="1.5"/>
+            </svg>
+          } />
+          <NavItem page="agent" label="智能体" subtitle="Agent" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#7c3aed"/>
               <circle cx="14" cy="10" r="4" fill="none" stroke="#ddd6fe" strokeWidth="1.5"/>
               <path d="M7 22c0-3.866 3.134-7 7-7s7 3.134 7 7" fill="none" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round"/>
               <circle cx="21" cy="10" r="2.5" fill="#a78bfa"/>
               <circle cx="7" cy="10" r="2.5" fill="#a78bfa"/>
+            </svg>
+          } />
+          <NavItem page="advanced_tools" label="微调" subtitle="Fine-tune" icon={
+            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+              <rect width="28" height="28" rx="7" fill="#be185d"/>
+              <circle cx="14" cy="12" r="3" fill="none" stroke="#fbcfe8" strokeWidth="1.5"/>
+              <path d="M10 18c1.5 2 2.5 2.5 4 2.5s2.5-.5 4-2.5" stroke="#fbcfe8" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           } />
           <NavItem page="format_convert" label="格式转换" subtitle="音视频 · 文档" icon={

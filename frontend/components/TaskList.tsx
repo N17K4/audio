@@ -173,10 +173,20 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
   const [smokeSummary, setSmokeSummary] = useState<Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>>([]);
   const smokeLogRef = useRef<HTMLDivElement>(null);
 
+  const [smoke2Running, setSmoke2Running] = useState(false);
+  const [smoke2Log, setSmoke2Log] = useState<string[]>([]);
+  const [smoke2Summary, setSmoke2Summary] = useState<Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>>([]);
+  const smoke2LogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const el = smokeLogRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [smokeLog]);
+
+  useEffect(() => {
+    const el = smoke2LogRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [smoke2Log]);
 
   async function runSmokeTests() {
     setSmokeRunning(true);
@@ -330,6 +340,103 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     setSmokeSummary(results);
     onFetchJobs();
     setSmokeRunning(false);
+  }
+
+  async function runSmokeTests2() {
+    setSmoke2Running(true);
+    setSmoke2Log([]);
+    setSmoke2Summary([]);
+
+    const log = (msg: string) => setSmoke2Log(prev => [...prev, msg]);
+    let hasError = false;
+
+    try {
+      log('烟雾测试 2 启动…');
+      log('');
+
+      const response = await fetch(`${backendBaseUrl}/smoketest2/run`, {
+        method: 'POST',
+        headers: { 'Accept': 'text/event-stream' },
+      });
+
+      if (!response.ok) {
+        log(`✗ 请求失败: HTTP ${response.status}`);
+        const err = await response.text();
+        if (err) log(err);
+        hasError = true;
+        setSmoke2Summary([{ name: 'RAG/Agent/LoRA 测试', status: 'failed' }]);
+        setSmoke2Running(false);
+        return;
+      }
+
+      // 解析 SSE 流
+      const reader = response.body?.getReader();
+      if (!reader) {
+        log('✗ 无法读取响应流');
+        hasError = true;
+        setSmoke2Summary([{ name: 'RAG/Agent/LoRA 测试', status: 'failed' }]);
+        setSmoke2Running(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines[lines.length - 1];
+
+        for (let i = 0; i < lines.length - 1; i++) {
+          const line = lines[i];
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonStr = line.slice(6);
+              const data = JSON.parse(jsonStr);
+              if (data.log) {
+                log(data.log);
+                // 检测错误信息
+                if (data.log.includes('❌') || data.log.includes('失败')) {
+                  hasError = true;
+                }
+              }
+            } catch (e) {
+              // 忽略 JSON 解析错误
+            }
+          }
+        }
+      }
+
+      // 处理剩余 buffer
+      if (buffer.startsWith('data: ')) {
+        try {
+          const jsonStr = buffer.slice(6);
+          const data = JSON.parse(jsonStr);
+          if (data.log) {
+            log(data.log);
+            if (data.log.includes('❌') || data.log.includes('失败')) {
+              hasError = true;
+            }
+          }
+        } catch (e) {
+          // 忽略
+        }
+      }
+
+    } catch (e: any) {
+      log(`✗ 执行异常: ${e.message}`);
+      hasError = true;
+    }
+
+    // 根据是否有错误设置结果状态
+    setSmoke2Summary([{
+      name: 'RAG/Agent/LoRA 测试',
+      status: hasError ? 'failed' : 'passed'
+    }]);
+    setSmoke2Running(false);
   }
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
   const now = Date.now() / 1000;
@@ -600,6 +707,63 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2">测试结果汇总</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               {smokeSummary.map(r => (
+                <div key={r.name} className="flex items-center gap-1.5 text-xs">
+                  {r.status === 'passed'  && <span className="text-emerald-500 font-bold shrink-0">✓</span>}
+                  {r.status === 'failed'  && <span className="text-rose-500 font-bold shrink-0">✗</span>}
+                  {r.status === 'skipped' && <span className="text-amber-500 font-bold shrink-0">⚠</span>}
+                  <span className={
+                    r.status === 'passed'  ? 'text-emerald-700 dark:text-emerald-400' :
+                    r.status === 'failed'  ? 'text-rose-600 dark:text-rose-400' :
+                    'text-amber-600 dark:text-amber-400'
+                  }>{r.name}</span>
+                  {r.status === 'skipped' && <span className="text-slate-400 text-[10px]">跳过</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+      {/* 烟雾测试 2 */}
+      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试 2</span>
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">高级功能测试（RAG 知识库 · Agent 智能体 · LoRA 微调）</p>
+            <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-1 font-mono">
+              <p>📥 会自动拉取的资源：</p>
+              <p className="ml-3">├─ nomic-embed-text (~274MB, RAG 向量嵌入)</p>
+              <p className="ml-3">└─ qwen2.5:0.5b (~370MB, Agent 推理)</p>
+            </div>
+            <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-2">⚠️ 前置要求：</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-3">• ollama serve 运行中</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-3">• pnpm run setup:ml 已执行</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">💡 需要网络连接（首次拉取较慢，可能 5-10 分钟）</p>
+          </div>
+          <button
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
+            style={{ backgroundColor: SPRING_GREEN }}
+            disabled={smoke2Running || !backendBaseUrl}
+            onClick={runSmokeTests2}
+          >
+            {smoke2Running ? <><Spinner />运行中…</> : '运行烟雾测试 2'}
+          </button>
+        </div>
+        {smoke2Log.length > 0 && (
+          <div
+            ref={smoke2LogRef}
+            className="px-5 py-3 bg-slate-950 text-green-400 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap"
+            style={{ maxHeight: '10rem' }}
+          >
+            {smoke2Log.join('\n')}
+          </div>
+        )}
+        {smoke2Summary.length > 0 && (
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
+            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2">测试结果汇总</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {smoke2Summary.map(r => (
                 <div key={r.name} className="flex items-center gap-1.5 text-xs">
                   {r.status === 'passed'  && <span className="text-emerald-500 font-bold shrink-0">✓</span>}
                   {r.status === 'failed'  && <span className="text-rose-500 font-bold shrink-0">✗</span>}

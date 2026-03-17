@@ -175,7 +175,7 @@ export default function AgentPanel({ backendUrl }: Props) {
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
             智能体
             <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
-              Agent · ReAct
+              Agent
             </span>
           </h3>
 

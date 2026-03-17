@@ -196,7 +196,7 @@ export default function RagPanel({ backendUrl }: Props) {
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
             知识库管理
             <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
-              RAG · Retrieval-Augmented Generation
+              RAG
             </span>
           </h3>
 

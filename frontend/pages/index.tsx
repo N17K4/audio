@@ -57,7 +57,7 @@ export default function Home() {
 
   const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' :
     showAudioTools ? 'audio_tools' : showFormatConvert ? 'format_convert' :
-    showAdvancedTools ? 'advanced_tools' :
+    showAdvancedTools ? (advancedSubPage === 'rag' ? 'rag' : advancedSubPage === 'agent' ? 'agent' : 'advanced_tools') :
     showImageTools ? 'image_tools' : showVideoTools ? 'video_tools' :
     showTextTools ? 'text_tools' : taskType;
 
@@ -102,10 +102,20 @@ export default function Home() {
         if (subPage !== 'llm') misc.setMiscSubPage(subPage as MiscSubPage);
       }
     }
+    else if (page === 'rag') {
+      resetAll(); setShowAdvancedTools(true);
+      setAdvancedSubPage('rag');
+    }
+    else if (page === 'agent') {
+      resetAll(); setShowAdvancedTools(true);
+      setAdvancedSubPage('agent');
+    }
     else if (page === 'advanced_tools') {
       resetAll(); setShowAdvancedTools(true);
       if (subPage === 'rag' || subPage === 'agent' || subPage === 'finetune') {
         setAdvancedSubPage(subPage);
+      } else {
+        setAdvancedSubPage('finetune');
       }
     }
     else if (page === 'misc') {
@@ -1513,20 +1523,22 @@ export default function Home() {
                   </div>
                 </header>
                 <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                  {(['rag', 'agent', 'finetune'] as const).map(tab => {
-                    const labels: Record<string, string> = { rag: '知识库', agent: '智能体', finetune: 'LoRA 微调' };
-                    return (
-                      <button key={tab}
-                        onClick={() => setAdvancedSubPage(tab)}
-                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                          advancedSubPage === tab
-                            ? 'bg-white dark:bg-slate-900 text-[#7c3aed] shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                        }`}>
-                        {labels[tab]}
-                      </button>
-                    );
-                  })}
+                  {([
+                    ['rag',      '知识库',   'RAG'      ],
+                    ['agent',    '智能体',   'Agent'    ],
+                    ['finetune', 'LoRA 微调', 'Fine-tune'],
+                  ] as const).map(([tab, label, abbr]) => (
+                    <button key={tab}
+                      onClick={() => setAdvancedSubPage(tab)}
+                      className={`flex-1 py-2 rounded-lg flex flex-col items-center gap-0.5 transition-all ${
+                        advancedSubPage === tab
+                          ? 'bg-white dark:bg-slate-900 text-[#7c3aed] shadow-sm'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                      }`}>
+                      <span className="text-sm font-medium leading-tight">{label}</span>
+                      <span className={`text-[10px] font-mono leading-tight ${advancedSubPage === tab ? 'text-[#7c3aed]' : 'text-slate-400 dark:text-slate-600'}`}>{abbr}</span>
+                    </button>
+                  ))}
                 </div>
                 {advancedSubPage === 'rag' && <RagPanel backendUrl={backend.backendBaseUrl} />}
                 {advancedSubPage === 'agent' && <AgentPanel backendUrl={backend.backendBaseUrl} />}
