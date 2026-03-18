@@ -37,15 +37,16 @@ jobs:
             AI-Workshop-win-*.zip
           retention-days: 1  # 临时中转，1天即删
 
-  # ─── 阶段 2: 并行分发 (切换到便宜的 Linux 资源) ─────────────────────
+  # ─── 阶段 2: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ─────────────────
   publish:
-    name: '🚀 分发: ${{ matrix.target }}'
+    name: '🚀 ${{ matrix.target }}'
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false  # 关键：任一失败不影响其他，三个任务互不阻塞
+      fail-fast: false  # 关键：任一失败不影响其他，四个任务完全独立
       matrix:
-        target: [upyun, github-release, artifacts-backup]
+        # 直接拆成 4 个并行任务，每个都是独立的虚拟机
+        target: [upyun, mac-release, win-release, artifacts-backup]
     steps:
       - name: 检出脚本
         uses: actions/checkout@v4
@@ -56,8 +57,8 @@ jobs:
           name: build-assets
           path: ./
 
-      # ── 任务1: 上传到又拍云 ──────────────────────────────────────────
-      - name: 📤 上传 Windows 到又拍云
+      # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
+      - name: 📤 Windows → 又拍云
         if: matrix.target == 'upyun'
         env:
           UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
@@ -65,18 +66,24 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: bash scripts/upload.sh --win --upyun-only
 
-      # ── 任务2: 发布到 GitHub Release ─────────────────────────────────
-      - name: 📋 发布到 GitHub Release (macOS + Windows)
-        if: matrix.target == 'github-release'
+      # ── 任务2: macOS → GitHub Release ───────────────────────────────
+      - name: 📋 macOS → GitHub Release
+        if: matrix.target == 'mac-release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
-        run: |
-          bash scripts/upload.sh --mac --release-only
-          bash scripts/upload.sh --win --release-only
+        run: bash scripts/upload.sh --mac --release-only
 
-      # ── 任务3: 备份 Artifacts ────────────────────────────────────────
-      - name: 💾 归档为 GitHub Artifacts
+      # ── 任务3: Windows → GitHub Release ─────────────────────────────
+      - name: 📋 Windows → GitHub Release
+        if: matrix.target == 'win-release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: bash scripts/upload.sh --win --release-only
+
+      # ── 任务4: 两个 ZIP → GitHub Artifacts 备份 ──────────────────────
+      - name: 💾 Artifacts 备份
         if: matrix.target == 'artifacts-backup'
         uses: actions/upload-artifact@v4
         with:
