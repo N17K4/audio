@@ -21,6 +21,7 @@ import json
 import os
 import platform
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -199,7 +200,7 @@ def check_and_download(
     checkpoint_files: list[dict] = cfg.get("checkpoint_files", [])
 
     if not checkpoint_files:
-        msg = f"  [{engine_name}] 无 checkpoint_files 定义，跳过（依赖 hf_cache_downloads）"
+        msg = f"  [{engine_name}] 无需 checkpoint_files，继续检查 HF 缓存/本地模型"
         emit("log", message=msg)
         return True
 
@@ -523,11 +524,13 @@ def download_hf_cache(
 
         try:
             if filename:
+                final_dest = cache_dir / filename
+                final_dest.parent.mkdir(parents=True, exist_ok=True)
                 # 单文件：JSON 模式用 HTTP 直连以获得实时进度，否则用 hf_hub_download
                 if _JSON_MODE:
                     hf_url = f"{HF_ENDPOINT}/{repo_id}/resolve/{revision}/{filename}"
-                    # HTTP 下载到临时路径，完成后移入 HF cache 格式目录
-                    tmp_dest = cache_dir / filename
+                    # HTTP 下载到最终目标路径，确保离线模式能直接命中本地文件
+                    tmp_dest = final_dest
                     msg2 = f"  [HTTP 单文件] {hf_url}"
                     print(msg2)
                     emit("log", message=msg2)
@@ -535,18 +538,25 @@ def download_hf_cache(
                         download_via_requests(hf_url, tmp_dest)
                     except Exception as http_err:
                         emit("log", message=f"    HTTP 下载失败 ({http_err.__class__.__name__})，回退 hf_hub_download…")
-                        hf_hub_download(
+                        downloaded = Path(hf_hub_download(
                             repo_id=repo_id, filename=filename,
                             revision=revision, cache_dir=str(cache_dir), token=token,
-                        )
+                        ))
+                        if downloaded.resolve() != final_dest.resolve():
+                            shutil.copy2(downloaded, final_dest)
                 else:
                     msg2 = f"  [HF单文件] {repo_id}  {filename}  revision={revision}  cache_dir={cache_dir}"
                     print(msg2)
                     emit("log", message=msg2)
-                    hf_hub_download(
+                    downloaded = Path(hf_hub_download(
                         repo_id=repo_id, filename=filename,
                         revision=revision, cache_dir=str(cache_dir), token=token,
-                    )
+                    ))
+                    if downloaded.resolve() != final_dest.resolve():
+                        shutil.copy2(downloaded, final_dest)
+
+                if not final_dest.exists() or final_dest.stat().st_size <= 0:
+                    raise FileNotFoundError(f"下载完成后目标文件不存在: {final_dest}")
             else:
                 ignore_patterns: list[str] = item.get("ignore_patterns", [])
                 msg2 = (f"  [HF快照] {repo_id}  revision={revision}  cache_dir={cache_dir}"
