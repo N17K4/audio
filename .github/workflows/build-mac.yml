@@ -28,21 +28,35 @@ jobs:
       - name: 执行 dist.sh (生成双端安装包)
         run: bash scripts/dist.sh --both
 
-      - name: 提取 ZIP 到根目录
-        run: mv dist/**/*.zip . 2>/dev/null || true
-
-      - name: 检查产物位置 (调试)
+      - name: 压缩为 ZIP (macOS + Windows)
         run: |
-          echo "━━━━━━ 搜索所有 ZIP 文件 ━━━━━━"
-          find . -name "AI-Workshop-*.zip" -type f
-          echo "━━━━━━ dist 目录结构 ━━━━━━"
-          ls -R dist/ 2>/dev/null | head -50
+          TAG="${{ github.ref_name }}"
+          TAG="${TAG#v}"
+          [ -z "$TAG" ] && TAG="dev"
 
-      - name: 存储产物 (递归搜索所有 ZIP)
+          # macOS
+          if [ -d "dist/mac-arm64/AI Workshop.app" ]; then
+            echo "📦 压缩 macOS..."
+            ditto -c -k --sequesterRsrc --keepParent "dist/mac-arm64/AI Workshop.app" "AI-Workshop-mac-${TAG}.zip"
+            ls -lh "AI-Workshop-mac-${TAG}.zip"
+          fi
+
+          # Windows
+          if [ -d "dist/win-unpacked" ]; then
+            echo "📦 压缩 Windows..."
+            if command -v 7z &> /dev/null; then
+              7z a -tzip "AI-Workshop-win-${TAG}.zip" "dist/win-unpacked"
+            else
+              tar -czf "AI-Workshop-win-${TAG}.tar.gz" "dist/win-unpacked"
+            fi
+            ls -lh "AI-Workshop-"*
+          fi
+
+      - name: 存储产物
         uses: actions/upload-artifact@v4
         with:
           name: build-assets
-          path: "**/*.zip"
+          path: AI-Workshop-*.zip
           if-no-files-found: error
           retention-days: 1
 
