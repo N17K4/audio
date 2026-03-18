@@ -56,13 +56,13 @@ else
         export PATH="$HOME/.local/bin:$PATH"
         MISE_CMD="$HOME/.local/bin/mise"
     elif [[ "$OS" == "win" ]]; then
-        powershell -NoProfile -Command @"
-\$MiseInstaller = "\$env:TEMP\mise-installer.ps1"
-\$ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest -Uri "https://mise.jdx.dev/install.ps1" -OutFile \$MiseInstaller
-& powershell -ExecutionPolicy Bypass -File \$MiseInstaller
-Remove-Item \$MiseInstaller -Force
-"@
+        powershell -NoProfile -Command <<'EOF'
+$MiseInstaller = "$env:TEMP\mise-installer.ps1"
+$ProgressPreference = 'SilentlyContinue'
+Invoke-WebRequest -Uri "https://mise.jdx.dev/install.ps1" -OutFile $MiseInstaller
+& powershell -ExecutionPolicy Bypass -File $MiseInstaller
+Remove-Item $MiseInstaller -Force
+EOF
         export PATH="$APPDATA/mise/shims:$PATH"
         MISE_CMD="mise"
     else
