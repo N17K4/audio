@@ -150,6 +150,7 @@ def get_fish_speech_command_template() -> str:
 def detect_seed_vc_script() -> str:
     candidates = [
         WRAPPERS_ROOT / "seed_vc" / "inference.py",
+        RUNTIME_ROOT / "seed_vc" / "engine" / "inference.py",
         RUNTIME_ROOT / "seed_vc" / "run_inference.py",
         RUNTIME_ROOT / "seed_vc" / "seed_vc" / "inference.py",
     ]
@@ -345,6 +346,11 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     # 新版 protobuf (>=4.x) 的 C 扩展禁用了 Descriptor 直接创建，导致 ImportError。
     # 强制使用纯 Python 实现以规避此问题（对所有引擎无副作用）。
     merged["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+    ffmpeg_bin = get_ffmpeg_binary()
+    if ffmpeg_bin:
+        ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)
+        merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
+        merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
     return merged
 
 

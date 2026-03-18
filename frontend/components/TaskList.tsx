@@ -212,6 +212,34 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       return { ok: true, data: body };
     }
 
+    async function fetchJob(jobId: string): Promise<Job | null> {
+      try {
+        const r = await fetch(`${backendBaseUrl}/jobs`);
+        if (!r.ok) return null;
+        const data = await r.json();
+        const items: Job[] = Array.isArray(data) ? data : (data.jobs ?? []);
+        return items.find(j => j.id === jobId) ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function waitForJob(jobId: string, name: string, timeoutMs = 180000): Promise<Job | null> {
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        const job = await fetchJob(jobId);
+        if (job && (job.status === 'completed' || job.status === 'failed')) return job;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+      log(`✗ ${name} 超时：任务 ${jobId.slice(0, 8)} 在 ${Math.round(timeoutMs / 1000)}s 内未完成`);
+      return null;
+    }
+
+    function expectedFacefusionFailure(err: string): boolean {
+      const text = err.toLowerCase();
+      return text.includes('no face') || text.includes('未检测到') || text.includes('无人脸') || text.includes('face');
+    }
+
     const testWav = createTestWav();
     let rvcVoiceId: string | null = null;
     try {
@@ -231,7 +259,13 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
       const res = await postForm(`${backendBaseUrl}/tasks/tts`, fd);
       if (res.ok === false) { log(`✗ Fish Speech TTS 失败: ${res.errMsg}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
-      else if (res.data?.job_id) { log(`✓ Fish Speech TTS 已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Fish Speech TTS', status: 'passed' }); }
+      else if (res.data?.job_id) {
+        const jobId = String(res.data.job_id);
+        log(`… Fish Speech TTS 已排队 [${jobId.slice(0, 8)}]，等待结果`);
+        const job = await waitForJob(jobId, 'Fish Speech TTS');
+        if (job?.status === 'completed') results.push({ name: 'Fish Speech TTS', status: 'passed' });
+        else results.push({ name: 'Fish Speech TTS', status: 'failed' });
+      }
       else { log(`✗ Fish Speech TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
     } catch (e: any) { log(`✗ Fish Speech TTS 异常: ${e.message}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
 
@@ -246,7 +280,16 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       if (res.ok === false) {
         log(`✗ Faster Whisper STT 失败: ${res.errMsg}`); results.push({ name: 'Faster Whisper STT', status: 'failed' });
       } else if (res.data?.job_id) {
-        log(`✓ Faster Whisper STT 已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Faster Whisper STT', status: 'passed' });
+        const jobId = String(res.data.job_id);
+        log(`… Faster Whisper STT 已排队 [${jobId.slice(0, 8)}]，等待结果`);
+        const job = await waitForJob(jobId, 'Faster Whisper STT');
+        if (job?.status === 'completed') {
+          log(`✓ Faster Whisper STT 完成，识别文本: "${job.result_text ?? '(空)'}"`);
+          results.push({ name: 'Faster Whisper STT', status: 'passed' });
+        } else {
+          log(`✗ Faster Whisper STT 失败: ${job?.error ?? '任务失败或超时'}`);
+          results.push({ name: 'Faster Whisper STT', status: 'failed' });
+        }
       } else {
         const d = res.data ?? {};
         const status: 'completed' | 'failed' = (d.status === 'completed' || d.status === 'success') ? 'completed' : 'failed';
@@ -267,7 +310,16 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
       const res = await postForm(`${backendBaseUrl}/convert`, fd);
       if (res.ok === false) { log(`✗ Seed-VC 换声失败: ${res.errMsg}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
-      else if (res.data?.job_id) { log(`✓ Seed-VC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'Seed-VC 换声', status: 'passed' }); }
+      else if (res.data?.job_id) {
+        const jobId = String(res.data.job_id);
+        log(`… Seed-VC 换声已排队 [${jobId.slice(0, 8)}]，等待结果`);
+        const job = await waitForJob(jobId, 'Seed-VC 换声');
+        if (job?.status === 'completed') results.push({ name: 'Seed-VC 换声', status: 'passed' });
+        else {
+          log(`✗ Seed-VC 换声失败: ${job?.error ?? '任务失败或超时'}`);
+          results.push({ name: 'Seed-VC 换声', status: 'failed' });
+        }
+      }
       else { log(`✗ Seed-VC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
     } catch (e: any) { log(`✗ Seed-VC 换声异常: ${e.message}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
 
@@ -282,7 +334,16 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
         const res = await postForm(`${backendBaseUrl}/convert`, fd);
         if (res.ok === false) { log(`✗ RVC 换声失败: ${res.errMsg}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
-        else if (res.data?.job_id) { log(`✓ RVC 换声已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 换声', status: 'passed' }); }
+        else if (res.data?.job_id) {
+          const jobId = String(res.data.job_id);
+          log(`… RVC 换声已排队 [${jobId.slice(0, 8)}]，等待结果`);
+          const job = await waitForJob(jobId, 'RVC 换声');
+          if (job?.status === 'completed') results.push({ name: 'RVC 换声', status: 'passed' });
+          else {
+            log(`✗ RVC 换声失败: ${job?.error ?? '任务失败或超时'}`);
+            results.push({ name: 'RVC 换声', status: 'failed' });
+          }
+        }
         else { log(`✗ RVC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
       } catch (e: any) { log(`✗ RVC 换声异常: ${e.message}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
     } else {
@@ -302,7 +363,16 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       fd.append('epochs', '1');
       const res = await postForm(`${backendBaseUrl}/train`, fd);
       if (res.ok === false) { log(`✗ RVC 训练失败: ${res.errMsg}`); results.push({ name: 'RVC 训练', status: 'failed' }); }
-      else if (res.data?.job_id) { log(`✓ RVC 训练音色已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'RVC 训练音色', status: 'passed' }); }
+      else if (res.data?.job_id) {
+        const jobId = String(res.data.job_id);
+        log(`… RVC 训练音色已排队 [${jobId.slice(0, 8)}]，等待结果`);
+        const job = await waitForJob(jobId, 'RVC 训练音色', 300000);
+        if (job?.status === 'completed') results.push({ name: 'RVC 训练音色', status: 'passed' });
+        else {
+          log(`✗ RVC 训练音色失败: ${job?.error ?? '任务失败或超时'}`);
+          results.push({ name: 'RVC 训练音色', status: 'failed' });
+        }
+      }
       else { log(`✗ RVC 训练音色响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
     } catch (e: any) { log(`✗ RVC 训练音色异常: ${e.message}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
 
@@ -316,7 +386,20 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
       const res = await postForm(`${backendBaseUrl}/tasks/image-i2i`, fd);
       if (res.ok === false) { log(`✗ FaceFusion 换脸接口失败: ${res.errMsg}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
-      else if (res.data?.job_id) { log(`✓ FaceFusion 换脸已排队 [${String(res.data.job_id).slice(0, 8)}]（⚠ 合成图无人脸，任务预期失败）`); results.push({ name: 'FaceFusion 换脸', status: 'passed' }); }
+      else if (res.data?.job_id) {
+        const jobId = String(res.data.job_id);
+        log(`… FaceFusion 换脸已排队 [${jobId.slice(0, 8)}]，等待结果`);
+        const job = await waitForJob(jobId, 'FaceFusion 换脸');
+        if (job?.status === 'completed') {
+          results.push({ name: 'FaceFusion 换脸', status: 'passed' });
+        } else if (job?.error && expectedFacefusionFailure(job.error)) {
+          log(`⚠ FaceFusion 换脸按预期失败：${job.error}`);
+          results.push({ name: 'FaceFusion 换脸', status: 'passed' });
+        } else {
+          log(`✗ FaceFusion 换脸失败: ${job?.error ?? '任务失败或超时'}`);
+          results.push({ name: 'FaceFusion 换脸', status: 'failed' });
+        }
+      }
       else { log(`✗ FaceFusion 换脸响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
     } catch (e: any) { log(`✗ FaceFusion 换脸异常: ${e.message}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
 
@@ -343,7 +426,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     const passed = results.filter(r => r.status === 'passed').length;
     const failed = results.filter(r => r.status === 'failed').length;
     const skipped = results.filter(r => r.status === 'skipped').length;
-    log(`─── 全部测试已提交  ✓ ${passed} 通过  ✗ ${failed} 失败${skipped ? `  ⚠ ${skipped} 跳过` : ''}`);
+    log(`─── 全部测试完成  ✓ ${passed} 通过  ✗ ${failed} 失败${skipped ? `  ⚠ ${skipped} 跳过` : ''}`);
     setSmokeSummary(results);
     onFetchJobs();
     setSmokeRunning(false);
@@ -357,6 +440,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     const allLines: string[] = [];
     const log = (msg: string) => { allLines.push(msg); setSmoke2Log(prev => [...prev, msg]); };
     let hasError = false;
+    const smoke2Names = ['RAG创建知识库', 'RAG知识库提问', 'Agent', 'LoRA'] as const;
 
     try {
       log('═══════════════════════════════════════════════════════════');
@@ -442,30 +526,38 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     }
 
     // 从日志中解析结果汇总（使用本地 allLines，避免 stale closure）
-    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
+    const statusMap = new Map<string, 'passed' | 'failed'>();
     const summaryStart = allLines.findIndex(line => line.includes('📊 测试结果汇总'));
     if (summaryStart >= 0) {
       for (let i = summaryStart + 2; i < allLines.length; i++) {
         const line = allLines[i];
         if (line.includes('✅ 通过')) {
-          const match = line.match(/✅ 通过\s*—\s*(\S+)/);
-          if (match) results.push({ name: match[1], status: 'passed' });
+          const match = line.match(/✅ 通过\s*—\s*(.+)$/);
+          if (match) statusMap.set(match[1].trim(), 'passed');
         } else if (line.includes('❌ 失败')) {
-          const match = line.match(/❌ 失败\s*—\s*(\S+)/);
-          if (match) results.push({ name: match[1], status: 'failed' });
+          const match = line.match(/❌ 失败\s*—\s*(.+)$/);
+          if (match) statusMap.set(match[1].trim(), 'failed');
         }
       }
     }
 
-    // 如果没有解析到结果，按整体状态判断
-    if (results.length === 0) {
-      setSmoke2Summary([{
-        name: 'RAG/Agent/LoRA 测试',
-        status: hasError ? 'failed' : 'passed'
-      }]);
-    } else {
-      setSmoke2Summary(results);
+    // 汇总缺失时，尝试从逐项日志回填
+    for (const line of allLines) {
+      if (line.includes('✅ RAG 创建知识库测试成功')) statusMap.set('RAG创建知识库', 'passed');
+      else if (line.includes('❌ RAG 创建知识库测试失败')) statusMap.set('RAG创建知识库', 'failed');
+      else if (line.includes('✅ RAG 知识库提问测试成功')) statusMap.set('RAG知识库提问', 'passed');
+      else if (line.includes('❌ RAG 知识库提问测试失败')) statusMap.set('RAG知识库提问', 'failed');
+      else if (line.includes('✅ Agent ReAct 循环执行成功')) statusMap.set('Agent', 'passed');
+      else if (line.includes('❌ Agent 测试失败') || line.includes('❌ Agent 请求失败')) statusMap.set('Agent', 'failed');
+      else if (line.includes('✅ LoRA 微调测试通过')) statusMap.set('LoRA', 'passed');
+      else if (line.includes('❌ LoRA 测试失败') || line.includes('❌ 训练失败') || line.includes('❌ 提交失败')) statusMap.set('LoRA', 'failed');
     }
+
+    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = smoke2Names.map(name => ({
+      name,
+      status: statusMap.get(name) ?? (hasError ? 'failed' : 'skipped'),
+    }));
+    setSmoke2Summary(results);
 
     onFetchJobs();
 
