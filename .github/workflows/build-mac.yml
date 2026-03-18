@@ -1,4 +1,4 @@
-name: 构建 macOS 安装包
+name: macOS runner 构建 macOS + Windows 安装包
 
 on:
   workflow_dispatch:

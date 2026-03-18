@@ -61,7 +61,7 @@ def upload_to_upyun(bucket, ak, sk, local_file, remote_path):
         authorization = f"UpYun {ak}:{base64.b64encode(hmac_sha1.digest()).decode()}"
 
         # 上传
-        url = f"https://{bucket}.up.qiniu.com{remote_path}"
+        url = f"https://v0.api.upyun.com{remote_path}"
         headers = {
             'Authorization': authorization,
             'Content-MD5': md5_hash,
