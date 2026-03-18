@@ -37,10 +37,32 @@ jobs:
             AI-Workshop-win-*.zip
           retention-days: 1  # 临时中转，1天即删
 
-  # ─── 阶段 2: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ─────────────────
+  # ─── 阶段 2a: Artifact 序列化下载 (避免竞态条件) ────────────────────
+  prepare-artifacts:
+    name: 📦 准备分发产物
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: build-assets
+          path: ./
+
+      - name: 上传为中间 artifact (供分发任务使用)
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-assets
+          path: ./*.zip
+          retention-days: 1
+
+  # ─── 阶段 2b: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ─────────────────
   publish:
     name: '🚀 ${{ matrix.target }}'
-    needs: build
+    needs: prepare-artifacts
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # 关键：任一失败不影响其他，四个任务完全独立
@@ -51,10 +73,10 @@ jobs:
       - name: 检出脚本
         uses: actions/checkout@v4
 
-      - name: 下载构建产物
+      - name: 下载分发产物
         uses: actions/download-artifact@v4
         with:
-          name: build-assets
+          name: publish-assets
           path: ./
 
       # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
