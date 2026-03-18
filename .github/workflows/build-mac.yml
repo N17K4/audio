@@ -52,11 +52,19 @@ jobs:
           bash scripts/upload.sh --win --release-only &
           wait
 
-      # ── 6. 上传两个安装包为 GitHub Artifact 备份（始终执行）──────────────────
-      # 任务4: macOS + Windows 安装包 → GitHub Artifacts（作为备份下载源）
+
+  # ── 第二个 Job: 并行上传 Artifact ─────────────────────────────────────────
+  # 任务4: 上传两个安装包为 GitHub Artifacts 备份（与前面三个上传并行）
+  upload-artifact:
+    runs-on: macos-14
+    needs: build-macos
+    if: always()
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
       - name: 上传安装包为 GitHub Artifact 备份
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: releases-${{ github.ref_name }}
           path: |
