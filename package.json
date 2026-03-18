@@ -107,6 +107,10 @@
         ]
       },
       {
+        "from": "runtime/faster_whisper/",
+        "to": "runtime/faster_whisper/"
+      },
+      {
         "from": "runtime/facefusion/",
         "to": "runtime/facefusion/",
         "filter": [
