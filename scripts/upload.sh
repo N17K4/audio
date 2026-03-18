@@ -6,7 +6,7 @@
 #
 # 前置条件：
 #   - 必须先运行 dist.sh 生成 Zip 文件
-#   - 环境变量：UPYUN_BUCKET、UPYUN_OPERATOR、UPYUN_PASSWORD（又拍云上传）
+#   - 环境变量：UPYUN_OPERATOR、UPYUN_PASSWORD（又拍云上传）
 #     或者：UPYUN_AK、UPYUN_SK（兼容旧方式）
 #   - 环境变量：GITHUB_TOKEN（GitHub Release）
 #
@@ -172,9 +172,9 @@ if [ "$RELEASE_ONLY" != "true" ]; then
     log_step "2/3 上传到又拍云"
 
     # 支持两种凭证方式：
-    # 方式1：UPYUN_BUCKET、UPYUN_OPERATOR、UPYUN_PASSWORD
+    # 方式1：UPYUN_OPERATOR、UPYUN_PASSWORD
     # 方式2：UPYUN_AK、UPYUN_SK（旧方式）
-    BUCKET="${UPYUN_BUCKET:-audio1}"
+    BUCKET="audio1"
     if [ -n "$UPYUN_OPERATOR" ] && [ -n "$UPYUN_PASSWORD" ]; then
         # 新方式：OPERATOR/PASSWORD
         CRED1="$UPYUN_OPERATOR"

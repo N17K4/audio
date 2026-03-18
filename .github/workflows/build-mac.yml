@@ -47,7 +47,6 @@ jobs:
       - name: 上传 Windows 到又拍云和 GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          UPYUN_BUCKET: ${{ secrets.UPYUN_BUCKET }}
           UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
           UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
