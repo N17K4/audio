@@ -336,9 +336,15 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         "HUGGINGFACE_HUB_CACHE": hf_cache,   # 兼容旧版
         "TOKENIZERS_PARALLELISM": "false",
     }
-    # 所有引擎都强制离线：额外模型须通过 pnpm run checkpoints 预先下载
-    merged["HF_HUB_OFFLINE"] = "1"
-    merged["TRANSFORMERS_OFFLINE"] = "1"
+    # 默认强制离线：额外模型须通过 pnpm run checkpoints 预先下载。
+    # Seed-VC 目前仍依赖少量 HF 单文件（如 campplus / rmvpe）；
+    # 若 setup 阶段未落盘，允许运行时回退联网下载，避免直接不可用。
+    if engine == "seed_vc":
+        merged.pop("HF_HUB_OFFLINE", None)
+        merged.pop("TRANSFORMERS_OFFLINE", None)
+    else:
+        merged["HF_HUB_OFFLINE"] = "1"
+        merged["TRANSFORMERS_OFFLINE"] = "1"
     # macOS ARM CPU 下 fairseq/HuBERT 在不启用 MPS fallback 时会 SIGSEGV；
     # 对所有引擎统一开启，允许 MPS 不支持的算子自动降级到 CPU
     merged["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
@@ -351,6 +357,10 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
+    if engine == "facefusion":
+        facefusion_pkgs = CHECKPOINTS_ROOT.parent / "facefusion-packages"
+        merged["PYTHONPATH"] = str(facefusion_pkgs)
+        merged["PYTHONNOUSERSITE"] = "1"
     return merged
 
 

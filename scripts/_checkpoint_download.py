@@ -653,7 +653,22 @@ _FACEFUSION_RM = [
 ]
 
 
-def setup_facefusion_engine(project_root: Path, resources_root: Path, pypi_mirror: str = "") -> bool:
+def get_facefusion_packages_dir(project_root: Path, checkpoints_base: "Path | None" = None) -> Path:
+    """返回 FaceFusion 独立 site-packages 目录。"""
+    if checkpoints_base is not None:
+        return checkpoints_base.parent / "facefusion-packages"
+    checkpoints_dir_env = os.getenv("CHECKPOINTS_DIR", "").strip()
+    if checkpoints_dir_env:
+        return Path(checkpoints_dir_env).resolve().parent / "facefusion-packages"
+    return project_root / "local_data" / "facefusion-packages"
+
+
+def setup_facefusion_engine(
+    project_root: Path,
+    resources_root: Path,
+    checkpoints_base: "Path | None" = None,
+    pypi_mirror: str = "",
+) -> bool:
     """克隆 FaceFusion 3.5.4 并精简到运行时所需文件，再运行 install.py。
 
     与 setup-engines.py 里 fish_speech / seed_vc 的模式一致：
@@ -721,13 +736,21 @@ def setup_facefusion_engine(project_root: Path, resources_root: Path, pypi_mirro
         if line and not line.startswith("onnxruntime"):
             packages.append(line)
     packages.append("onnxruntime==1.24.1")
+    target_dir = get_facefusion_packages_dir(project_root, checkpoints_base)
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"  [facefusion] 安装 {len(packages)} 个依赖包（可能需要 3-10 分钟）...")
     emit("log", message=f"  正在安装 FaceFusion 依赖（{len(packages)} 个包，可能需要 3-10 分钟）…")
+    emit("log", message=f"  FaceFusion 独立环境目录：{target_dir}")
 
-    pip_cmd = [py, "-m", "pip", "install", "--quiet"] + packages
+    pip_cmd = [py, "-m", "pip", "install", "--quiet", "--target", str(target_dir), "--upgrade"] + packages
     if pypi_mirror:
         pip_cmd += ["--index-url", pypi_mirror, "--extra-index-url", "https://pypi.org/simple"]
+    pip_env = {
+        **os.environ,
+        "PYTHONPATH": str(target_dir),
+        "PYTHONNOUSERSITE": "1",
+    }
     proc = subprocess.Popen(
         pip_cmd,
         cwd=str(engine_dir),
@@ -735,6 +758,7 @@ def setup_facefusion_engine(project_root: Path, resources_root: Path, pypi_mirro
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=pip_env,
     )
 
     line_q: "queue.Queue[str | None]" = queue.Queue()
@@ -1035,7 +1059,12 @@ def main() -> int:
 
         # FaceFusion：先 clone 引擎源码，再下载模型（clone 会删除 engine/ 目录，必须先 clone）
         if engine_name == "facefusion" and not args.check_only:
-            ok_ff = setup_facefusion_engine(project_root, resources_root, pypi_mirror=args.pypi_mirror)
+            ok_ff = setup_facefusion_engine(
+                project_root,
+                resources_root,
+                checkpoints_base=checkpoints_base,
+                pypi_mirror=args.pypi_mirror,
+            )
             if not ok_ff:
                 all_ready = False
 
