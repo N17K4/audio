@@ -73,6 +73,61 @@ def _dedup_packages(packages: list[str]) -> list[str]:
     return list(seen.values())
 
 
+def _exact_version_spec(pkg: str) -> str | None:
+    m = re.match(r"^\s*([A-Za-z0-9_.-]+)==([^\s;]+)\s*$", pkg)
+    if not m:
+        return None
+    return m.group(2)
+
+
+def _installed_dist_version(py: str, target: str, dist_name: str) -> str:
+    env = {**os.environ, "PYTHONPATH": target} if target else None
+    code = (
+        "import importlib.metadata as m; "
+        f"print(m.version({dist_name!r}))"
+    )
+    r = subprocess.run([py, "-c", code], capture_output=True, text=True, env=env)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def _embedded_dist_version(py: str, dist_name: str) -> str:
+    code = (
+        "import importlib.metadata as m; "
+        f"print(m.version({dist_name!r}))"
+    )
+    r = subprocess.run([py, "-c", code], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def align_torch_stack_versions(packages: list[str], py: str) -> list[str]:
+    """将运行时 torch 栈与 embedded Python 自带版本对齐，避免混装。"""
+    pinned: dict[str, str] = {}
+    for dist_name in ("torch", "torchaudio", "torchvision"):
+        version = _embedded_dist_version(py, dist_name)
+        if version:
+            pinned[dist_name] = f"{dist_name}=={version}"
+
+    if not pinned:
+        return packages
+
+    normalized = []
+    seen = set()
+    for pkg in packages:
+        name = re.split(r"[>=<!\[;\s]", pkg)[0].lower().replace("-", "_")
+        if name in pinned:
+            if name not in seen:
+                normalized.append(pinned[name])
+                seen.add(name)
+            continue
+        normalized.append(pkg)
+
+    for name in ("torch", "torchaudio", "torchvision"):
+        if name in pinned and name not in seen:
+            normalized.append(pinned[name])
+            seen.add(name)
+    return normalized
+
+
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
     """安装包列表。target 为空时直接 pip install，否则 pip install --target。"""
     if target:
@@ -82,10 +137,18 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
 
     for pkg in packages:
         module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
-        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
-        if check.returncode == 0:
-            _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
-            continue
+        dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
+        exact_version = _exact_version_spec(pkg)
+        if exact_version:
+            installed_version = _installed_dist_version(py, target, dist_name)
+            if installed_version == exact_version:
+                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                continue
+        else:
+            check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
+            if check.returncode == 0:
+                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                continue
 
         _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
         cmd = [py, "-m", "pip", "install", pkg, "--quiet"]
@@ -150,6 +213,7 @@ def main():
         all_pkgs.extend(cfg.get("runtime_pip_packages", []))
 
     packages = _dedup_packages(all_pkgs)
+    packages = align_torch_stack_versions(packages, py)
     if not packages:
         _emit({"type": "log", "message": "无需安装运行时包"}, args.json_progress)
         return 0
