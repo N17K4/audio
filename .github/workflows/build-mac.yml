@@ -39,7 +39,7 @@ jobs:
 
   # ─── 阶段 2: 并行分发 (切换到便宜的 Linux 资源) ─────────────────────
   publish:
-    name: 🚀 分发: ${{ matrix.target }}
+    name: '🚀 分发: ${{ matrix.target }}'
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -66,12 +66,14 @@ jobs:
         run: bash scripts/upload.sh --win --upyun-only
 
       # ── 任务2: 发布到 GitHub Release ─────────────────────────────────
-      - name: 📋 发布到 GitHub Release
+      - name: 📋 发布到 GitHub Release (macOS + Windows)
         if: matrix.target == 'github-release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh --both --release-only
+        run: |
+          bash scripts/upload.sh --mac --release-only
+          bash scripts/upload.sh --win --release-only
 
       # ── 任务3: 备份 Artifacts ────────────────────────────────────────
       - name: 💾 归档为 GitHub Artifacts
