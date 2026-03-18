@@ -57,11 +57,12 @@ def load_engine(checkpoint_dir: str, device: str):
     os.chdir(orig_cwd)
 
     if not device:
-        if torch.backends.mps.is_available():
-            device = "mps"
-        elif torch.cuda.is_available():
+        if torch.cuda.is_available():
             device = "cuda"
         else:
+            # Fish Speech 的 decoder / vocoder 在 macOS MPS 下会触发
+            # "Output channels > 65536 not supported"。
+            # 这里直接默认走 CPU，避免随机在推理阶段炸掉。
             device = "cpu"
 
     print(f"[fish_speech_worker] 使用设备: {device}", file=sys.stderr, flush=True)
