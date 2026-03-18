@@ -1,4 +1,4 @@
-name: macOS runner 构建 macOS + Windows 安装包
+name: 生产级双端构建与并行分发
 
 on:
   workflow_dispatch:
@@ -7,72 +7,98 @@ on:
       - 'v*'
 
 jobs:
-  build-macos:
-    runs-on: macos-14   # Apple Silicon (arm64)，与发布包架构一致
+  # ─── 阶段 1: 构建 (昂贵的 Mac 资源只用在这里) ──────────────────────
+  build:
+    name: 🏗️ 核心构建 (macOS 14)
+    runs-on: macos-14
     timeout-minutes: 120
     permissions:
       contents: write
-
+    outputs:
+      tag_name: ${{ github.ref_name }}
     steps:
-      # ── 1. 拉代码 ────────────────────────────────────────────────────────────
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # ── 2. 准备 Node 环境 ─────────────────────────────────────────────────────
-      # ── 3. 执行统一 setup 脚本 ──────────────────────────────────────────────────
-      # setup.sh 包含：
-      #   - 安装 mise（工具版本管理）
-      #   - mise install — 安装 Node.js、Python、Poetry 等
-      #   - pnpm install — 安装前端依赖
-      #   - poetry install — 安装后端依赖
-      #   - setup_base.py — 下载嵌入式 Python、backend 依赖、引擎 pip_packages、FFmpeg
-      - name: 执行 setup.sh
+      - name: 执行 setup.sh (环境初始化)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/setup.sh
 
-      # ── 4. 构建（dist.sh 构建 macOS + Windows）────────────────────────────────
-      - name: 构建（dist.sh --both）
+      - name: 执行 dist.sh (生成双端安装包)
         run: bash scripts/dist.sh --both
 
-      # ── 5. 并行上传四个任务（始终执行）──────────────────────────────────────
-      # 任务1: macOS 安装包 → GitHub Release
-      # 任务2: Windows 安装包 → 又拍云
-      # 任务3: Windows 安装包 → GitHub Release
-      # 任务4: 两个安装包 → GitHub Artifacts 备份
-      - name: 并行上传到 Release、又拍云和 Artifacts
-        if: always()
-        env:
-          UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
-          UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          # 任务1: macOS → Release
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            bash scripts/upload.sh --mac --release-only &
-          fi
-
-          # 任务2: Windows → 又拍云
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            bash scripts/upload.sh --win --upyun-only &
-          fi
-
-          # 任务3: Windows → Release
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            bash scripts/upload.sh --win --release-only &
-          fi
-
-          # 等所有上传完成
-          wait
-
-      # ── 6. 上传为 GitHub Artifacts 备份（任务4）─────────────────────────────
-      - name: 上传安装包为 GitHub Artifacts 备份
+      - name: 临时存储产物 (供后续并行任务使用)
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: releases-${{ github.ref_name }}
+          name: build-assets
           path: |
             AI-Workshop-mac-*.zip
             AI-Workshop-win-*.zip
+          retention-days: 1  # 临时中转，1天即删
+
+  # ─── 阶段 2: 并行分发 (切换到便宜的 Linux 资源) ─────────────────────
+  publish:
+    name: 🚀 分发: ${{ matrix.target }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # 关键：任一失败不影响其他，三个任务互不阻塞
+      matrix:
+        target: [upyun, github-release, artifacts-backup]
+    steps:
+      - name: 检出脚本
+        uses: actions/checkout@v4
+
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: build-assets
+          path: ./
+
+      # ── 任务1: 上传到又拍云 ──────────────────────────────────────────
+      - name: 📤 上传 Windows 到又拍云
+        if: matrix.target == 'upyun'
+        env:
+          UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
+          UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: bash scripts/upload.sh --win --upyun-only
+
+      # ── 任务2: 发布到 GitHub Release ─────────────────────────────────
+      - name: 📋 发布到 GitHub Release
+        if: matrix.target == 'github-release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: bash scripts/upload.sh --both --release-only
+
+      # ── 任务3: 备份 Artifacts ────────────────────────────────────────
+      - name: 💾 归档为 GitHub Artifacts
+        if: matrix.target == 'artifacts-backup'
+        uses: actions/upload-artifact@v4
+        with:
+          name: releases-${{ github.ref_name }}
+          path: ./*.zip
           retention-days: 30
+
+  # ─── 阶段 3: 状态汇总 ────────────────────────────────────────────────
+  summary:
+    name: ✅ 构建完成
+    needs: [build, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总状态
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ 构建流水线执行完毕"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📦 产物："
+          echo "   - macOS: AI-Workshop-mac-${{ github.ref_name }}.zip"
+          echo "   - Windows: AI-Workshop-win-${{ github.ref_name }}.zip"
+          echo "🚀 分发："
+          echo "   - ✓ GitHub Release (macOS + Windows)"
+          echo "   - ✓ 又拍云 (Windows)"
+          echo "   - ✓ GitHub Artifacts (备份)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
