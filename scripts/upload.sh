@@ -54,6 +54,31 @@ log_error() {
     echo -e "${RED}✗ $1${NC}"
 }
 
+ensure_release_exists() {
+    local tag="$1"
+    local notes="$2"
+    local attempt
+
+    for attempt in 1 2 3 4 5; do
+        if gh release view "$tag" >/dev/null 2>&1; then
+            return 0
+        fi
+
+        gh release create "$tag" \
+            --title "Release $tag" \
+            --notes "$notes" \
+            >/dev/null 2>&1 || true
+
+        if gh release view "$tag" >/dev/null 2>&1; then
+            return 0
+        fi
+
+        sleep 2
+    done
+
+    return 1
+}
+
 # ─── 参数解析 ──────────────────────────────────────────────────────────────
 TARGET=""
 UPYUN_ONLY=false
@@ -214,31 +239,29 @@ if [ "$UPYUN_ONLY" != "true" ]; then
 
     if [ -z "$GITHUB_TOKEN" ]; then
         log_info "⚠ 环境变量 GITHUB_TOKEN 未设置，跳过 Release 创建"
+    elif [ -n "$GITHUB_ACTIONS" ] && [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
+        log_info "⚠ 当前不是 tag 触发，跳过 Release 创建"
     else
         # 检查是否有 gh 命令
         if ! command -v gh &> /dev/null; then
             log_info "⚠ gh 命令未安装，跳过 Release 创建"
         else
             log_info "创建 Release：$TAG"
-
-            # 检查 tag 是否存在
-            if git rev-parse "$TAG" &> /dev/null; then
-                log_info "创建 Release 并上传 Zip..."
-
-                if gh release create "$TAG" "$ZIP_NAME" \
-                    --title "Release $TAG" \
-                    --notes "AI Workshop $TAG
+            RELEASE_NOTES="AI Workshop $TAG
 
 下载说明：安装包已附在本页面的 Assets 中。
 
-> AI 模型（约 6 GB）将在首次启动时弹窗引导下载，支持设置 HuggingFace 镜像。" \
-                    2>/dev/null || gh release upload "$TAG" "$ZIP_NAME" --clobber; then
-                    log_done "GitHub Release 创建完成"
+> AI 模型（约 6 GB）将在首次启动时弹窗引导下载，支持设置 HuggingFace 镜像。"
+
+            if ensure_release_exists "$TAG" "$RELEASE_NOTES"; then
+                log_info "上传 Zip 到 GitHub Release..."
+                if gh release upload "$TAG" "$ZIP_NAME" --clobber; then
+                    log_done "GitHub Release 上传完成"
                 else
-                    log_error "GitHub Release 创建失败（但继续）"
+                    log_error "GitHub Release 上传失败（但继续）"
                 fi
             else
-                log_info "⚠ tag 不存在：$TAG，跳过 Release 创建"
+                log_error "GitHub Release 不存在且创建失败（但继续）"
             fi
         fi
     fi
