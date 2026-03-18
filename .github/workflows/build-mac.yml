@@ -35,8 +35,11 @@ jobs:
       - name: 构建（dist.sh --both）
         run: bash scripts/dist.sh --both
 
-      # ── 5. 并行上传（tag 触发时）────────────────────────────────────────────────
-      - name: 上传到 Release 和又拍云
+      # ── 5. 并行上传三个任务（tag 触发时）──────────────────────────────────────
+      # 任务1: macOS 安装包 → GitHub Release
+      # 任务2: Windows 安装包 → 又拍云
+      # 任务3: Windows 安装包 → GitHub Release
+      - name: 并行上传到 GitHub Release 和又拍云
         if: startsWith(github.ref, 'refs/tags/')
         env:
           UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
@@ -49,8 +52,9 @@ jobs:
           bash scripts/upload.sh --win --release-only &
           wait
 
-      # ── 6. 上传为 Artifact（始终执行，作为备份）──────────────────────────
-      - name: 上传为 Artifact
+      # ── 6. 上传两个安装包为 GitHub Artifact 备份（始终执行）──────────────────
+      # 任务4: macOS + Windows 安装包 → GitHub Artifacts（作为备份下载源）
+      - name: 上传安装包为 GitHub Artifact 备份
         uses: actions/upload-artifact@v4
         if: always()
         with:
