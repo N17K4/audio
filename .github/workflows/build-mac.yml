@@ -31,35 +31,25 @@ jobs:
       - name: 提取 ZIP 到根目录
         run: mv dist/**/*.zip . 2>/dev/null || true
 
-      - name: 临时存储产物 (供后续并行任务使用)
+      - name: 检查产物位置 (调试)
+        run: |
+          echo "━━━━━━ 搜索所有 ZIP 文件 ━━━━━━"
+          find . -name "AI-Workshop-*.zip" -type f
+          echo "━━━━━━ dist 目录结构 ━━━━━━"
+          ls -R dist/ 2>/dev/null | head -50
+
+      - name: 存储产物 (递归搜索所有 ZIP)
         uses: actions/upload-artifact@v4
         with:
           name: build-assets
-          path: AI-Workshop-*.zip
-          retention-days: 1  # 临时中转，1天即删
-
-  # ─── 阶段 2a: Artifact 序列化下载 (避免竞态条件) ────────────────────
-  prepare-artifacts:
-    name: 📦 准备分发产物
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: 下载构建产物
-        uses: actions/download-artifact@v4
-        with:
-          name: build-assets
-
-      - name: 转存为中间 artifact (供分发任务使用)
-        uses: actions/upload-artifact@v4
-        with:
-          name: publish-assets
-          path: AI-Workshop-*.zip
+          path: "**/*.zip"
+          if-no-files-found: error
           retention-days: 1
 
-  # ─── 阶段 2b: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ─────────────────
+  # ─── 阶段 2: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ────────────────────
   publish:
     name: '🚀 ${{ matrix.target }}'
-    needs: prepare-artifacts
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # 关键：任一失败不影响其他，四个任务完全独立
@@ -70,10 +60,19 @@ jobs:
       - name: 检出脚本
         uses: actions/checkout@v4
 
-      - name: 下载分发产物
+      - name: 下载构建产物
         uses: actions/download-artifact@v4
         with:
-          name: publish-assets
+          name: build-assets
+          path: ./assets-temp
+
+      - name: 准备上传环境 (移动 ZIP 到根目录)
+        run: |
+          echo "━━━━━━ 下载的产物结构 ━━━━━━"
+          find ./assets-temp -type f
+          echo "━━━━━━ 移动 ZIP 到根目录 ━━━━━━"
+          find ./assets-temp -name "*.zip" -exec mv {} . \;
+          ls -lh *.zip
 
       # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
       - name: 📤 Windows → 又拍云
