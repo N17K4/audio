@@ -203,8 +203,7 @@ if [ "$RELEASE_ONLY" != "true" ]; then
         if python3 "$SCRIPT_DIR/upload_to_upyun.py" "$BUCKET" "$CRED1" "$CRED2" "$ZIP_NAME" "$REMOTE_PATH"; then
             log_done "又拍云上传完成"
         else
-            log_error "又拍云上传失败"
-            exit 1
+            log_error "又拍云上传失败（但继续）"
         fi
     fi
 fi
@@ -236,8 +235,7 @@ if [ "$UPYUN_ONLY" != "true" ]; then
                     2>/dev/null || gh release upload "$TAG" "$ZIP_NAME" --clobber; then
                     log_done "GitHub Release 创建完成"
                 else
-                    log_error "GitHub Release 创建失败"
-                    exit 1
+                    log_error "GitHub Release 创建失败（但继续）"
                 fi
             else
                 log_info "⚠ tag 不存在：$TAG，跳过 Release 创建"
