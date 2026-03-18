@@ -51,9 +51,24 @@ if command -v mise &> /dev/null; then
     log_done "mise 已安装"
 else
     echo "📥 安装 mise..."
-    curl https://mise.jdx.dev/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
-    MISE_CMD="mise"
+    if [[ "$OS" == "win" ]]; then
+        # Windows: 从 GitHub releases 下载 mise 二进制
+        MISE_LATEST=$(curl -s https://api.github.com/repos/jdx/mise/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
+        MISE_URL="https://github.com/jdx/mise/releases/download/${MISE_LATEST}/mise-${MISE_LATEST}-windows-x64.zip"
+        MISE_ZIP="/tmp/mise.zip"
+        MISE_DIR="$HOME/.local/bin"
+        mkdir -p "$MISE_DIR"
+        curl -L "$MISE_URL" -o "$MISE_ZIP"
+        unzip -o "$MISE_ZIP" -d "$MISE_DIR"
+        rm "$MISE_ZIP"
+        export PATH="$MISE_DIR:$PATH"
+        MISE_CMD="$MISE_DIR/mise.exe"
+    else
+        # macOS / Linux
+        curl https://mise.jdx.dev/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        MISE_CMD="mise"
+    fi
     log_done "mise 安装完成"
 fi
 

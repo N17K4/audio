@@ -29,6 +29,8 @@ jobs:
       #   - setup_base.py — 下载嵌入式 Python、backend 依赖、引擎 pip_packages、FFmpeg
       - name: 执行 setup.sh
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/setup.sh
 
       # ── 4. 构建（dist.sh 只负责：构建前端 + 打包 Electron）──────────────────
