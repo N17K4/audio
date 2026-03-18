@@ -72,6 +72,9 @@ def upload_to_upyun(bucket, ak, sk, local_file, remote_path):
         }
 
         print(f"   上传地址: {url}")
+        print(f"[DEBUG] MD5: {md5_hash}")
+        print(f"[DEBUG] Authorization: {headers['Authorization'][:50]}...")
+        print(f"[DEBUG] Date: {headers['Date']}")
         response = requests.put(url, data=file_content, headers=headers, timeout=300)
 
         if response.status_code in [200, 201]:
