@@ -10,6 +10,8 @@ import hashlib
 import hmac
 import base64
 import requests
+from datetime import datetime
+from email.utils import formatdate
 
 # Windows 编码修复：设置 stdout 为 UTF-8
 if sys.platform == 'win32':
@@ -62,9 +64,11 @@ def upload_to_upyun(bucket, ak, sk, local_file, remote_path):
 
         # 上传
         url = f"https://v0.api.upyun.com{remote_path}"
+        date_header = formatdate(timeval=None, localtime=False, usegmt=True)
         headers = {
             'Authorization': authorization,
             'Content-MD5': md5_hash,
+            'Date': date_header,
         }
 
         print(f"   上传地址: {url}")
