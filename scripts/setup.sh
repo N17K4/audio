@@ -51,33 +51,16 @@ if command -v mise &> /dev/null; then
     log_done "mise 已安装"
 else
     echo "📥 安装 mise..."
-    if [[ "$OS" == "mac" ]]; then
-        curl https://mise.jdx.dev/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
-        MISE_CMD="$HOME/.local/bin/mise"
-    elif [[ "$OS" == "win" ]]; then
-        cat > /tmp/mise-install.ps1 << 'PWSHEOF'
-$MiseInstaller = "$env:TEMP\mise-installer.ps1"
-$ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest -Uri "https://mise.jdx.dev/install.ps1" -OutFile $MiseInstaller
-& powershell -ExecutionPolicy Bypass -File $MiseInstaller
-Remove-Item $MiseInstaller -Force
-PWSHEOF
-        powershell -NoProfile -File /tmp/mise-install.ps1
-        export PATH="$APPDATA/mise/shims:$PATH"
-        MISE_CMD="mise"
-    else
-        # Linux
-        curl https://mise.jdx.dev/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
-        MISE_CMD="$HOME/.local/bin/mise"
-    fi
+    curl https://mise.jdx.dev/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    MISE_CMD="mise"
     log_done "mise 安装完成"
 fi
 
 # ─── 2. mise install — 安装 Node.js、Python、Poetry 等 ─────────────────────
 log_step "2/5 安装 Node.js、Python、Poetry 等（通过 .mise.toml）"
 $MISE_CMD install
+eval "$($MISE_CMD activate bash)"
 log_done "工具安装完成"
 
 # ─── 3. pnpm install — 安装前端和根目录依赖 ────────────────────────────────

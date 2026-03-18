@@ -28,15 +28,18 @@ jobs:
       #   - poetry install — 安装后端依赖
       #   - setup_base.py — 下载嵌入式 Python、backend 依赖、引擎 pip_packages、FFmpeg
       - name: 执行 setup.sh
+        shell: bash
         run: bash scripts/setup.sh
 
       # ── 4. 构建（dist.sh 只负责：构建前端 + 打包 Electron）──────────────────
       - name: 构建（dist.sh --win）
+        shell: bash
         run: bash scripts/dist.sh --win
 
       # ── 5. 上传（upload.sh 负责：压缩 Zip + 上传到又拍云 + 创建 Release）────
       - name: 上传到又拍云和 GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
         env:
           UPYUN_AK: ${{ secrets.UPYUN_AK }}
           UPYUN_SK: ${{ secrets.UPYUN_SK }}
