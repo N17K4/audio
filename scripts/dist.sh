@@ -53,12 +53,15 @@ for arg in "$@"; do
         --win)
             TARGET="win"
             ;;
+        --both)
+            TARGET="both"
+            ;;
         --publish)
             PUBLISH_FLAG="--publish"
             ;;
         *)
             echo "未知参数: $arg"
-            echo "用法: dist.sh [--mac|--win] [--publish]"
+            echo "用法: dist.sh [--mac|--win|--both] [--publish]"
             exit 1
             ;;
     esac
@@ -73,27 +76,29 @@ if [ -z "$TARGET" ]; then
         TARGET="win"
         log_info "未指定平台，检测到 Windows，默认构建 --win"
     else
-        echo "✗ 无法检测平台，请手动指定 --mac 或 --win"
+        echo "✗ 无法检测平台，请手动指定 --mac、--win 或 --both"
         exit 1
     fi
 fi
 
 # ─── 1. 构建前端静态文件 ────────────────────────────────────────────────────
-log_step "1/3 构建前端"
+log_step "1/2 构建前端"
 cd "$PROJECT_ROOT/frontend"
 pnpm build
 cd "$PROJECT_ROOT"
 log_done "前端构建完成"
 
 # ─── 2. 打包 Electron ──────────────────────────────────────────────────────
-log_step "2/2 打包 Electron（$TARGET）"
-if [ "$TARGET" = "mac" ]; then
+log_step "2/2 打包 Electron"
+if [ "$TARGET" = "mac" ] || [ "$TARGET" = "both" ]; then
+    log_info "构建 macOS..."
     npx electron-builder --mac $PUBLISH_FLAG
-    DIST_PATH="dist/mac-arm64/AI Workshop.app"
     log_done "macOS 打包完成"
-elif [ "$TARGET" = "win" ]; then
+fi
+
+if [ "$TARGET" = "win" ] || [ "$TARGET" = "both" ]; then
+    log_info "构建 Windows..."
     npx electron-builder --win $PUBLISH_FLAG
-    DIST_PATH="dist/win-unpacked"
     log_done "Windows 打包完成"
 fi
 
