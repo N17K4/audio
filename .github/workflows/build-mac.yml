@@ -63,7 +63,10 @@ jobs:
       # ── 8. 上传为 Artifact（始终执行，作为备份）──────────────────────────
       - name: 上传为 Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_NAME }}
+          name: releases-${{ github.ref_name }}
+          path: |
+            AI-Workshop-mac-*.zip
+            AI-Workshop-win-*.zip
           retention-days: 30
