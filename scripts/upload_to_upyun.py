@@ -19,14 +19,14 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
-def upload_to_upyun(bucket, ak, sk, local_file, remote_path):
+def upload_to_upyun(bucket, credential1, credential2, local_file, remote_path):
     """
-    上传文件到又拍云
+    上传文件到又拍云（支持 AK/SK 或 OPERATOR/PASSWORD 认证）
 
     Args:
         bucket: 空间名
-        ak: 访问密钥
-        sk: 秘密密钥
+        credential1: AK 或 OPERATOR（操作员）
+        credential2: SK 或 PASSWORD（密码）
         local_file: 本地文件路径
         remote_path: 远程路径（如 /releases/v1.0.0/file.zip）
 
@@ -52,15 +52,10 @@ def upload_to_upyun(bucket, ak, sk, local_file, remote_path):
         # 计算 MD5
         md5_hash = hashlib.md5(file_content).hexdigest()
 
-        # 构建认证签名
-        # 签名格式: MD5(bucket:ak:sk:remote_path)
-        sign_str = f"{bucket}:{ak}:{sk}:{remote_path}"
-        signature = hashlib.md5(sign_str.encode()).hexdigest()
-
-        # 使用 HMAC-SHA1 进行签名（又拍云推荐）
-        sign_data = f"PUT\n{remote_path}\n{ak}\n{md5_hash}\n{int(file_size)}\n"
-        hmac_sha1 = hmac.new(sk.encode(), sign_data.encode(), hashlib.sha1)
-        authorization = f"UpYun {ak}:{base64.b64encode(hmac_sha1.digest()).decode()}"
+        # 使用 HMAC-SHA1 进行签名（credential1=AK/OPERATOR, credential2=SK/PASSWORD）
+        sign_data = f"PUT\n{remote_path}\n{credential1}\n{md5_hash}\n{int(file_size)}\n"
+        hmac_sha1 = hmac.new(credential2.encode(), sign_data.encode(), hashlib.sha1)
+        authorization = f"UpYun {credential1}:{base64.b64encode(hmac_sha1.digest()).decode()}"
 
         # 上传
         url = f"https://v0.api.upyun.com{remote_path}"

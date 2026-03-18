@@ -6,7 +6,8 @@
 #
 # 前置条件：
 #   - 必须先运行 dist.sh 生成 Zip 文件
-#   - 环境变量：UPYUN_AK、UPYUN_SK（又拍云上传）
+#   - 环境变量：UPYUN_BUCKET、UPYUN_OPERATOR、UPYUN_PASSWORD（又拍云上传）
+#     或者：UPYUN_AK、UPYUN_SK（兼容旧方式）
 #   - 环境变量：GITHUB_TOKEN（GitHub Release）
 #
 # 用法：
@@ -170,18 +171,35 @@ fi
 if [ "$RELEASE_ONLY" != "true" ]; then
     log_step "2/3 上传到又拍云"
 
-    if [ -z "$UPYUN_AK" ] || [ -z "$UPYUN_SK" ]; then
-        log_info "⚠ 环境变量 UPYUN_AK 或 UPYUN_SK 未设置，跳过上传"
+    # 支持两种凭证方式：
+    # 方式1：UPYUN_BUCKET、UPYUN_OPERATOR、UPYUN_PASSWORD
+    # 方式2：UPYUN_AK、UPYUN_SK（旧方式）
+    BUCKET="${UPYUN_BUCKET:-audio1}"
+    if [ -n "$UPYUN_OPERATOR" ] && [ -n "$UPYUN_PASSWORD" ]; then
+        # 新方式：OPERATOR/PASSWORD
+        CRED1="$UPYUN_OPERATOR"
+        CRED2="$UPYUN_PASSWORD"
+        CRED_TYPE="OPERATOR/PASSWORD"
+    elif [ -n "$UPYUN_AK" ] && [ -n "$UPYUN_SK" ]; then
+        # 旧方式：AK/SK
+        CRED1="$UPYUN_AK"
+        CRED2="$UPYUN_SK"
+        CRED_TYPE="AK/SK"
     else
+        log_info "⚠ 未找到又拍云凭证（缺少 UPYUN_OPERATOR/PASSWORD 或 UPYUN_AK/SK），跳过上传"
+    fi
+
+    if [ -n "$CRED1" ] && [ -n "$CRED2" ]; then
         # 安装 requests 库（如果需要）
         python3 -c "import requests" 2>/dev/null || pip install requests -q
 
         REMOTE_PATH="/releases/$TAG/$ZIP_NAME"
-        log_info "上传到又拍云："
+        log_info "上传到又拍云（$CRED_TYPE）："
+        log_info "  空间：$BUCKET"
         log_info "  文件：$ZIP_NAME"
         log_info "  路径：$REMOTE_PATH"
 
-        if python3 "$SCRIPT_DIR/upload_to_upyun.py" "audio1" "$UPYUN_AK" "$UPYUN_SK" "$ZIP_NAME" "$REMOTE_PATH"; then
+        if python3 "$SCRIPT_DIR/upload_to_upyun.py" "$BUCKET" "$CRED1" "$CRED2" "$ZIP_NAME" "$REMOTE_PATH"; then
             log_done "又拍云上传完成"
         else
             log_error "又拍云上传失败"
