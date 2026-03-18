@@ -93,6 +93,21 @@ function createFileLogger(filename) {
   };
 }
 
+function createAppendLogger(filename) {
+  const logPath = path.join(LOGS_DIR, filename);
+  const stream = fs.createWriteStream(logPath, { flags: 'a', encoding: 'utf-8' });
+  return {
+    path: logPath,
+    write(level, ...args) {
+      const line = `${new Date().toISOString()} [${level}] ${args.join(' ')}\n`;
+      stream.write(line);
+    },
+    close() {
+      try { stream.end(); } catch { /**/ }
+    },
+  };
+}
+
 const electronLog = createFileLogger('electron.log');
 let frontendLog = createFileLogger('frontend.log');
 
@@ -350,24 +365,53 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     CHECKPOINTS_DIR: ckptDir,
     ...(hfEndpoint ? { HF_ENDPOINT: hfEndpoint } : {}),
   };
+  const setupLog = createAppendLogger('setup-download.log');
+  setupLog.write('INFO', '═══════════════════════════════════════════════════════════');
+  setupLog.write('INFO', `setup:startDownload pid=${process.pid}`);
+  setupLog.write('INFO', `checkpoints_dir=${ckptDir}`);
+  setupLog.write('INFO', `python_packages_dir=${userPkgDir}`);
+  setupLog.write('INFO', `python=${pyPath}`);
+  setupLog.write('INFO', `hf_endpoint=${hfEndpoint || '(empty)'}`);
+  setupLog.write('INFO', `pypi_mirror=${pypiMirror || '(empty)'}`);
+  setupLog.write('INFO', `resources_root=${env.RESOURCES_ROOT}`);
+  setupLog.write('INFO', `log_file=${setupLog.path}`);
 
   function sendProgress(msg) {
+    try { setupLog.write('PROGRESS', JSON.stringify(msg)); } catch { /**/ }
     if (setupGuideWin && !setupGuideWin.isDestroyed()) {
       setupGuideWin.webContents.send('setup:progress', msg);
     }
   }
 
-  function spawnScript(scriptPath, args, onClose) {
+  function spawnScript(stageName, scriptPath, args, onClose) {
+    setupLog.write('INFO', `[${stageName}] spawn ${pyPath} ${[scriptPath, ...args].join(' ')}`);
     const proc = spawn(pyPath, [scriptPath, ...args], { env, shell: false });
     proc.stdout.on('data', (data) => {
-      data.toString().split('\n').filter(Boolean).forEach(line => {
-        try { sendProgress(JSON.parse(line)); } catch {}
+      const text = data.toString();
+      text.split('\n').filter(Boolean).forEach(line => {
+        setupLog.write('STDOUT', `[${stageName}] ${line}`);
+        try {
+          sendProgress(JSON.parse(line));
+        } catch {
+          setupLog.write('WARN', `[${stageName}] non-json stdout: ${line}`);
+        }
       });
     });
     proc.stderr.on('data', (data) => {
-      sendProgress({ type: 'log', message: data.toString().trim() });
+      const text = data.toString();
+      text.split('\n').filter(Boolean).forEach(line => {
+        setupLog.write('STDERR', `[${stageName}] ${line}`);
+      });
+      sendProgress({ type: 'log', message: text.toString().trim() });
     });
-    proc.on('close', onClose);
+    proc.on('error', (err) => {
+      setupLog.write('ERROR', `[${stageName}] spawn error: ${err.stack || err.message}`);
+      sendProgress({ type: 'log', message: `[${stageName}] 启动失败: ${err.message}` });
+    });
+    proc.on('close', (code, signal) => {
+      setupLog.write('INFO', `[${stageName}] close code=${String(code)} signal=${String(signal || '')}`);
+      onClose(code, signal);
+    });
     return proc;
   }
 
@@ -378,9 +422,12 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
   const enginesArgs = ['--target', userPkgDir, '--json-progress'];
   if (pypiMirror) enginesArgs.push('--pypi-mirror', pypiMirror);
 
-  downloadProc = spawnScript(runtimeDepsScript, enginesArgs, (code1) => {
+  sendProgress({ type: 'log', message: `详细日志：${setupLog.path}` });
+  downloadProc = spawnScript('phase1-ml-base', runtimeDepsScript, enginesArgs, (code1) => {
     downloadProc = null;
     if (code1 !== 0) {
+      setupLog.write('ERROR', `[phase1-ml-base] failed with exitCode=${String(code1)}`);
+      setupLog.close();
       if (setupGuideWin && !setupGuideWin.isDestroyed()) {
         setupGuideWin.webContents.send('setup:done', { exitCode: code1 });
       }
@@ -390,8 +437,15 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     const dlArgs = ['--json-progress'];
     if (hfEndpoint) dlArgs.push('--hf-endpoint', hfEndpoint);
     if (pypiMirror) dlArgs.push('--pypi-mirror', pypiMirror);
-    downloadProc = spawnScript(downloadScript, dlArgs, (code2) => {
+    setupLog.write('INFO', '[phase1-ml-base] success; start phase2-checkpoints');
+    downloadProc = spawnScript('phase2-checkpoints', downloadScript, dlArgs, (code2) => {
       downloadProc = null;
+      if (code2 !== 0) {
+        setupLog.write('ERROR', `[phase2-checkpoints] failed with exitCode=${String(code2)}`);
+      } else {
+        setupLog.write('INFO', '[phase2-checkpoints] success');
+      }
+      setupLog.close();
       if (setupGuideWin && !setupGuideWin.isDestroyed()) {
         setupGuideWin.webContents.send('setup:done', { exitCode: code2 });
       }
