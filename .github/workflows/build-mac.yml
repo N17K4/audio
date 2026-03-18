@@ -40,6 +40,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
         run: bash scripts/upload.sh --mac --release-only
 
       # ── 6. 上传 Windows 到又拍云和 GitHub Release（tag 触发时）──────────────────
@@ -49,6 +50,7 @@ jobs:
           UPYUN_AK: ${{ secrets.UPYUN_AK }}
           UPYUN_SK: ${{ secrets.UPYUN_SK }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
         run: bash scripts/upload.sh --win
 
       # ── 6. 上传为 Artifact（始终执行，作为备份）──────────────────────────

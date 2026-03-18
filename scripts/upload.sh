@@ -18,6 +18,10 @@
 
 set -e
 
+# 设置 UTF-8 编码（处理中文文件名）
+export LC_ALL=en_US.UTF-8
+export LANG=en_US.UTF-8
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
@@ -86,7 +90,8 @@ if [ -z "$TARGET" ]; then
 fi
 
 # ─── 获取版本号 ────────────────────────────────────────────────────────────
-TAG="${CI_COMMIT_TAG:-$(git describe --tags 2>/dev/null || echo 'dev')}"
+# 优先使用 GitHub Actions 传入的 TAG_NAME，其次 git describe，最后 dev
+TAG="${TAG_NAME:-${CI_COMMIT_TAG:-$(git describe --tags 2>/dev/null || echo 'dev')}}"
 TAG="${TAG#v}"  # 移除 v 前缀
 [ -z "$TAG" ] && TAG="dev"
 

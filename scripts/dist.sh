@@ -97,8 +97,8 @@ if [ "$TARGET" = "mac" ] || [ "$TARGET" = "both" ]; then
 fi
 
 if [ "$TARGET" = "win" ] || [ "$TARGET" = "both" ]; then
-    log_info "构建 Windows..."
-    npx electron-builder --win $PUBLISH_FLAG
+    log_info "构建 Windows (x64)..."
+    npx electron-builder --win --x64 $PUBLISH_FLAG
     log_done "Windows 打包完成"
 fi
 

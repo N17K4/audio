@@ -84,18 +84,22 @@ def get_embedded_python(root: Path) -> str:
 def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
     """从 HF dataset 仓库下载引擎 zip 并解压到 engine_dir。"""
     try:
-        from huggingface_hub import hf_hub_download
-        print(f"  [HF] 尝试从 {HF_ASSETS_REPO} 下载 {filename} ...")
-        zip_path = hf_hub_download(
-            repo_id=HF_ASSETS_REPO,
-            filename=filename,
-            repo_type="dataset",
-        )
+        # 构造 HuggingFace CDN URL（不需要 huggingface_hub 包）
+        url = f"https://huggingface.co/datasets/{HF_ASSETS_REPO}/resolve/main/{filename}"
+        print(f"  [HF] 尝试从 {url} 下载 ...")
+
+        tmp_zip = engine_dir.parent / f"_{filename}"
+        urllib.request.urlretrieve(url, str(tmp_zip), _reporthook)
+        if _IS_TTY:
+            print()
+
         tmp = engine_dir.parent / "_engine_hf_tmp"
         if tmp.exists():
             shutil.rmtree(tmp)
-        with zipfile.ZipFile(zip_path) as zf:
+        with zipfile.ZipFile(tmp_zip) as zf:
             zf.extractall(tmp)
+        tmp_zip.unlink()
+
         extracted = list(tmp.iterdir())
         src = extracted[0] if len(extracted) == 1 and extracted[0].is_dir() else tmp
         if engine_dir.exists():
@@ -145,6 +149,14 @@ def _download_mac_python(dest_dir: Path) -> None:
     shutil.rmtree(tmp_extract, ignore_errors=True)
     print(f"  ✓ macOS standalone Python {MAC_PY_VERSION} 已就绪: {dest_dir}")
 
+    # 装 huggingface_hub 等依赖到嵌入式 Python 中
+    py_exe = dest_dir / "bin" / "python3"
+    print(f"  装 huggingface_hub 到嵌入式 Python...")
+    subprocess.run(
+        [str(py_exe), "-m", "pip", "install", "-q", "huggingface-hub", "requests", "tqdm"],
+        check=False,
+    )
+
 
 def _download_win_python(dest_dir: Path) -> None:
     """下载 Windows 嵌入式 Python 并启用 site-packages + pip。"""
@@ -178,6 +190,11 @@ def _download_win_python(dest_dir: Path) -> None:
     subprocess.run([py_exe, str(get_pip_path), "--quiet"], check=True)
     get_pip_path.unlink()
     subprocess.run([py_exe, "-m", "pip", "install", "setuptools", "wheel", "tomli", "--quiet"], check=True)
+
+    # 装 huggingface_hub 等依赖
+    print(f"  装 huggingface_hub 到嵌入式 Python...")
+    subprocess.run([py_exe, "-m", "pip", "install", "huggingface-hub", "requests", "tqdm", "--quiet"], check=False)
+
     print(f"  ✓ Windows 嵌入式 Python {WIN_PY_VERSION} 已就绪: {dest_dir}")
 
 

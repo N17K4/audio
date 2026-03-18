@@ -108,6 +108,48 @@ log_step "5/5 安装嵌入式 Python 和引擎依赖"
 python3 "$SCRIPT_DIR/setup_base.py" "$@"
 log_done "所有依赖安装完成"
 
+# ─── 5.5. macOS 上也下载 Windows 运行时（仅 CI 环境）───────────────────────
+# CI 环境（build-mac.yml）需要打包两个平台，本地开发不需要
+if [[ "$OS" == "mac" ]] && [ -n "$GITHUB_ACTIONS" ]; then
+    log_step "5.5/5 下载 Windows 运行时（用于跨平台打包）"
+
+    # 下载 Windows Python
+    WINDOWS_PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9+20250317-x86_64-pc-windows-msvc-install_only.tar.gz"
+    WIN_PYTHON_DIR="$PROJECT_ROOT/runtime/win/python"
+    WIN_PYTHON_ZIP="/tmp/windows-python.tar.gz"
+
+    mkdir -p "$WIN_PYTHON_DIR"
+
+    if [ ! -f "$WIN_PYTHON_DIR/python.exe" ]; then
+        echo "📥 下载 Windows Python..."
+        curl -L "$WINDOWS_PYTHON_URL" -o "$WIN_PYTHON_ZIP"
+        echo "📦 解压..."
+        tar -xzf "$WIN_PYTHON_ZIP" -C "$WIN_PYTHON_DIR" --strip-components=1
+        rm -f "$WIN_PYTHON_ZIP"
+        log_done "Windows Python 下载完成"
+    else
+        log_info "Windows Python 已存在"
+    fi
+
+    # 下载 Windows FFmpeg
+    WINDOWS_FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+    WIN_BIN_DIR="$PROJECT_ROOT/runtime/win/bin"
+    WIN_FFMPEG_ZIP="/tmp/windows-ffmpeg.zip"
+
+    mkdir -p "$WIN_BIN_DIR"
+
+    if [ ! -f "$WIN_BIN_DIR/ffmpeg.exe" ]; then
+        echo "📥 下载 Windows FFmpeg..."
+        curl -L "$WINDOWS_FFMPEG_URL" -o "$WIN_FFMPEG_ZIP"
+        echo "📦 解压..."
+        unzip -o "$WIN_FFMPEG_ZIP" -d /tmp/ffmpeg-win && cp /tmp/ffmpeg-win/*/bin/ffmpeg.exe "$WIN_BIN_DIR/" 2>/dev/null || true
+        rm -f "$WIN_FFMPEG_ZIP"
+        log_done "Windows FFmpeg 下载完成"
+    else
+        log_info "Windows FFmpeg 已存在"
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}✅ setup 完成！${NC}"
 echo "下一步：pnpm run ml          (安装 torch、torchaudio 等 ML 包)"
