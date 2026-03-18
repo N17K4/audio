@@ -28,11 +28,14 @@ jobs:
       - name: 执行 dist.sh (生成双端安装包)
         run: bash scripts/dist.sh --both
 
+      - name: 提取 ZIP 到根目录
+        run: mv dist/**/*.zip . 2>/dev/null || true
+
       - name: 临时存储产物 (供后续并行任务使用)
         uses: actions/upload-artifact@v4
         with:
           name: build-assets
-          path: dist/
+          path: AI-Workshop-*.zip
           retention-days: 1  # 临时中转，1天即删
 
   # ─── 阶段 2a: Artifact 序列化下载 (避免竞态条件) ────────────────────
@@ -41,20 +44,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
       - name: 下载构建产物
         uses: actions/download-artifact@v4
         with:
           name: build-assets
-          path: dist/
 
-      - name: 上传为中间 artifact (供分发任务使用)
+      - name: 转存为中间 artifact (供分发任务使用)
         uses: actions/upload-artifact@v4
         with:
           name: publish-assets
-          path: dist/
+          path: AI-Workshop-*.zip
           retention-days: 1
 
   # ─── 阶段 2b: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ─────────────────
@@ -75,12 +74,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: publish-assets
-          path: dist/
-
-      - name: 移动 ZIP 到根目录 (供 upload.sh 使用)
-        run: |
-          mv dist/*.zip . 2>/dev/null || true
-          ls -lh *.zip || echo "No ZIP files found"
 
       # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
       - name: 📤 Windows → 又拍云
@@ -113,7 +106,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: releases-${{ github.ref_name }}
-          path: ./*.zip
+          path: AI-Workshop-*.zip
           retention-days: 30
 
   # ─── 阶段 3: 状态汇总 ────────────────────────────────────────────────
