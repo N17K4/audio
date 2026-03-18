@@ -1405,6 +1405,8 @@ export default function Home() {
                     setApiKey={setApiKey}
                     cloudEndpoint={cloudEndpoint}
                     setCloudEndpoint={setCloudEndpoint}
+                    outputDir={outputDir}
+                    setOutputDir={setOutputDir}
                     status={status}
                     imageGenProvider={misc.imageGenProvider}
                     onImageGenProviderChange={misc.handleImageGenProviderChange}

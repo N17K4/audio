@@ -55,8 +55,8 @@ else
         # Windows: 从 GitHub releases 下载 mise 二进制
         MISE_LATEST=$(curl -s https://api.github.com/repos/jdx/mise/releases/latest | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
         if [ -z "$MISE_LATEST" ]; then
-            echo "❌ 无法获取 mise 最新版本，使用默认版本 v2024.12.11"
-            MISE_LATEST="v2024.12.11"
+            echo "❌ 无法获取 mise 最新版本，使用默认版本 v2025.1.0"
+            MISE_LATEST="v2025.1.0"
         fi
         MISE_URL="https://github.com/jdx/mise/releases/download/${MISE_LATEST}/mise-${MISE_LATEST}-windows-x64.zip"
         MISE_ZIP="/tmp/mise.zip"
