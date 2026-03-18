@@ -5,8 +5,8 @@
   "scripts": {
     "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
-    "setup": "mise install && pnpm install && cd frontend && pnpm install && cd ../backend && (mise exec -- poetry install || (mise exec -- poetry lock && mise exec -- poetry install)) && cd .. && mise exec -- python3 scripts/setup_base.py",
-    "setup:extra": "mise exec -- python3 scripts/setup_extra.py",
+    "setup": "bash scripts/setup.sh",
+    "setup:extra": "runtime/mac/python/bin/python3 scripts/setup_extra.py",
     "ml": "runtime/mac/python/bin/python3 scripts/ml_base.py",
     "ml:extra": "runtime/mac/python/bin/python3 scripts/ml_extra.py",
     "ml:rag": "runtime/mac/python/bin/python3 scripts/ml_extra.py --group rag",
@@ -17,10 +17,10 @@
     "checkpoints:force": "runtime/mac/python/bin/python3 scripts/checkpoints_base.py --force",
     "checkpoints:extra": "runtime/mac/python/bin/python3 scripts/checkpoints_extra.py",
     "build:frontend": "cd frontend && pnpm build",
-    "dist:both": "pnpm run build:frontend && electron-builder --mac --win",
     "predist": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'Electron.*test001' 2>/dev/null; true",
-    "dist": "pnpm run build:frontend && electron-builder --mac",
-    "dist:win": "pnpm run build:frontend && electron-builder --win",
+    "dist": "bash scripts/dist.sh --mac",
+    "dist:win": "bash scripts/dist.sh --win",
+    "dist:both": "bash scripts/dist.sh --mac && bash scripts/dist.sh --win",
     "docker": "docker compose up --build"
   },
   "devDependencies": {

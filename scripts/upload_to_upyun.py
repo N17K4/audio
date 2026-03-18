@@ -7,7 +7,74 @@
 import sys
 import os
 import hashlib
-import hmac∏1
+import hmac
+import base64
+import requests
+
+# Windows 编码修复：设置 stdout 为 UTF-8
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+
+def upload_to_upyun(bucket, ak, sk, local_file, remote_path):
+    """
+    上传文件到又拍云
+
+    Args:
+        bucket: 空间名
+        ak: 访问密钥
+        sk: 秘密密钥
+        local_file: 本地文件路径
+        remote_path: 远程路径（如 /releases/v1.0.0/file.zip）
+
+    Returns:
+        bool: 是否上传成功
+    """
+
+    if not os.path.exists(local_file):
+        print(f"[ERROR] 本地文件不存在: {local_file}")
+        return False
+
+    file_size = os.path.getsize(local_file)
+
+    try:
+        print(f"📦 准备上传: {local_file}")
+        print(f"   文件大小: {file_size / (1024*1024):.2f} MB")
+        print(f"   远程路径: {remote_path}")
+
+        # 读取文件内容
+        with open(local_file, 'rb') as f:
+            file_content = f.read()
+
+        # 计算 MD5
+        md5_hash = hashlib.md5(file_content).hexdigest()
+
+        # 构建认证签名
+        # 签名格式: MD5(bucket:ak:sk:remote_path)
+        sign_str = f"{bucket}:{ak}:{sk}:{remote_path}"
+        signature = hashlib.md5(sign_str.encode()).hexdigest()
+
+        # 使用 HMAC-SHA1 进行签名（又拍云推荐）
+        sign_data = f"PUT\n{remote_path}\n{ak}\n{md5_hash}\n{int(file_size)}\n"
+        hmac_sha1 = hmac.new(sk.encode(), sign_data.encode(), hashlib.sha1)
+        authorization = f"UpYun {ak}:{base64.b64encode(hmac_sha1.digest()).decode()}"
+
+        # 上传
+        url = f"https://{bucket}.up.qiniu.com{remote_path}"
+        headers = {
+            'Authorization': authorization,
+            'Content-MD5': md5_hash,
+        }
+
+        print(f"   上传地址: {url}")
+        response = requests.put(url, data=file_content, headers=headers, timeout=300)
+
+        if response.status_code in [200, 201]:
+            print(f"✅ 上传成功")
+            return True
+        else:
+            print(f"[ERROR] 上传失败，状态码: {response.status_code}")
             print(f"   响应: {response.text[:200]}")
             return False
 

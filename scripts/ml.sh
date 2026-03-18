@@ -1,0 +1,23 @@
+#!/bin/bash
+# 找到嵌入式 Python 并调用 ml_base.py 或 ml_extra.py
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# 检测嵌入式 Python
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    PYTHON="$PROJECT_ROOT/runtime/mac/python/bin/python3"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+    PYTHON="$PROJECT_ROOT/runtime/win/python/python.exe"
+else
+    PYTHON="$PROJECT_ROOT/runtime/linux/python/bin/python3"
+fi
+
+if [[ ! -x "$PYTHON" ]]; then
+    echo "❌ 嵌入式 Python 未找到: $PYTHON"
+    echo "请先运行: pnpm run setup"
+    exit 1
+fi
+
+"$PYTHON" "$SCRIPT_DIR/ml_base.py" "$@"

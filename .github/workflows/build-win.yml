@@ -20,85 +20,30 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. 准备 Node 环境 ─────────────────────────────────────────────────────
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+      # ── 3. 执行统一 setup 脚本 ──────────────────────────────────────────────────
+      # setup.sh 包含：
+      #   - 安装 mise（工具版本管理）
+      #   - mise install — 安装 Node.js、Python、Poetry 等
+      #   - pnpm install — 安装前端依赖
+      #   - poetry install — 安装后端依赖
+      #   - setup_base.py — 下载嵌入式 Python、backend 依赖、引擎 pip_packages、FFmpeg
+      - name: 执行 setup.sh
+        run: bash scripts/setup.sh
 
-      - name: 安装 pnpm
-        run: npm install -g pnpm
+      # ── 4. 构建（dist.sh 只负责：构建前端 + 打包 Electron）──────────────────
+      - name: 构建（dist.sh --win）
+        run: bash scripts/dist.sh --win
 
-      # ── 3. 安装 Node 依赖 + 嵌入式 Python + 后端依赖 + 引擎依赖 ────────────────
-      # setup_base.py 自动下载 Windows 嵌入式 Python 3.10（rvc-python 兼容性），
-      # 再装 backend pip 依赖和引擎 pip_packages + FFmpeg
-      - name: 安装依赖（pnpm install + setup）
-        run: |
-          pnpm install
-          cd frontend && pnpm install && cd ..
-          python3 scripts/setup_base.py
-
-      # ── 6. 构建前端静态文件 ───────────────────────────────────────────────────
-      - name: 构建前端
-        run: pnpm run build:frontend
-
-      # ── 8. electron-builder 打包 Windows ─────────────────────────────────────
-      - name: 打包 Electron（Windows）
-        run: npx electron-builder --win
-
-      # ── 9. 压缩产物 ───────────────────────────────────────────────────────────
-      - name: 压缩 dist
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          if (-not $tag -or $tag -eq "") { $tag = "dev" }
-          $zipName = "AI-Workshop-win-$tag.zip"
-          $distDir = Get-ChildItem -Path "dist" -Directory | Where-Object { $_.Name -like "*unpacked*" } | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $distDir) { Write-Error "dist 下未找到 *unpacked 目录"; exit 1 }
-          Write-Host "压缩目录：$distDir"
-          & "C:\Program Files\7-Zip\7z.exe" a -tzip "$zipName" "$distDir\*"
-          echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
-          echo "VERSION=$tag" >> $env:GITHUB_ENV
-          $size = (Get-Item $zipName).Length / 1GB
-          Write-Host "打包完成：$zipName（$([math]::Round($size,2)) GB）"
-
-      # ── 10. 上传到又拍云（仅 v 标签）────────────────────────────────────────
-      - name: 上传到又拍云
-        if: startsWith(github.ref, 'refs/tags/v') && env.UPYUN_AK && env.UPYUN_SK
+      # ── 5. 上传（upload.sh 负责：压缩 Zip + 上传到又拍云 + 创建 Release）────
+      - name: 上传到又拍云和 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           UPYUN_AK: ${{ secrets.UPYUN_AK }}
           UPYUN_SK: ${{ secrets.UPYUN_SK }}
-        run: |
-          # 安装 requests 库
-          pip install requests -q
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/upload.sh --win
 
-          # 生成远程路径
-          $remotePath = "/releases/${{ env.VERSION }}/AI-Workshop-win-${{ env.VERSION }}.zip"
-
-          Write-Host "📤 上传到又拍云..."
-          Write-Host "   文件: ${{ env.ZIP_NAME }}"
-          Write-Host "   远程路径: $remotePath"
-
-          python scripts/upload_to_upyun.py "audio1" "${{ env.UPYUN_AK }}" "${{ env.UPYUN_SK }}" "${{ env.ZIP_NAME }}" $remotePath
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "上传到又拍云失败"
-            exit 1
-          }
-
-      # ── 11. 创建 GitHub Release 并上传安装包（tag 触发时）──────────────────
-      - name: 创建 Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: ${{ env.ZIP_NAME }}
-          body: |
-            ## 下载说明
-
-            **Windows 安装包已附在本页面的 Assets 中。**
-
-            > AI 模型（约 6 GB）将在首次启动时弹窗引导下载，支持设置 HuggingFace 镜像。
-
-      # ── 12. 上传为 Artifact（始终执行，作为备份）────────────────────────────
+      # ── 6. 上传为 Artifact（始终执行，作为备份）────────────────────────────
       - name: 上传为 Artifact
         uses: actions/upload-artifact@v4
         with:
