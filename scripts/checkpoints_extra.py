@@ -39,6 +39,10 @@ def main():
     parser.add_argument("--check-only", action="store_true", help="仅检查，不下载")
     parser.add_argument("--force", action="store_true", help="强制重新下载")
     parser.add_argument("--json-progress", action="store_true", help="输出 JSON Lines 进度")
+    parser.add_argument("--hf-endpoint", default="", dest="hf_endpoint",
+                        help="HuggingFace 镜像端点（如 https://hf-mirror.com）")
+    parser.add_argument("--pypi-mirror", default="", dest="pypi_mirror",
+                        help="PyPI 镜像地址（如 https://pypi.tuna.tsinghua.edu.cn/simple）")
     args = parser.parse_args()
 
     script = Path(__file__).parent / "_checkpoint_download.py"
@@ -56,6 +60,10 @@ def main():
         cmd_args.append("--force")
     if args.json_progress:
         cmd_args.append("--json-progress")
+    if args.hf_endpoint:
+        cmd_args.extend(["--hf-endpoint", args.hf_endpoint])
+    if args.pypi_mirror:
+        cmd_args.extend(["--pypi-mirror", args.pypi_mirror])
 
     result = subprocess.run(
         [sys.executable, str(script)] + cmd_args,
