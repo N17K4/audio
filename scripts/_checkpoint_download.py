@@ -971,18 +971,25 @@ def main() -> int:
     checkpoints_base: "Path | None" = Path(checkpoints_dir_env).resolve() if checkpoints_dir_env else None
 
     manifest_path = resources_root / "runtime" / "manifest.json"
-    if not manifest_path.exists():
+    if manifest_path.exists():
+        active_root = resources_root
+    else:
         manifest_path = project_root / "runtime" / "manifest.json"
-        resources_root = project_root
-    if not manifest_path.exists():
-        manifest_path = resources_root / "wrappers" / "manifest.json"
-    if not manifest_path.exists():
-        manifest_path = project_root / "wrappers" / "manifest.json"
-        resources_root = project_root
+        if manifest_path.exists():
+            active_root = project_root
+        else:
+            manifest_path = resources_root / "wrappers" / "manifest.json"
+            if manifest_path.exists():
+                active_root = resources_root
+            else:
+                manifest_path = project_root / "wrappers" / "manifest.json"
+                active_root = project_root
 
     if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json: {manifest_path}")
         return 1
+
+    resources_root = active_root
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     engines: dict = manifest.get("engines", {})
