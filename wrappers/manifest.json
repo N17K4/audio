@@ -376,7 +376,7 @@
           "path": "model.pt",
           "sha256": "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb",
           "size_mb": 1550,
-          "required": false,
+          "required": true,
           "_note": "非必填且无 url：faster_whisper 为默认引擎，whisper 模型暂不预下载"
         }
       ],
@@ -409,7 +409,7 @@
           "revision": "d3017ef2c2c1395888c8d635c5e0508bcb0ac78d",
           "cache_dir_rel": "checkpoints/hf_cache",
           "size_mb": 1500,
-          "required": false,
+          "required": true,
           "note": "GOT-OCR2.0 580M 参数 OCR 模型，存入全局 HF cache"
         }
       ],
@@ -447,7 +447,7 @@
           "revision": "main",
           "cache_dir_rel": "checkpoints/hf_cache",
           "size_mb": 1800,
-          "required": false,
+          "required": true,
           "note": "LivePortrait FP16 模型（外观特征提取、运动提取、warping、生成器等，含 animals 版）"
         }
       ],

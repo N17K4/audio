@@ -116,8 +116,11 @@ def _worker_alive(socket_path: str, pid_path: str) -> bool:
 
 
 def _start_worker(checkpoint_pth: str, config_yml: str, socket_path: str, pid_path: str) -> None:
+    import tempfile
     py = get_embedded_python()
     worker_script = str(Path(__file__).resolve().parent / "seed_vc_worker.py")
+    stderr_fd, stderr_log = tempfile.mkstemp(prefix="seedvc_worker_err_", suffix=".log")
+    os.close(stderr_fd)
 
     proc = subprocess.Popen(
         [py, worker_script,
@@ -125,8 +128,8 @@ def _start_worker(checkpoint_pth: str, config_yml: str, socket_path: str, pid_pa
          "--config", config_yml,
          "--socket_path", socket_path],
         stdout=subprocess.PIPE,
-        # stderr=subprocess.DEVNULL 避免 worker 继承上层 capture_output pipe 导致死锁
-        stderr=subprocess.DEVNULL,
+        # stderr 写入独立日志文件，既避免继承上层 capture pipe 死锁，也保留崩溃原因。
+        stderr=open(stderr_log, "w", encoding="utf-8", errors="replace"),
         env=os.environ.copy(),
         text=True,
     )
@@ -138,14 +141,32 @@ def _start_worker(checkpoint_pth: str, config_yml: str, socket_path: str, pid_pa
         line = proc.stdout.readline()
         if not line:
             rc = proc.poll()
+            try:
+                err_content = Path(stderr_log).read_text(encoding="utf-8", errors="replace").strip()
+                if err_content:
+                    print(f"[seed_vc] worker stderr:\n{err_content}", file=sys.stderr)
+                os.unlink(stderr_log)
+            except OSError:
+                pass
             print(f"[seed_vc] worker 进程意外退出 (code={rc})", file=sys.stderr)
             sys.exit(1)
         if line.strip() == "ready":
+            try:
+                os.unlink(stderr_log)
+            except OSError:
+                pass
             print("[seed_vc] worker 就绪，模型已加载", file=sys.stderr)
             return
         print(f"[seed_vc] worker: {line.strip()}", file=sys.stderr)
 
     proc.terminate()
+    try:
+        err_content = Path(stderr_log).read_text(encoding="utf-8", errors="replace").strip()
+        if err_content:
+            print(f"[seed_vc] worker stderr:\n{err_content}", file=sys.stderr)
+        os.unlink(stderr_log)
+    except OSError:
+        pass
     print("[seed_vc] worker 启动超时（300s）", file=sys.stderr)
     sys.exit(1)
 

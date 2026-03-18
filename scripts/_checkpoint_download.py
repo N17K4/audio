@@ -770,9 +770,9 @@ def setup_facefusion_engine(project_root: Path, resources_root: Path, pypi_mirro
     return True
 
 
-def prefetch_rvc_base_models(project_root: Path) -> None:
+def prefetch_rvc_base_models(project_root: Path, resources_root: Path) -> None:
     """触发 rvc-python 的 base_model 预下载（hubert_base.pt / rmvpe.pt / rmvpe.onnx）。"""
-    py = get_embedded_python(project_root)
+    py = get_embedded_python(resources_root) or get_embedded_python(project_root)
     if not py:
         print("  [rvc] 嵌入式 Python 未找到，跳过 RVC base model 预下载")
         return
@@ -1054,7 +1054,7 @@ def main() -> int:
 
         # RVC base model 预下载（rvc-python 触发内置下载，需 setup 阶段已装好 rvc-python）
         if engine_name == "rvc" and not args.check_only:
-            prefetch_rvc_base_models(project_root)
+            prefetch_rvc_base_models(project_root, resources_root)
 
         print()
 
