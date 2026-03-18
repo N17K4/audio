@@ -67,8 +67,8 @@ else
         echo "📦 解压..."
         unzip -o "$MISE_ZIP" -d "$MISE_DIR"
         rm -f "$MISE_ZIP"
-        export PATH="$MISE_DIR:$PATH"
-        MISE_CMD="$MISE_DIR/mise.exe"
+        export PATH="$MISE_DIR/mise/bin:$PATH"
+        MISE_CMD="$MISE_DIR/mise/bin/mise.exe"
     else
         # macOS / Linux
         curl https://mise.jdx.dev/install.sh | sh
