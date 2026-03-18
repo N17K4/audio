@@ -126,7 +126,9 @@ async def run_rvc_training(
         rc = await proc.wait()
 
         if rc != 0:
-            err_tail = "\n".join(stderr_lines[-20:])
+            err_tail = "\n".join(stderr_lines[-80:])
+            if len(err_tail) > 20000:
+                err_tail = "...\n" + err_tail[-20000:]
             msg = TRAIN_JOBS[job_id].get("message", "")
             err = (
                 f"训练失败 (code={rc})"

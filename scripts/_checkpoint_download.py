@@ -605,8 +605,11 @@ def download_hf_cache(
                 hf_cache_dir = (checkpoints_base or (resources_root / "checkpoints")) / "hf_cache"
                 hf_cache_dir.mkdir(parents=True, exist_ok=True)
                 link_target = hf_cache_dir / marker_dir.name
-                if not link_target.exists():
-                    link_target.symlink_to(os.path.relpath(marker_dir, hf_cache_dir))
+                try:
+                    if not os.path.lexists(link_target):
+                        link_target.symlink_to(os.path.relpath(marker_dir, hf_cache_dir))
+                except FileExistsError:
+                    pass
         except Exception as e:
             err_str = str(e)
             err_msg = f"    ✗ 下载失败: {err_str[:300]}"
@@ -743,7 +746,14 @@ def setup_facefusion_engine(
     emit("log", message=f"  正在安装 FaceFusion 依赖（{len(packages)} 个包，可能需要 3-10 分钟）…")
     emit("log", message=f"  FaceFusion 独立环境目录：{target_dir}")
 
-    pip_cmd = [py, "-m", "pip", "install", "--quiet", "--target", str(target_dir), "--upgrade"] + packages
+    pip_cmd = [
+        py, "-m", "pip", "install",
+        "--quiet",
+        "--disable-pip-version-check",
+        "--no-warn-conflicts",
+        "--target", str(target_dir),
+        "--upgrade",
+    ] + packages
     if pypi_mirror:
         pip_cmd += ["--index-url", pypi_mirror, "--extra-index-url", "https://pypi.org/simple"]
     pip_env = {

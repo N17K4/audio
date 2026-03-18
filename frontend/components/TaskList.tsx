@@ -201,13 +201,18 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     log('═══════════════════════════════════════════════════════════');
     log('');
 
+    function formatJobError(err: unknown, maxLen = 8000): string {
+      const text = String(err ?? '任务失败或超时').replace(/\r\n/g, '\n').trim();
+      return text.length > maxLen ? `${text.slice(0, maxLen)}\n...(已截断)` : text;
+    }
+
     async function postForm(url: string, fd: FormData): Promise<{ ok: true; data: any } | { ok: false; errMsg: string }> {
       const r = await fetch(url, { method: 'POST', body: fd });
       let body: any;
       try { body = await r.json(); } catch { body = null; }
       if (!r.ok) {
         const detail = body?.detail ?? body?.error ?? (body ? JSON.stringify(body) : '');
-        return { ok: false, errMsg: `HTTP ${r.status}${detail ? ': ' + String(detail).slice(0, 120) : ''}` };
+        return { ok: false, errMsg: `HTTP ${r.status}${detail ? ': ' + formatJobError(detail, 2000) : ''}` };
       }
       return { ok: true, data: body };
     }
@@ -287,7 +292,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           log(`✓ Faster Whisper STT 完成，识别文本: "${job.result_text ?? '(空)'}"`);
           results.push({ name: 'Faster Whisper STT', status: 'passed' });
         } else {
-          log(`✗ Faster Whisper STT 失败: ${job?.error ?? '任务失败或超时'}`);
+          log(`✗ Faster Whisper STT 失败:\n${formatJobError(job?.error)}`);
           results.push({ name: 'Faster Whisper STT', status: 'failed' });
         }
       } else {
@@ -316,7 +321,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         const job = await waitForJob(jobId, 'Seed-VC 换声');
         if (job?.status === 'completed') results.push({ name: 'Seed-VC 换声', status: 'passed' });
         else {
-          log(`✗ Seed-VC 换声失败: ${job?.error ?? '任务失败或超时'}`);
+          log(`✗ Seed-VC 换声失败:\n${formatJobError(job?.error)}`);
           results.push({ name: 'Seed-VC 换声', status: 'failed' });
         }
       }
@@ -340,7 +345,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           const job = await waitForJob(jobId, 'RVC 换声');
           if (job?.status === 'completed') results.push({ name: 'RVC 换声', status: 'passed' });
           else {
-            log(`✗ RVC 换声失败: ${job?.error ?? '任务失败或超时'}`);
+            log(`✗ RVC 换声失败:\n${formatJobError(job?.error)}`);
             results.push({ name: 'RVC 换声', status: 'failed' });
           }
         }
@@ -369,7 +374,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         const job = await waitForJob(jobId, 'RVC 训练音色', 300000);
         if (job?.status === 'completed') results.push({ name: 'RVC 训练音色', status: 'passed' });
         else {
-          log(`✗ RVC 训练音色失败: ${job?.error ?? '任务失败或超时'}`);
+          log(`✗ RVC 训练音色失败:\n${formatJobError(job?.error)}`);
           results.push({ name: 'RVC 训练音色', status: 'failed' });
         }
       }
@@ -393,10 +398,10 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         if (job?.status === 'completed') {
           results.push({ name: 'FaceFusion 换脸', status: 'passed' });
         } else if (job?.error && expectedFacefusionFailure(job.error)) {
-          log(`⚠ FaceFusion 换脸按预期失败：${job.error}`);
+          log(`⚠ FaceFusion 换脸按预期失败：\n${formatJobError(job.error)}`);
           results.push({ name: 'FaceFusion 换脸', status: 'passed' });
         } else {
-          log(`✗ FaceFusion 换脸失败: ${job?.error ?? '任务失败或超时'}`);
+          log(`✗ FaceFusion 换脸失败:\n${formatJobError(job?.error)}`);
           results.push({ name: 'FaceFusion 换脸', status: 'failed' });
         }
       }
@@ -718,7 +723,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2 leading-relaxed mt-1.5">{job.result_text}</pre>
           )}
           {job.status === 'failed' && job.error && (
-            <p className="text-xs text-rose-500 break-all pt-1">{job.error}</p>
+            <pre className="whitespace-pre-wrap break-words text-xs text-rose-500 pt-1">{job.error}</pre>
           )}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1.5">
