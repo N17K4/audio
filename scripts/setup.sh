@@ -60,15 +60,15 @@ else
         fi
         MISE_URL="https://github.com/jdx/mise/releases/download/${MISE_LATEST}/mise-${MISE_LATEST}-windows-x64.zip"
         MISE_ZIP="/tmp/mise.zip"
-        MISE_DIR="$HOME/.local/bin"
+        MISE_DIR="/c/Users/runneradmin/.local/bin/mise"  # 使用 /c/ 开头确保 Git Bash 路径
         mkdir -p "$MISE_DIR"
         echo "📥 下载 mise ${MISE_LATEST}..."
         curl -L "$MISE_URL" -o "$MISE_ZIP"
         echo "📦 解压..."
-        unzip -o "$MISE_ZIP" -d "$MISE_DIR"
+        unzip -o "$MISE_ZIP" -d "$(dirname "$MISE_DIR")"  # 解压到父目录，这样结构是 mise/bin/mise.exe
         rm -f "$MISE_ZIP"
-        export PATH="$MISE_DIR/mise/bin:$PATH"
-        MISE_CMD="$MISE_DIR/mise/bin/mise.exe"
+        export PATH="$MISE_DIR/bin:$PATH"
+        MISE_CMD="$MISE_DIR/bin/mise.exe"
     else
         # macOS / Linux
         curl https://mise.jdx.dev/install.sh | sh

@@ -156,6 +156,11 @@ fi
 ZIP_SIZE=$(du -h "$ZIP_NAME" | cut -f1)
 log_info "Zip 文件：$ZIP_NAME（$ZIP_SIZE）"
 
+# 保存 ZIP_NAME 到 GitHub Actions 环境变量（供后续步骤使用）
+if [ -n "$GITHUB_ENV" ]; then
+    echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+fi
+
 # ─── 2. 上传到又拍云 ────────────────────────────────────────────────────────
 if [ "$RELEASE_ONLY" != "true" ]; then
     log_step "2/3 上传到又拍云"
