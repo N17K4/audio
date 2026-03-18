@@ -174,7 +174,8 @@ if [ "$RELEASE_ONLY" != "true" ]; then
     # 支持两种凭证方式：
     # 方式1：UPYUN_OPERATOR、UPYUN_PASSWORD
     # 方式2：UPYUN_AK、UPYUN_SK（旧方式）
-    BUCKET="audio1"
+    UPYUN_BUCKET="audio1"
+    BUCKET="$UPYUN_BUCKET"
     if [ -n "$UPYUN_OPERATOR" ] && [ -n "$UPYUN_PASSWORD" ]; then
         # 新方式：OPERATOR/PASSWORD
         CRED1="$UPYUN_OPERATOR"
