@@ -32,9 +32,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-assets
-          path: |
-            AI-Workshop-mac-*.zip
-            AI-Workshop-win-*.zip
+          path: dist/
           retention-days: 1  # 临时中转，1天即删
 
   # ─── 阶段 2a: Artifact 序列化下载 (避免竞态条件) ────────────────────
@@ -50,13 +48,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-assets
-          path: ./
+          path: dist/
 
       - name: 上传为中间 artifact (供分发任务使用)
         uses: actions/upload-artifact@v4
         with:
           name: publish-assets
-          path: ./*.zip
+          path: dist/
           retention-days: 1
 
   # ─── 阶段 2b: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ─────────────────
@@ -77,7 +75,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: publish-assets
-          path: ./
+          path: dist/
+
+      - name: 移动 ZIP 到根目录 (供 upload.sh 使用)
+        run: |
+          mv dist/*.zip . 2>/dev/null || true
+          ls -lh *.zip || echo "No ZIP files found"
 
       # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
       - name: 📤 Windows → 又拍云
@@ -86,7 +89,7 @@ jobs:
           UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
           UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
           TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh --win --upyun-only
+        run: bash scripts/upload.sh --win --no-compress
 
       # ── 任务2: macOS → GitHub Release ───────────────────────────────
       - name: 📋 macOS → GitHub Release
@@ -94,7 +97,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh --mac --release-only
+        run: bash scripts/upload.sh --mac --no-compress
 
       # ── 任务3: Windows → GitHub Release ─────────────────────────────
       - name: 📋 Windows → GitHub Release
@@ -102,7 +105,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh --win --release-only
+        run: bash scripts/upload.sh --win --no-compress
 
       # ── 任务4: 两个 ZIP → GitHub Artifacts 备份 ──────────────────────
       - name: 💾 Artifacts 备份
