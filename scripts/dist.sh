@@ -18,6 +18,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# 激活 mise 环境（确保 pnpm、node 等可用）
+if command -v mise &> /dev/null; then
+    eval "$(mise activate bash)"
+fi
+
 # ─── 颜色输出 ──────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

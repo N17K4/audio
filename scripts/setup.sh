@@ -53,14 +53,20 @@ else
     echo "📥 安装 mise..."
     if [[ "$OS" == "win" ]]; then
         # Windows: 从 GitHub releases 下载 mise 二进制
-        MISE_LATEST=$(curl -s https://api.github.com/repos/jdx/mise/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
+        MISE_LATEST=$(curl -s https://api.github.com/repos/jdx/mise/releases/latest | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
+        if [ -z "$MISE_LATEST" ]; then
+            echo "❌ 无法获取 mise 最新版本，使用默认版本 v2024.12.11"
+            MISE_LATEST="v2024.12.11"
+        fi
         MISE_URL="https://github.com/jdx/mise/releases/download/${MISE_LATEST}/mise-${MISE_LATEST}-windows-x64.zip"
         MISE_ZIP="/tmp/mise.zip"
         MISE_DIR="$HOME/.local/bin"
         mkdir -p "$MISE_DIR"
+        echo "📥 下载 mise ${MISE_LATEST}..."
         curl -L "$MISE_URL" -o "$MISE_ZIP"
+        echo "📦 解压..."
         unzip -o "$MISE_ZIP" -d "$MISE_DIR"
-        rm "$MISE_ZIP"
+        rm -f "$MISE_ZIP"
         export PATH="$MISE_DIR:$PATH"
         MISE_CMD="$MISE_DIR/mise.exe"
     else
