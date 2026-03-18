@@ -88,6 +88,7 @@ def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
         url = f"https://huggingface.co/datasets/{HF_ASSETS_REPO}/resolve/main/{filename}"
         print(f"  [HF] 尝试从 {url} 下载 ...")
 
+        engine_dir.parent.mkdir(parents=True, exist_ok=True)
         tmp_zip = engine_dir.parent / f"_{filename}"
         urllib.request.urlretrieve(url, str(tmp_zip), _reporthook)
         if _IS_TTY:
