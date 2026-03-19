@@ -131,6 +131,73 @@ if [[ "$OS" == "mac" ]] && [ -n "$GITHUB_ACTIONS" ]; then
         log_info "Windows Python 已存在"
     fi
 
+    # 安装 backend 依赖 + 引擎 pip_packages 到 Windows Python（跨平台安装）
+    log_step "5.6/5 安装 Windows Python 依赖（跨平台 pip）"
+    WIN_SITE_PACKAGES="$WIN_PYTHON_DIR/Lib/site-packages"
+
+    # 生成 requirements：backend/pyproject.toml + manifest.json 引擎 pip_packages
+    python3 << 'PYEOF' > /tmp/win_all_requirements.txt
+import json, sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+seen = set()
+def emit(line):
+    key = line.split("==")[0].split(">=")[0].split("[")[0].lower().replace("-", "_")
+    if key not in seen:
+        seen.add(key)
+        print(line)
+
+# 1) backend/pyproject.toml
+with open("backend/pyproject.toml", "rb") as f:
+    data = tomllib.load(f)
+for name, spec in data["tool"]["poetry"]["dependencies"].items():
+    if name == "python":
+        continue
+    if isinstance(spec, str):
+        ver = spec.replace("^", ">=").replace("~", "~=")
+        emit(f"{name}{ver}" if ver != "*" else name)
+    elif isinstance(spec, dict):
+        version = spec.get("version", "").replace("^", ">=").replace("~", "~=")
+        extras = spec.get("extras", [])
+        pkg = f'{name}[{",".join(extras)}]' if extras else name
+        emit(f"{pkg}{version}" if version else pkg)
+
+# 2) manifest.json 基础引擎 pip_packages
+m = json.load(open("wrappers/manifest.json"))
+base_engines = ["rvc", "fish_speech", "seed_vc", "whisper", "faster_whisper", "facefusion"]
+for eng in base_engines:
+    for pkg in m.get("engines", {}).get(eng, {}).get("pip_packages", []):
+        emit(pkg)
+PYEOF
+
+    echo "📦 跨平台安装 Windows 依赖..."
+    python3 -m pip install \
+        --target "$WIN_SITE_PACKAGES" \
+        --platform win_amd64 \
+        --python-version 3.12 \
+        --implementation cp \
+        --only-binary :all: \
+        -r /tmp/win_all_requirements.txt \
+        --quiet || {
+        echo "⚠ --only-binary 安装部分失败，尝试逐包安装..."
+        while IFS= read -r pkg; do
+            [ -z "$pkg" ] && continue
+            python3 -m pip install \
+                --target "$WIN_SITE_PACKAGES" \
+                --platform win_amd64 \
+                --python-version 3.12 \
+                --implementation cp \
+                --only-binary :all: \
+                "$pkg" --quiet 2>/dev/null \
+            || echo "  ⚠ 跳过（无 Windows wheel）: $pkg"
+        done < /tmp/win_all_requirements.txt
+    }
+    rm -f /tmp/win_all_requirements.txt
+    log_done "Windows Python 依赖安装完成"
+
     # 下载 Windows FFmpeg
     WINDOWS_FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     WIN_BIN_DIR="$PROJECT_ROOT/runtime/win/bin"

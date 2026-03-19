@@ -93,28 +93,7 @@
   .mirror-hint.warn { color: #f0c060; }
   .mirror-hint.ok { color: #4ec9b0; }
 
-  /* ── 进度 ── */
-  .progress-section { margin-bottom: 14px; }
-  .progress-label {
-    font-size: 13px;
-    color: #ccc;
-    margin-bottom: 6px;
-    display: flex;
-    justify-content: space-between;
-  }
-  .progress-bar-wrap {
-    height: 8px;
-    background: #3c3c3c;
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .progress-bar-fill {
-    height: 100%;
-    background: #569cd6;
-    border-radius: 4px;
-    transition: width 0.3s;
-    width: 0%;
-  }
+  /* ── 日志 ── */
   .log-area {
     background: #0d0d0d;
     border: 1px solid #3c3c3c;
@@ -382,12 +361,14 @@ let _currentFile = '';
 let _logLines = [];  // 收集所有日志，失败时展示
 let _failedItems = [];
 let _pendingFiles = new Map();
+let _fileSeq = 0;    // 下载序号计数器
 
 function resetFailureState() {
   _currentFile = '';
   _logLines = [];
   _failedItems = [];
   _pendingFiles = new Map();
+  _fileSeq = 0;
   document.getElementById('log-area').innerHTML = '';
   document.getElementById('error-detail').style.display = 'none';
   document.getElementById('error-detail').textContent = '';
@@ -416,21 +397,23 @@ window.setupAPI.onProgress((msg) => {
       break;
     case 'file_start':
       _currentFile = msg.file || '';
+      _fileSeq++;
       _pendingFiles.set(
         fileKey(msg.engine, msg.file || _currentFile),
         `${msg.engine || 'unknown'} / ${msg.file || _currentFile}`
       );
-      appendLog(`  ↓ ${_currentFile}${msg.size_mb ? '（' + fmtSize(msg.size_mb) + '）' : ''}`);
+      appendLog(`  [${_fileSeq}] ↓ ${_currentFile}${msg.size_mb ? '（' + fmtSize(msg.size_mb) + '）' : ''}`);
+      document.getElementById('progress-subtitle').textContent = `[${_fileSeq}] 正在下载：${_currentFile}`;
       break;
     case 'progress':
       break;
     case 'file_done':
       _pendingFiles.delete(fileKey(msg.engine, msg.file || _currentFile));
       if (msg.ok) {
-        appendLog(`  ✓ ${msg.file || _currentFile} 完成`);
+        appendLog(`  [${_fileSeq}] ✓ ${msg.file || _currentFile} 完成`);
       } else {
         rememberFailure(`${msg.engine || 'unknown'} / ${msg.file || _currentFile}`);
-        appendLog(`  ✗ ${msg.file || _currentFile} 失败：${msg.error || '未知错误'}`, 'err');
+        appendLog(`  [${_fileSeq}] ✗ ${msg.file || _currentFile} 失败：${msg.error || '未知错误'}`, 'err');
       }
       break;
     case 'log':
