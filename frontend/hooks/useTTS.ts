@@ -43,6 +43,22 @@ export function useTTS({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  // GPT-SoVITS 高級パラメータ
+  const [gptSovitsTextLang, setGptSovitsTextLang] = useState('auto');
+  const [gptSovitsPromptLang, setGptSovitsPromptLang] = useState('auto');
+  const [gptSovitsRefText, setGptSovitsRefText] = useState('');
+  const [gptSovitsTopK, setGptSovitsTopK] = useState(15);
+  const [gptSovitsTopP, setGptSovitsTopP] = useState(1.0);
+  const [gptSovitsTemperature, setGptSovitsTemperature] = useState(1.0);
+  const [gptSovitsSpeed, setGptSovitsSpeed] = useState(1.0);
+  const [gptSovitsRepetitionPenalty, setGptSovitsRepetitionPenalty] = useState(1.35);
+  const [gptSovitsSeed, setGptSovitsSeed] = useState(-1);
+  const [gptSovitsTextSplitMethod, setGptSovitsTextSplitMethod] = useState('cut5');
+  const [gptSovitsBatchSize, setGptSovitsBatchSize] = useState(1);
+  const [gptSovitsParallelInfer, setGptSovitsParallelInfer] = useState(true);
+  const [gptSovitsFragmentInterval, setGptSovitsFragmentInterval] = useState(0.3);
+  const [gptSovitsSampleSteps, setGptSovitsSampleSteps] = useState(32);
+
   async function startTtsRefRecording() {
     setError('');
     try {
@@ -114,8 +130,22 @@ export function useTTS({
       if (selectedProvider === 'fish_speech') {
         ttsRefAudios.forEach(f => fd.append('reference_audio', f));
       }
-      if (selectedProvider === 'gpt_sovits' && ttsVoiceId) {
-        fd.append('voice_id', ttsVoiceId);
+      if (selectedProvider === 'gpt_sovits') {
+        if (ttsVoiceId) fd.append('voice_id', ttsVoiceId);
+        fd.append('text_lang', gptSovitsTextLang);
+        fd.append('prompt_lang', gptSovitsPromptLang);
+        if (gptSovitsRefText.trim()) fd.append('ref_text', gptSovitsRefText);
+        fd.append('top_k', String(gptSovitsTopK));
+        fd.append('top_p', String(gptSovitsTopP));
+        fd.append('temperature', String(gptSovitsTemperature));
+        fd.append('speed', String(gptSovitsSpeed));
+        fd.append('repetition_penalty', String(gptSovitsRepetitionPenalty));
+        fd.append('seed', String(gptSovitsSeed));
+        fd.append('text_split_method', gptSovitsTextSplitMethod);
+        fd.append('batch_size', String(gptSovitsBatchSize));
+        fd.append('parallel_infer', gptSovitsParallelInfer ? '1' : '0');
+        fd.append('fragment_interval', String(gptSovitsFragmentInterval));
+        fd.append('sample_steps', String(gptSovitsSampleSteps));
       }
       const res = await fetch(`${backendBaseUrl}/tasks/tts`, { method: 'POST', body: fd });
       const data = await safeJson(res);
@@ -144,6 +174,20 @@ export function useTTS({
     ttsRefRecordedObjectUrl,
     ttsRecordingDir,
     startTtsRefRecording, stopTtsRefRecording, clearTtsRefRecording,
+    gptSovitsTextLang, setGptSovitsTextLang,
+    gptSovitsPromptLang, setGptSovitsPromptLang,
+    gptSovitsRefText, setGptSovitsRefText,
+    gptSovitsTopK, setGptSovitsTopK,
+    gptSovitsTopP, setGptSovitsTopP,
+    gptSovitsTemperature, setGptSovitsTemperature,
+    gptSovitsSpeed, setGptSovitsSpeed,
+    gptSovitsRepetitionPenalty, setGptSovitsRepetitionPenalty,
+    gptSovitsSeed, setGptSovitsSeed,
+    gptSovitsTextSplitMethod, setGptSovitsTextSplitMethod,
+    gptSovitsBatchSize, setGptSovitsBatchSize,
+    gptSovitsParallelInfer, setGptSovitsParallelInfer,
+    gptSovitsFragmentInterval, setGptSovitsFragmentInterval,
+    gptSovitsSampleSteps, setGptSovitsSampleSteps,
     runTts,
   };
 }

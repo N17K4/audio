@@ -1135,14 +1135,16 @@ def main() -> int:
             if not ok2:
                 engine_ready = False
 
-        # faster-whisper 模型预下载
+        # faster-whisper 模型预下载（large-v3 用于生产，base 用于烟雾测试等轻量场景）
         if engine_name == "faster_whisper":
-            ok3 = prefetch_faster_whisper_model(
-                project_root, cfg, resources_root, checkpoints_base,
-                check_only=args.check_only,
-            )
-            if not ok3:
-                engine_ready = False
+            for _fw_model in ("large-v3", "base"):
+                ok3 = prefetch_faster_whisper_model(
+                    project_root, cfg, resources_root, checkpoints_base,
+                    check_only=args.check_only,
+                    model=_fw_model,
+                )
+                if not ok3:
+                    engine_ready = False
 
         # RVC base model 预下载
         if engine_name == "rvc" and not args.check_only:

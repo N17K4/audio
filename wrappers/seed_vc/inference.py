@@ -86,12 +86,22 @@ def _find_file(directory: str, suffix: str) -> str:
     return ""
 
 
+_USE_TCP = sys.platform == "win32"
+
+
 def _worker_paths(checkpoint_pth: str) -> tuple[str, str]:
+    """返回 (connection_path, pid_path)。
+
+    Unix: connection_path 是 Unix socket 路径。
+    Windows: connection_path 是存储 TCP 端口号的文件路径。
+    """
     import hashlib
+    import tempfile
     h = hashlib.md5(checkpoint_pth.encode()).hexdigest()[:8]
-    tmp = os.environ.get("TMPDIR") or "/tmp"
+    tmp = tempfile.gettempdir()
+    suffix = "port" if _USE_TCP else "sock"
     return (
-        os.path.join(tmp, f"seed_vc_worker_{h}.sock"),
+        os.path.join(tmp, f"seed_vc_worker_{h}.{suffix}"),
         os.path.join(tmp, f"seed_vc_worker_{h}.pid"),
     )
 
@@ -106,12 +116,18 @@ def _worker_alive(socket_path: str, pid_path: str) -> bool:
         except (ProcessLookupError, ValueError, PermissionError, OSError):
             return False
     try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2.0)
-        s.connect(socket_path)
+        if _USE_TCP:
+            port = int(Path(socket_path).read_text().strip())
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(("127.0.0.1", port))
+        else:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(socket_path)
         s.close()
         return True
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
@@ -122,11 +138,16 @@ def _start_worker(checkpoint_pth: str, config_yml: str, socket_path: str, pid_pa
     stderr_fd, stderr_log = tempfile.mkstemp(prefix="seedvc_worker_err_", suffix=".log")
     os.close(stderr_fd)
 
+    cmd = [py, worker_script,
+           "--checkpoint", checkpoint_pth,
+           "--config", config_yml]
+    if _USE_TCP:
+        cmd.extend(["--tcp", "--port_file", socket_path])
+    else:
+        cmd.extend(["--socket_path", socket_path])
+
     proc = subprocess.Popen(
-        [py, worker_script,
-         "--checkpoint", checkpoint_pth,
-         "--config", config_yml,
-         "--socket_path", socket_path],
+        cmd,
         stdout=subprocess.PIPE,
         # stderr 写入独立日志文件，既避免继承上层 capture pipe 死锁，也保留崩溃原因。
         stderr=open(stderr_log, "w", encoding="utf-8", errors="replace"),
@@ -172,9 +193,15 @@ def _start_worker(checkpoint_pth: str, config_yml: str, socket_path: str, pid_pa
 
 
 def _send_request(socket_path: str, req: dict) -> dict:
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(600.0)
-    s.connect(socket_path)
+    if _USE_TCP:
+        port = int(Path(socket_path).read_text().strip())
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(600.0)
+        s.connect(("127.0.0.1", port))
+    else:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(600.0)
+        s.connect(socket_path)
     s.sendall((json.dumps(req, ensure_ascii=False) + "\n").encode())
     buf = b""
     while b"\n" not in buf:

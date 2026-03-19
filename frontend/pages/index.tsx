@@ -240,6 +240,9 @@ export default function Home() {
   const [newVoiceModel, setNewVoiceModel] = useState<File | null>(null);
   const [newVoiceIndex, setNewVoiceIndex] = useState<File | null>(null);
   const [newVoiceRef, setNewVoiceRef] = useState<File | null>(null);
+  const [newVoiceGptModel, setNewVoiceGptModel] = useState<File | null>(null);
+  const [newVoiceSovitsModel, setNewVoiceSovitsModel] = useState<File | null>(null);
+  const [newVoiceRefText, setNewVoiceRefText] = useState('');
   const [creatingVoice, setCreatingVoice] = useState(false);
 
   // ─── 训练状态 ─────────────────────────────────────────────────────────────
@@ -407,6 +410,9 @@ export default function Home() {
       if (newVoiceModel) fd.append('model_file', newVoiceModel);
       if (newVoiceIndex) fd.append('index_file', newVoiceIndex);
       if (newVoiceRef) fd.append('reference_audio', newVoiceRef);
+      if (newVoiceGptModel) fd.append('gpt_model_file', newVoiceGptModel);
+      if (newVoiceSovitsModel) fd.append('sovits_model_file', newVoiceSovitsModel);
+      if (newVoiceRefText.trim()) fd.append('ref_text', newVoiceRefText.trim());
       const res = await fetch(`${backend.backendBaseUrl}/voices/create`, { method: 'POST', body: fd });
       let data: any = null;
       try { data = await res.json(); } catch { /**/ }
@@ -414,6 +420,7 @@ export default function Home() {
       setSuccessMsg(`音色已创建：${data.voice_name}（ID: ${data.voice_id}）`);
       setShowCreateVoice(false);
       setNewVoiceName(''); setNewVoiceModel(null); setNewVoiceIndex(null); setNewVoiceRef(null);
+      setNewVoiceGptModel(null); setNewVoiceSovitsModel(null); setNewVoiceRefText('');
       await backend.fetchVoices();
       backend.setSelectedVoiceId(data.voice_id);
     } catch (e) {
@@ -641,6 +648,56 @@ export default function Home() {
                 ttsVoiceId={tts.ttsVoiceId}
                 setTtsVoiceId={tts.setTtsVoiceId}
                 onRefreshVoices={backend.fetchVoices}
+                onRenameVoice={renameVoice}
+                onDeleteVoice={deleteVoice}
+                gptSovitsTextLang={tts.gptSovitsTextLang}
+                setGptSovitsTextLang={tts.setGptSovitsTextLang}
+                gptSovitsPromptLang={tts.gptSovitsPromptLang}
+                setGptSovitsPromptLang={tts.setGptSovitsPromptLang}
+                gptSovitsRefText={tts.gptSovitsRefText}
+                setGptSovitsRefText={tts.setGptSovitsRefText}
+                gptSovitsTopK={tts.gptSovitsTopK}
+                setGptSovitsTopK={tts.setGptSovitsTopK}
+                gptSovitsTopP={tts.gptSovitsTopP}
+                setGptSovitsTopP={tts.setGptSovitsTopP}
+                gptSovitsTemperature={tts.gptSovitsTemperature}
+                setGptSovitsTemperature={tts.setGptSovitsTemperature}
+                gptSovitsSpeed={tts.gptSovitsSpeed}
+                setGptSovitsSpeed={tts.setGptSovitsSpeed}
+                gptSovitsRepetitionPenalty={tts.gptSovitsRepetitionPenalty}
+                setGptSovitsRepetitionPenalty={tts.setGptSovitsRepetitionPenalty}
+                gptSovitsSeed={tts.gptSovitsSeed}
+                setGptSovitsSeed={tts.setGptSovitsSeed}
+                gptSovitsTextSplitMethod={tts.gptSovitsTextSplitMethod}
+                setGptSovitsTextSplitMethod={tts.setGptSovitsTextSplitMethod}
+                gptSovitsBatchSize={tts.gptSovitsBatchSize}
+                setGptSovitsBatchSize={tts.setGptSovitsBatchSize}
+                gptSovitsParallelInfer={tts.gptSovitsParallelInfer}
+                setGptSovitsParallelInfer={tts.setGptSovitsParallelInfer}
+                gptSovitsFragmentInterval={tts.gptSovitsFragmentInterval}
+                setGptSovitsFragmentInterval={tts.setGptSovitsFragmentInterval}
+                gptSovitsSampleSteps={tts.gptSovitsSampleSteps}
+                setGptSovitsSampleSteps={tts.setGptSovitsSampleSteps}
+                showCreateVoice={showCreateVoice}
+                setShowCreateVoice={setShowCreateVoice}
+                newVoiceEngine={newVoiceEngine}
+                setNewVoiceEngine={setNewVoiceEngine}
+                newVoiceName={newVoiceName}
+                setNewVoiceName={setNewVoiceName}
+                creatingVoice={creatingVoice}
+                setNewVoiceModel={setNewVoiceModel}
+                setNewVoiceIndex={setNewVoiceIndex}
+                setNewVoiceRef={setNewVoiceRef}
+                setNewVoiceGptModel={setNewVoiceGptModel}
+                setNewVoiceSovitsModel={setNewVoiceSovitsModel}
+                newVoiceRefText={newVoiceRefText}
+                setNewVoiceRefText={setNewVoiceRefText}
+                onCreateVoice={createVoice}
+                trainVoiceName={trainVoiceName}
+                setTrainVoiceName={setTrainVoiceName}
+                trainFiles={trainFiles}
+                setTrainFiles={setTrainFiles}
+                onStartTraining={startTraining}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}

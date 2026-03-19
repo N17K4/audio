@@ -25,6 +25,9 @@ async def create_voice(
     model_file: Optional[UploadFile] = File(None),
     index_file: Optional[UploadFile] = File(None),
     reference_audio: Optional[UploadFile] = File(None),
+    gpt_model_file: Optional[UploadFile] = File(None),
+    sovits_model_file: Optional[UploadFile] = File(None),
+    ref_text: Optional[str] = Form(None),
 ):
     """创建音色包：RVC 上传 .pth（+可选 .index），Fish Speech / Seed-VC 上传参考音频。"""
     safe = "".join(ch for ch in voice_name.strip().lower() if ch.isalnum() or ch in ["_", "-"])
@@ -63,6 +66,21 @@ async def create_voice(
         dst = voice_dir / f"reference{ext}"
         dst.write_bytes(await reference_audio.read())
         meta["reference_audio"] = dst.name
+
+    if gpt_model_file and gpt_model_file.filename:
+        ext = Path(gpt_model_file.filename).suffix or ".ckpt"
+        dst = voice_dir / f"gpt_model{ext}"
+        dst.write_bytes(await gpt_model_file.read())
+        meta["gpt_model"] = dst.name
+
+    if sovits_model_file and sovits_model_file.filename:
+        ext = Path(sovits_model_file.filename).suffix or ".pth"
+        dst = voice_dir / f"sovits_model{ext}"
+        dst.write_bytes(await sovits_model_file.read())
+        meta["sovits_model"] = dst.name
+
+    if ref_text and ref_text.strip():
+        meta["ref_text"] = ref_text.strip()
 
     (voice_dir / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"

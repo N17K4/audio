@@ -107,6 +107,21 @@ async def task_tts(
     voice_id: str = Form(""),
     output_dir: str = Form(""),
     reference_audio: List[UploadFile] = File([]),
+    # GPT-SoVITS 高级参数
+    text_lang: str = Form("auto"),
+    prompt_lang: str = Form("auto"),
+    ref_text: str = Form(""),
+    top_k: int = Form(15),
+    top_p: float = Form(1.0),
+    temperature: float = Form(1.0),
+    speed: float = Form(1.0),
+    repetition_penalty: float = Form(1.35),
+    seed: int = Form(-1),
+    text_split_method: str = Form("cut5"),
+    batch_size: int = Form(1),
+    parallel_infer: int = Form(1),
+    fragment_interval: float = Form(0.3),
+    sample_steps: int = Form(32),
 ):
     if not text.strip():
         raise HTTPException(status_code=400, detail="text is required")
@@ -183,7 +198,16 @@ async def task_tts(
         elif p == "minimax_tts":
             return await run_minimax_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
         elif p == "gpt_sovits":
-            return await run_gpt_sovits_tts(text=text, voice_meta=voice_meta, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint)
+            return await run_gpt_sovits_tts(
+                text=text, voice_meta=voice_meta, voice_refs=voice_refs_list,
+                api_key=api_key, endpoint=cloud_endpoint,
+                text_lang=text_lang, prompt_lang=prompt_lang, ref_text=ref_text,
+                top_k=top_k, top_p=top_p, temperature=temperature, speed=speed,
+                repetition_penalty=repetition_penalty, seed=seed,
+                text_split_method=text_split_method, batch_size=batch_size,
+                parallel_infer=bool(parallel_infer), fragment_interval=fragment_interval,
+                sample_steps=sample_steps,
+            )
         elif p == "cosyvoice":
             raise HTTPException(status_code=501, detail="CosyVoice 2 引擎即将支持，敬请期待。")
         else:

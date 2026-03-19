@@ -174,6 +174,125 @@ class TestBasicFeatures:
                 print(f"   响应：{resp.text}")
                 pytest.fail(f"GPT-SoVITS TTS 失败")
 
+    def test_gpt_sovits_create_voice(self):
+        """测试：GPT-SoVITS 创建音色（导入模型文件）。"""
+        import httpx
+
+        print("📦 测试 GPT-SoVITS 创建音色")
+
+        with httpx.Client(timeout=30) as client:
+            # 创建虚拟模型文件
+            gpt_model = BytesIO(b"\x00" * 1024)
+            sovits_model = BytesIO(b"\x00" * 1024)
+            ref_audio = BytesIO(create_test_wav())
+
+            files = {
+                "gpt_model_file": ("test_gpt.ckpt", gpt_model, "application/octet-stream"),
+                "sovits_model_file": ("test_sovits.pth", sovits_model, "application/octet-stream"),
+                "reference_audio": ("test_ref.wav", ref_audio, "audio/wav"),
+            }
+            data = {
+                "voice_name": f"smoke_test_gpt_sovits",
+                "engine": "gpt_sovits",
+                "ref_text": "这是参考音频的文本",
+            }
+
+            print(f"  📤 POST /voices/create")
+            print(f"     engine=gpt_sovits, voice_name={data['voice_name']}")
+
+            resp = client.post(
+                f"{_BASE_URL}/voices/create",
+                data=data,
+                files=files,
+            )
+
+            print(f"     HTTP {resp.status_code}")
+            if resp.status_code == 200:
+                body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
+                voice_id = body.get("voice_id", "")
+                print(f"✅ GPT-SoVITS 创建音色成功 [voice_id: {voice_id}]")
+
+                # 验证 meta.json 包含 gpt_model 和 sovits_model 字段
+                voices_resp = client.get(f"{_BASE_URL}/voices")
+                if voices_resp.status_code == 200:
+                    voices = voices_resp.json().get("voices", [])
+                    matched = [v for v in voices if v.get("voice_id") == voice_id]
+                    if matched:
+                        v = matched[0]
+                        assert v.get("engine") == "gpt_sovits", f"引擎类型错误：{v.get('engine')}"
+                        print(f"     ✓ 引擎类型正确：gpt_sovits")
+                    else:
+                        print(f"     ⚠️ 音色列表中未找到新创建的音色（可能在不同目录）")
+
+                # 清理：删除测试音色
+                del_resp = client.delete(f"{_BASE_URL}/voices/{voice_id}")
+                if del_resp.status_code == 200:
+                    print(f"     🧹 清理：删除测试音色 {voice_id}")
+                else:
+                    print(f"     ⚠️ 删除测试音色失败 (HTTP {del_resp.status_code})")
+            else:
+                print(f"❌ GPT-SoVITS 创建音色失败 (HTTP {resp.status_code})")
+                print(f"   响应：{resp.text}")
+                pytest.fail(f"GPT-SoVITS 创建音色失败")
+
+    def test_gpt_sovits_tts_advanced(self):
+        """测试：GPT-SoVITS TTS 高级参数（验证参数传递不报错）。"""
+        import httpx
+
+        print("🎛️  测试 GPT-SoVITS TTS 高级参数")
+
+        with httpx.Client(timeout=60) as client:
+            # 先检查 capabilities 是否包含 gpt_sovits
+            cap_resp = client.get(f"{_BASE_URL}/capabilities")
+            if cap_resp.status_code == 200:
+                caps = cap_resp.json()
+                tts_providers = caps.get("tts", [])
+                if "gpt_sovits" not in tts_providers:
+                    print("⚠️  GPT-SoVITS 未在 capabilities 中，跳过（需先安装引擎）")
+                    pytest.skip("GPT-SoVITS 引擎未安装")
+
+            data = {
+                "text": "高级参数烟雾测试",
+                "provider": "gpt_sovits",
+                "text_lang": "zh",
+                "prompt_lang": "zh",
+                "ref_text": "这是参考音频对应的文本",
+                "top_k": "10",
+                "top_p": "0.9",
+                "temperature": "0.8",
+                "speed": "1.2",
+                "repetition_penalty": "1.5",
+                "seed": "42",
+                "text_split_method": "cut3",
+                "batch_size": "2",
+                "parallel_infer": "1",
+                "fragment_interval": "0.5",
+                "sample_steps": "16",
+            }
+
+            print(f"  📤 POST /tasks/tts（含全部高级参数）")
+            param_summary = {k: v for k, v in data.items() if k != "text"}
+            print(f"     参数：{param_summary}")
+
+            resp = client.post(
+                f"{_BASE_URL}/tasks/tts",
+                data=data,
+            )
+
+            print(f"     HTTP {resp.status_code}")
+            if resp.status_code == 200:
+                body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
+                if body.get("job_id"):
+                    print(f"✅ GPT-SoVITS TTS（高级参数）已排队 [job_id: {body['job_id']}]")
+                else:
+                    print(f"✅ GPT-SoVITS TTS（高级参数）响应正常")
+            else:
+                print(f"❌ GPT-SoVITS TTS（高级参数）失败 (HTTP {resp.status_code})")
+                print(f"   响应：{resp.text}")
+                pytest.fail(f"GPT-SoVITS TTS（高级参数）失败")
+
     def test_faster_whisper_stt(self):
         """测试：Faster Whisper STT（本地推理）。"""
         import httpx

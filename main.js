@@ -393,6 +393,7 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     CHECKPOINTS_DIR: ckptDir,
     // 与后端启动时保持一致：backend/ + python-packages/
     PYTHONPATH: [path.join(__dirname, 'backend'), userPkgDir].join(path.delimiter),
+    PYTHONIOENCODING: 'utf-8',
     ...(hfEndpoint ? { HF_ENDPOINT: hfEndpoint } : {}),
   };
   const setupLog = createAppendLogger('setup-download.log');
@@ -706,6 +707,7 @@ async function createWindow() {
     RESOURCES_ROOT: resRoot,
     CHECKPOINTS_DIR: getCheckpointsDir(),
     PYTHONPATH: [path.join(__dirname, 'backend'), mlPkgDir].join(path.delimiter),
+    PYTHONIOENCODING: 'utf-8',
     ...(LOGS_DIR ? { LOGS_DIR } : {}),
   };
 

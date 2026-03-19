@@ -31,7 +31,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint_dir", default="", help="模型权重目录（覆盖 manifest 默认值）")
     parser.add_argument("--gpt_model", default="", help="GPT 模型文件路径（.ckpt）")
     parser.add_argument("--sovits_model", default="", help="SoVITS 模型文件路径（.pth）")
-    parser.add_argument("--text_lang", default="auto", help="文本语言（auto / zh / ja / en 等）")
+    parser.add_argument("--text_lang", default="auto", help="合成文本语言（auto / zh / ja / en / ko / yue）")
+    parser.add_argument("--prompt_lang", default="auto", help="参考音频语言（auto / zh / ja / en / ko / yue）")
+    parser.add_argument("--ref_text", default="", help="参考音频对应文本（few-shot 推荐填写）")
+    parser.add_argument("--top_k", type=int, default=15, help="Top-K 采样：每步从概率最高的 K 个 token 中选择（默认 15）")
+    parser.add_argument("--top_p", type=float, default=1.0, help="Top-P 核采样：保留累计概率达到 P 的 token（默认 1.0）")
+    parser.add_argument("--temperature", type=float, default=1.0, help="采样温度：控制随机性（默认 1.0）")
+    parser.add_argument("--speed", type=float, default=1.0, help="语速倍率（默认 1.0）")
+    parser.add_argument("--repetition_penalty", type=float, default=1.35, help="重复惩罚：抑制重复 token 生成（默认 1.35）")
+    parser.add_argument("--seed", type=int, default=-1, help="随机种子：-1 为随机，固定值可复现结果")
+    parser.add_argument("--text_split_method", default="cut5", help="文本切分方式：cut0 不切/cut1 按4句/cut2 按50字/cut3 中文句号/cut4 英文句号/cut5 标点（默认 cut5）")
+    parser.add_argument("--batch_size", type=int, default=1, help="推理批处理大小（默认 1）")
+    parser.add_argument("--no_parallel_infer", action="store_true", help="禁用并行推理（默认启用）")
+    parser.add_argument("--fragment_interval", type=float, default=0.3, help="分段间隔秒数（默认 0.3）")
+    parser.add_argument("--sample_steps", type=int, default=32, help="VITS V3 扩散采样步数（默认 32）")
     return parser.parse_args()
 
 
@@ -142,6 +155,32 @@ def main() -> int:
         cmd.extend(["--gpt_model", args.gpt_model])
     if args.sovits_model:
         cmd.extend(["--sovits_model", args.sovits_model])
+    if args.prompt_lang and args.prompt_lang != "auto":
+        cmd.extend(["--prompt_lang", args.prompt_lang])
+    if args.ref_text:
+        cmd.extend(["--ref_text", args.ref_text])
+    if args.top_k != 15:
+        cmd.extend(["--top_k", str(args.top_k)])
+    if args.top_p != 1.0:
+        cmd.extend(["--top_p", str(args.top_p)])
+    if args.temperature != 1.0:
+        cmd.extend(["--temperature", str(args.temperature)])
+    if args.speed != 1.0:
+        cmd.extend(["--speed", str(args.speed)])
+    if args.repetition_penalty != 1.35:
+        cmd.extend(["--repetition_penalty", str(args.repetition_penalty)])
+    if args.seed != -1:
+        cmd.extend(["--seed", str(args.seed)])
+    if args.text_split_method != "cut5":
+        cmd.extend(["--text_split_method", args.text_split_method])
+    if args.batch_size != 1:
+        cmd.extend(["--batch_size", str(args.batch_size)])
+    if args.no_parallel_infer:
+        cmd.extend(["--no_parallel_infer"])
+    if args.fragment_interval != 0.3:
+        cmd.extend(["--fragment_interval", str(args.fragment_interval)])
+    if args.sample_steps != 32:
+        cmd.extend(["--sample_steps", str(args.sample_steps)])
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(engine_dir) + os.pathsep + env.get("PYTHONPATH", "")

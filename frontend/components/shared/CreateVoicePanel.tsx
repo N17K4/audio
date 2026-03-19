@@ -11,6 +11,10 @@ interface CreateVoicePanelProps {
   setNewVoiceModel: (v: File | null) => void;
   setNewVoiceIndex: (v: File | null) => void;
   setNewVoiceRef: (v: File | null) => void;
+  setNewVoiceGptModel?: (v: File | null) => void;
+  setNewVoiceSovitsModel?: (v: File | null) => void;
+  newVoiceRefText?: string;
+  setNewVoiceRefText?: (v: string) => void;
   setShowCreateVoice: (v: boolean) => void;
   onCreateVoice: () => void;
   fieldCls: string;
@@ -28,6 +32,10 @@ export default function CreateVoicePanel({
   setNewVoiceModel,
   setNewVoiceIndex,
   setNewVoiceRef,
+  setNewVoiceGptModel,
+  setNewVoiceSovitsModel,
+  newVoiceRefText = '',
+  setNewVoiceRefText,
   setShowCreateVoice,
   onCreateVoice,
   fieldCls,
@@ -38,10 +46,13 @@ export default function CreateVoicePanel({
 }: CreateVoicePanelProps) {
   const eng = engine || newVoiceEngine;
   const isRvc = eng === 'rvc';
+  const isGptSovits = eng === 'gpt_sovits';
 
   const [modelFile, setModelFile] = useState<File | null>(null);
   const [indexFile, setIndexFile] = useState<File | null>(null);
   const [refAudioFile, setRefAudioFile] = useState<File | null>(null);
+  const [gptModelFile, setGptModelFile] = useState<File | null>(null);
+  const [sovitsModelFile, setSovitsModelFile] = useState<File | null>(null);
 
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-5 space-y-4 dark:border-slate-600 dark:bg-slate-800/40">
@@ -76,6 +87,7 @@ export default function CreateVoicePanel({
               <option value="rvc">RVC</option>
               <option value="fish_speech">Fish Speech</option>
               <option value="seed_vc">Seed-VC</option>
+              <option value="gpt_sovits">GPT-SoVITS</option>
             </select>
           </label>
         )}
@@ -112,10 +124,54 @@ export default function CreateVoicePanel({
         </>
       )}
 
+      {isGptSovits && (
+        <>
+          {/* GPT 模型文件 */}
+          <div>
+            <span className={labelCls}>GPT 模型文件 .ckpt（必填）</span>
+            <FileDrop
+              files={gptModelFile ? [gptModelFile] : []}
+              onAdd={fs => { setGptModelFile(fs[0]); setNewVoiceGptModel?.(fs[0]); }}
+              onRemove={() => { setGptModelFile(null); setNewVoiceGptModel?.(null); }}
+              accept=".ckpt,.pt,.pth"
+              compact
+              iconType="file"
+              emptyLabel="点击选择 GPT 模型文件 (.ckpt)"
+            />
+          </div>
+
+          {/* SoVITS 模型文件 */}
+          <div>
+            <span className={labelCls}>SoVITS 模型文件 .pth（必填）</span>
+            <FileDrop
+              files={sovitsModelFile ? [sovitsModelFile] : []}
+              onAdd={fs => { setSovitsModelFile(fs[0]); setNewVoiceSovitsModel?.(fs[0]); }}
+              onRemove={() => { setSovitsModelFile(null); setNewVoiceSovitsModel?.(null); }}
+              accept=".pth,.pt"
+              compact
+              iconType="file"
+              emptyLabel="点击选择 SoVITS 模型文件 (.pth)"
+            />
+          </div>
+
+          {/* 参考文本 */}
+          <div>
+            <span className={labelCls}>参考文本（推荐，对应参考音频的文本）</span>
+            <textarea
+              className={fieldCls}
+              value={newVoiceRefText}
+              onChange={e => setNewVoiceRefText?.(e.target.value)}
+              rows={2}
+              placeholder="输入参考音频对应的文本内容（few-shot 合成时使用）"
+            />
+          </div>
+        </>
+      )}
+
       {/* 参考音频 */}
       <div>
         <span className={labelCls}>
-          {isRvc ? '参考音频（可选，用于音色预览）' : '参考音频（必填，用于声音克隆）'}
+          {isRvc ? '参考音频（可选，用于音色预览）' : isGptSovits ? '参考音频（推荐，用于 few-shot 合成）' : '参考音频（必填，用于声音克隆）'}
         </span>
         <FileDrop
           files={refAudioFile ? [refAudioFile] : []}
@@ -131,7 +187,7 @@ export default function CreateVoicePanel({
       <button
         className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
         onClick={onCreateVoice}
-        disabled={creatingVoice || !newVoiceName.trim() || !modelFile}
+        disabled={creatingVoice || !newVoiceName.trim() || (isRvc && !modelFile) || (isGptSovits && (!gptModelFile || !sovitsModelFile))}
       >
         {creatingVoice ? '创建中...' : '确认创建'}
       </button>

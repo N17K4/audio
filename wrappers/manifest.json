@@ -563,24 +563,6 @@
           "size_mb": 53,
           "required": true,
           "sha256": "baba41a3245958c7d769a045abdb25e3a7027e3380c365afca4037c6fa646b66"
-        },
-        {
-          "path": "raiden/model.pth",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
-          "filename": "raiden/model.pth",
-          "size_mb": 55,
-          "required": false,
-          "sha256": "f038cbf92ee58522831e8c6a723f53d11df8b7d157e39cd68d477f70d7e444b2"
-        },
-        {
-          "path": "raiden/raiden-jp_v2.index",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
-          "filename": "raiden/raiden-jp_v2.index",
-          "size_mb": 501,
-          "required": false,
-          "sha256": "227f40cfcde9edd581ef53edd91a8a34425c983199ea331a38f539be7b2716b0"
         }
       ]
     },

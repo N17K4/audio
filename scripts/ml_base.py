@@ -132,6 +132,20 @@ def _is_importable_in_target(target: str, module_name: str) -> bool:
     return (target_path / module_name).is_dir() or (target_path / f"{module_name}.py").is_file()
 
 
+# pip 包名 → 实际 import 模块名的映射（仅针对名称不一致的包）
+_PKG_TO_MODULE: dict[str, str] = {
+    "faiss_cpu": "faiss",
+    "ffmpeg_python": "ffmpeg",
+    "praat_parselmouth": "parselmouth",
+    "rvc_python": "rvc",
+    "faster_whisper": "faster_whisper",
+    "hydra_core": "hydra",
+    "scikit_learn": "sklearn",
+    "pillow": "PIL",
+    "pyyaml": "yaml",
+}
+
+
 def _embedded_dist_version(py: str, dist_name: str) -> str:
     code = (
         "import importlib.metadata as m; "
@@ -287,11 +301,25 @@ def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) 
                     pass
 
 
+def _ensure_pip_updated(py: str, json_progress: bool) -> None:
+    """尝试升级 pip，避免旧版 pip 在 Windows 上的已知 bug（长路径、依赖解析异常等）。"""
+    r = subprocess.run(
+        [py, "-m", "pip", "install", "--upgrade", "pip", "--quiet"],
+        capture_output=True, text=True, timeout=120,
+    )
+    if r.returncode == 0:
+        _emit({"type": "log", "message": "  ✓ pip 已更新到最新版"}, json_progress)
+
+
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
     """并行下载 + 逐个安装。单个失败不影响其他包。"""
     if target:
         Path(target).mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PYTHONPATH": target} if target else None
+
+    # Windows 旧版 pip 存在长路径等 bug，先升级
+    if platform.system() == "Windows":
+        _ensure_pip_updated(py, json_progress)
     no_deps_names = {n.lower().replace("-", "_") for n in _NO_DEPS_PACKAGES}
 
     # ── 筛选需要安装的包 ──────────────────────────────────────────────────
@@ -299,7 +327,8 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     # 无 target：检查全局 Python 环境
     to_install: list[str] = []
     for pkg in packages:
-        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+        raw_module = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+        module_name = _PKG_TO_MODULE.get(raw_module.lower(), raw_module)
         dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
         exact_version = _exact_version_spec(pkg)
         if exact_version:
@@ -395,7 +424,8 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
         for pkg in to_install:
             if pkg not in download_failed:
                 dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
-                module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+                raw_module = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+                module_name = _PKG_TO_MODULE.get(raw_module.lower(), raw_module)
                 exact_ver = _exact_version_spec(pkg)
                 if exact_ver:
                     if _installed_dist_version(py, target, dist_name) != exact_ver:

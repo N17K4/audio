@@ -656,6 +656,38 @@ def set_seed(seed: int):
 """
 
 
+def _patch_fish_speech_reference_loader(engine_dir: Path) -> None:
+    """修复 torchaudio 2.10.0+ 移除 list_audio_backends() 的兼容性问题。"""
+    target = engine_dir / "tools" / "inference_engine" / "reference_loader.py"
+    if not target.exists():
+        return
+    text = target.read_text(encoding="utf-8")
+    # 原始代码直接调用 torchaudio.list_audio_backends()，在 torchaudio ≥2.10 会 AttributeError
+    old_pattern = "backends = torchaudio.list_audio_backends()"
+    if old_pattern not in text:
+        return  # 已修复或代码结构不同
+    patched = text.replace(
+        """        backends = torchaudio.list_audio_backends()
+        if "ffmpeg" in backends:
+            self.backend = "ffmpeg"
+        else:
+            self.backend = "soundfile\"""",
+        """        # torchaudio 2.10+ 移除了 list_audio_backends；新 dispatcher 模式下无需显式 backend。
+        list_backends = getattr(torchaudio, "list_audio_backends", None)
+        if callable(list_backends):
+            backends = list_backends()
+            if "ffmpeg" in backends:
+                self.backend = "ffmpeg"
+            else:
+                self.backend = "soundfile"
+        else:
+            self.backend = None""",
+    )
+    if patched != text:
+        target.write_text(patched, encoding="utf-8")
+        print("  ✓ reference_loader.py torchaudio 兼容补丁已应用")
+
+
 def _patch_fish_speech_generate(engine_dir: Path) -> None:
     """修复 MPS torch.isin dtype 不匹配问题。"""
     target1 = engine_dir / "tools" / "llama" / "generate.py"
@@ -692,6 +724,7 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
 
     if _download_engine_zip_from_hf("fish_speech_v1.5.0.zip", engine_dir):
         _patch_fish_speech_generate(engine_dir)
+        _patch_fish_speech_reference_loader(engine_dir)
         n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
         print(f"  ✓ fish_speech engine 就绪（{n} 个文件，HF 下载）")
         return True
@@ -736,6 +769,7 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
     (utils_dir / "utils.py").write_text(_FISH_SPEECH_UTILS, encoding="utf-8")
 
     _patch_fish_speech_generate(engine_dir)
+    _patch_fish_speech_reference_loader(engine_dir)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
     shutil.rmtree(engine_dir / ".git", ignore_errors=True)

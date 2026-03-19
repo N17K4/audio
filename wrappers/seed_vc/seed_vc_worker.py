@@ -32,7 +32,9 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Seed-VC 持久化 Worker")
     p.add_argument("--checkpoint", required=True, help=".pth 模型路径")
     p.add_argument("--config", required=True, help=".yml 配置路径")
-    p.add_argument("--socket_path", required=True, help="Unix socket 路径")
+    p.add_argument("--socket_path", default="", help="Unix socket 路径")
+    p.add_argument("--tcp", action="store_true", help="使用 TCP 模式（Windows）")
+    p.add_argument("--port_file", default="", help="TCP 端口写入文件路径")
     p.add_argument("--device", default="", help="推理设备（默认自动检测）")
     return p.parse_args()
 
@@ -270,28 +272,48 @@ def main() -> int:
         print(f"[seed_vc_worker] 模型加载失败: {exc}", file=sys.stderr)
         return 1
 
+    use_tcp = args.tcp
     socket_path = args.socket_path
-    try:
-        os.unlink(socket_path)
-    except OSError:
-        pass
+    port_file = args.port_file
 
-    server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server_sock.bind(socket_path)
-    server_sock.listen(5)
+    if use_tcp:
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_sock.bind(("127.0.0.1", 0))
+        server_sock.listen(5)
+        tcp_port = server_sock.getsockname()[1]
+        if port_file:
+            Path(port_file).write_text(str(tcp_port))
+        listen_label = f"127.0.0.1:{tcp_port}"
+    else:
+        try:
+            os.unlink(socket_path)
+        except OSError:
+            pass
+        server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server_sock.bind(socket_path)
+        server_sock.listen(5)
+        listen_label = socket_path
 
     print("ready", flush=True)
-    print(f"[seed_vc_worker] 就绪，监听: {socket_path}", file=sys.stderr)
+    print(f"[seed_vc_worker] 就绪，监听: {listen_label}", file=sys.stderr)
 
     def _cleanup(signum=None, frame=None):
         try:
             server_sock.close()
         except Exception:
             pass
-        try:
-            os.unlink(socket_path)
-        except OSError:
-            pass
+        if use_tcp:
+            try:
+                if port_file:
+                    os.unlink(port_file)
+            except OSError:
+                pass
+        else:
+            try:
+                os.unlink(socket_path)
+            except OSError:
+                pass
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _cleanup)

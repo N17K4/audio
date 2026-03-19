@@ -56,107 +56,15 @@ jobs:
             ls -lh "AI-Workshop-"*
           fi
 
-      - name: 存储 macOS 产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: AI-Workshop-mac
-          path: AI-Workshop-mac-*.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: 存储 Windows 产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: AI-Workshop-win
-          path: AI-Workshop-win-*.zip
-          if-no-files-found: error
-          retention-days: 30
-
-  # ─── 阶段 2: 三路并行分发 (3 个独立虚拟机 × 独立带宽) ────────────────────
-  publish:
-    name: '🚀 ${{ matrix.target }}'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false  # 关键：任一失败不影响其他，三个任务完全独立
-      matrix:
-        include:
-          # - target: upyun
-          #   upload_args: --win --upyun-only --no-compress
-          - target: mac-release
-            upload_args: --mac --release-only --no-compress
-          - target: win-release
-            upload_args: --win --release-only --no-compress
-    steps:
-      - name: 检出脚本
-        uses: actions/checkout@v4
-
-      - name: 下载 macOS 产物
-        if: matrix.target == 'mac-release'
-        uses: actions/download-artifact@v4
-        with:
-          name: AI-Workshop-mac
-          path: ./assets-temp
-
-      - name: 下载 Windows 产物
-        if: matrix.target != 'mac-release'
-        uses: actions/download-artifact@v4
-        with:
-          name: AI-Workshop-win
-          path: ./assets-temp
-
-      - name: 准备上传环境 (移动 ZIP 到根目录)
-        run: |
-          echo "━━━━━━ 下载的产物结构 ━━━━━━"
-          find ./assets-temp -type f
-          echo "━━━━━━ 移动 ZIP 到根目录 ━━━━━━"
-          find ./assets-temp -name "*.zip" -exec mv {} . \;
-          ls -lh *.zip
-
-      # # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
-      # - name: 📤 Windows → 又拍云
-      #   if: matrix.target == 'upyun'
-      #   env:
-      #     UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
-      #     UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
-      #     TAG_NAME: ${{ github.ref_name }}
-      #   run: bash scripts/upload.sh ${{ matrix.upload_args }}
-
-      # ── 任务2: macOS → GitHub Release ───────────────────────────────
+      # ── 直接上传到 GitHub Release（不经 artifact 中转）──────────────
       - name: 📋 macOS → GitHub Release
-        if: matrix.target == 'mac-release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh ${{ matrix.upload_args }}
+        run: bash scripts/upload.sh --mac --release-only --no-compress
 
-      # ── 任务3: Windows → GitHub Release ─────────────────────────────
       - name: 📋 Windows → GitHub Release
-        if: matrix.target == 'win-release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh ${{ matrix.upload_args }}
-
-  # ─── 阶段 3: 状态汇总 ────────────────────────────────────────────────
-  summary:
-    name: ✅ 构建完成
-    needs: [build, publish]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: 汇总状态
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ 构建流水线执行完毕"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📦 产物："
-          echo "   - macOS: AI-Workshop-mac-${{ github.ref_name }}.zip"
-          echo "   - Windows: AI-Workshop-win-${{ github.ref_name }}.zip"
-          echo "🚀 分发："
-          echo "   - ✓ GitHub Release (macOS + Windows)"
-          echo "   - ✓ 又拍云 (Windows) [已暂停]"
-          echo "   - ✓ GitHub Artifacts (macOS + Windows 独立下载)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        run: bash scripts/upload.sh --win --release-only --no-compress
