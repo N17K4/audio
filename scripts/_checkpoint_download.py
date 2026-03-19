@@ -821,16 +821,18 @@ def prefetch_rvc_base_models(project_root: Path, resources_root: Path) -> None:
         print("  [rvc] 嵌入式 Python 未找到，跳过 RVC base model 预下载")
         return
 
+    runtime_env = dict(os.environ)
+
     # 检查 rvc-python 是否已安装（setup-engines.py 负责安装）
     check = subprocess.run([py, "-c", "from rvc_python.infer import RVCInference"],
-                           capture_output=True)
+                           capture_output=True, env=runtime_env)
     if check.returncode != 0:
         print("  [rvc] rvc-python 未安装，跳过 base model 预下载（请先运行 pnpm run setup）")
         return
 
     rvc_pkg = subprocess.run(
         [py, "-c", "import rvc_python, os; print(os.path.dirname(rvc_python.__file__))"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=runtime_env,
     )
     if rvc_pkg.returncode != 0:
         return
@@ -845,7 +847,7 @@ def prefetch_rvc_base_models(project_root: Path, resources_root: Path) -> None:
     print(f"  [rvc] 预下载 {', '.join(missing)} ...")
     r = subprocess.run(
         [py, "-c", "from rvc_python.infer import RVCInference; RVCInference()"],
-        capture_output=True, text=True, timeout=600,
+        capture_output=True, text=True, timeout=600, env=runtime_env,
     )
     if r.returncode == 0:
         print("    ✓ RVC 基础模型已就绪")
@@ -894,7 +896,8 @@ def prefetch_faster_whisper_model(
         print("  [faster-whisper] 嵌入式 Python 未找到，跳过模型预下载")
         return False
 
-    check = subprocess.run([py, "-c", "import faster_whisper"], capture_output=True)
+    runtime_env = dict(os.environ)
+    check = subprocess.run([py, "-c", "import faster_whisper"], capture_output=True, env=runtime_env)
     if check.returncode != 0:
         print("  [faster-whisper] faster-whisper 未安装，跳过模型预下载")
         return False
@@ -930,7 +933,7 @@ except Exception as e1:
         sys.exit(1)
 """
     # 传入干净的环境（去掉 HF_HUB_OFFLINE，保留其余环境变量）
-    clean_env = {k: v for k, v in os.environ.items() if k not in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")}
+    clean_env = {k: v for k, v in runtime_env.items() if k not in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")}
     r = subprocess.run(
         [py, "-c", script],
         capture_output=True, text=True, timeout=600,

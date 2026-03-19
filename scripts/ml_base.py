@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""安装基础 ML 依赖 — 所有引擎必需的包（torch、torchaudio、transformers 等）。
+"""安装基础运行依赖。
 
 Base 引擎：Fish Speech、RVC、Seed-VC、Faster Whisper、FaceFusion
 
@@ -12,6 +12,13 @@ Base 引擎：Fish Speech、RVC、Seed-VC、Faster Whisper、FaceFusion
         --target /path/to/userData/python-packages \
         [--pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple] \
         [--json-progress]
+
+说明：
+    用户首次启动时，这个脚本会安装两类依赖到外部包目录：
+    1) runtime_pip_packages：torch、torchaudio、transformers 等重型运行库
+    2) pip_packages：faster-whisper、rvc-python 等轻量但运行必需的包
+
+这样打包产物即使没有在构建机提前执行完整 setup，也能完成默认引擎的首启安装。
 """
 
 from __future__ import annotations
@@ -199,7 +206,7 @@ def main():
         _emit({"type": "log", "message": "✗ 嵌入式 Python 未找到，请先运行 pnpm run setup"}, args.json_progress)
         return 1
 
-    phase_label = "1/2 正在安装运行库…" if args.json_progress else "安装 runtime_pip_packages"
+    phase_label = "1/2 正在安装运行依赖…" if args.json_progress else "安装运行依赖"
     _emit({"type": "phase", "label": phase_label}, args.json_progress)
     if args.target:
         _emit({"type": "log", "message": f"目标目录：{args.target}"}, args.json_progress)
@@ -210,6 +217,7 @@ def main():
 
     all_pkgs: list[str] = []
     for cfg in engines.values():
+        all_pkgs.extend(cfg.get("pip_packages", []))
         all_pkgs.extend(cfg.get("runtime_pip_packages", []))
 
     packages = _dedup_packages(all_pkgs)

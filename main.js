@@ -363,6 +363,9 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     ...process.env,
     RESOURCES_ROOT: app.isPackaged ? process.resourcesPath : __dirname,
     CHECKPOINTS_DIR: ckptDir,
+    // 首次安装阶段把 userData/python-packages 暴露给后续脚本，
+    // 这样 checkpoints 阶段才能 import 刚刚装入的 faster-whisper / rvc-python。
+    PYTHONPATH: userPkgDir,
     ...(hfEndpoint ? { HF_ENDPOINT: hfEndpoint } : {}),
   };
   const setupLog = createAppendLogger('setup-download.log');

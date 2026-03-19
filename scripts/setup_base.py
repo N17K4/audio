@@ -461,8 +461,8 @@ def _install_rvc_python(py: str) -> bool:
         return False
     _patch_fairseq_for_py312(py)
     pip("bitarray")
-    print("  [pip] 安装 rvc-python (--no-deps) ...")
-    if not pip("rvc-python", "--no-deps"):
+    print("  [pip] 安装 rvc-python==0.1.5 (--no-deps) ...")
+    if not pip("rvc-python==0.1.5", "--no-deps"):
         return False
     return True
 

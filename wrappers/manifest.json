@@ -326,7 +326,7 @@
         }
       ],
       "pip_packages": [
-        "rvc-python",
+        "rvc-python==0.1.5",
         "setuptools"
       ],
       "runtime_pip_packages": [
@@ -351,7 +351,7 @@
       "code_dir": "runtime/faster_whisper",
       "checkpoint_dir": "checkpoints/faster_whisper",
       "pip_packages": [
-        "faster-whisper"
+        "faster-whisper==1.2.1"
       ],
       "runtime_pip_packages": [],
       "readiness_check_file": "base/model.bin",
