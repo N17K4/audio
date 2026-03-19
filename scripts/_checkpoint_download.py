@@ -889,14 +889,14 @@ def prefetch_faster_whisper_model(
     if check_only:
         return False
 
-    py = get_embedded_python(project_root)
+    py = get_embedded_python(resources_root) or get_embedded_python(project_root)
     if not py:
-        print("  [faster-whisper] 嵌入式 Python 未找到，跳过模型预下载（请先运行 pnpm run setup）")
+        print("  [faster-whisper] 嵌入式 Python 未找到，跳过模型预下载")
         return False
 
     check = subprocess.run([py, "-c", "import faster_whisper"], capture_output=True)
     if check.returncode != 0:
-        print("  [faster-whisper] faster-whisper 未安装，跳过模型预下载（请先运行 pnpm run setup）")
+        print("  [faster-whisper] faster-whisper 未安装，跳过模型预下载")
         return False
 
     print(f"  [faster-whisper] 下载 {model} 模型到 {model_dir} ...")

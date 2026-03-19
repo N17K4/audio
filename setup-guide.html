@@ -381,11 +381,13 @@ function skipDownload() {
 let _currentFile = '';
 let _logLines = [];  // 收集所有日志，失败时展示
 let _failedItems = [];
+let _pendingFiles = new Map();
 
 function resetFailureState() {
   _currentFile = '';
   _logLines = [];
   _failedItems = [];
+  _pendingFiles = new Map();
   document.getElementById('log-area').innerHTML = '';
   document.getElementById('error-detail').style.display = 'none';
   document.getElementById('error-detail').textContent = '';
@@ -396,6 +398,10 @@ function resetFailureState() {
 function rememberFailure(label) {
   if (!label) return;
   if (!_failedItems.includes(label)) _failedItems.push(label);
+}
+
+function fileKey(engine, file) {
+  return `${engine || 'unknown'}::${file || ''}`;
 }
 
 window.setupAPI.onProgress((msg) => {
@@ -410,11 +416,16 @@ window.setupAPI.onProgress((msg) => {
       break;
     case 'file_start':
       _currentFile = msg.file || '';
+      _pendingFiles.set(
+        fileKey(msg.engine, msg.file || _currentFile),
+        `${msg.engine || 'unknown'} / ${msg.file || _currentFile}`
+      );
       appendLog(`  ↓ ${_currentFile}${msg.size_mb ? '（' + fmtSize(msg.size_mb) + '）' : ''}`);
       break;
     case 'progress':
       break;
     case 'file_done':
+      _pendingFiles.delete(fileKey(msg.engine, msg.file || _currentFile));
       if (msg.ok) {
         appendLog(`  ✓ ${msg.file || _currentFile} 完成`);
       } else {
@@ -425,7 +436,11 @@ window.setupAPI.onProgress((msg) => {
     case 'log':
       if (msg.message) {
         appendLog(msg.message);
-        if (/^\s*✗\s+/.test(msg.message)) rememberFailure(msg.message.replace(/^\s*✗\s+/, '').trim());
+      }
+      break;
+    case 'all_done':
+      if (msg.ok === false) {
+        for (const item of _pendingFiles.values()) rememberFailure(item);
       }
       break;
     default:
