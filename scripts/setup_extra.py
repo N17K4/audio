@@ -2,7 +2,7 @@
 """
 额外引擎初始化 — 可选引擎的 pip_packages + 源码。
 
-Extra 引擎：Faster Whisper、FaceFusion、LivePortrait、Flux、SD、WAN、GOT-OCR、Whisper
+Extra 引擎：LivePortrait、Flux、SD、WAN、GOT-OCR、Whisper
 
 用法（开发全量）：
     python3 scripts/setup_extra.py
@@ -31,11 +31,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 # 额外引擎集合（不含 rag_engine/agent_engine/finetune_engine，它们只有 runtime_pip_packages，由 ml_extra.py 处理）
-EXTRA_ENGINES = {"whisper", "got_ocr", "liveportrait", "wan", "flux", "sd", "faster_whisper", "facefusion"}
+EXTRA_ENGINES = {"whisper", "got_ocr", "liveportrait", "wan", "flux", "sd"}
 
-# FaceFusion 源码 setup 复用 setup_base.py 的实现
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from setup_base import setup_facefusion_engine  # noqa: E402
 
 HF_ASSETS_REPO = "N17K4/ai-workshop-assets"
 
@@ -234,7 +231,7 @@ def main_full_setup(project_root: Path) -> int:
     for engine_name in sorted(EXTRA_ENGINES):
         cfg = engines.get(engine_name, {})
         packages: list[str] = cfg.get("pip_packages", [])
-        if not packages and engine_name not in ("liveportrait", "facefusion"):
+        if not packages and engine_name != "liveportrait":
             continue
 
         print(f"▶ {engine_name}")
@@ -247,9 +244,6 @@ def main_full_setup(project_root: Path) -> int:
 
         if engine_name == "liveportrait":
             if not setup_liveportrait_engine(project_root):
-                all_ok = False
-        elif engine_name == "facefusion":
-            if not setup_facefusion_engine(project_root):
                 all_ok = False
         print()
 
@@ -294,9 +288,6 @@ def main_single_engine(engine: str, project_root: Path) -> int:
 
     if engine == "liveportrait":
         if not setup_liveportrait_engine(project_root):
-            ok = False
-    elif engine == "facefusion":
-        if not setup_facefusion_engine(project_root):
             ok = False
 
     return 0 if ok else 1

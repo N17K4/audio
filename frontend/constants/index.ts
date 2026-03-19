@@ -113,7 +113,7 @@ export const DEFAULT_MODELS: Record<string, Record<string, string>> = {
   asr: {
     openai:          'whisper-1',
     gemini:          'gemini-2.5-flash',
-    faster_whisper:  'base',
+    faster_whisper:  'large-v3',
     whisper:         'base',
     groq:            'whisper-large-v3-turbo',
     deepgram:        'nova-3',

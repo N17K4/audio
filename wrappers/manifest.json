@@ -345,8 +345,8 @@
       "version": "1.x",
       "ui": {
         "label": "Faster Whisper",
-        "size_display": "base · ~150 MB",
-        "default_install": false
+        "size_display": "large-v3 · ~3.1 GB",
+        "default_install": true
       },
       "code_dir": "runtime/faster_whisper",
       "checkpoint_dir": "checkpoints/faster_whisper",
@@ -354,8 +354,8 @@
         "faster-whisper==1.2.1"
       ],
       "runtime_pip_packages": [],
-      "readiness_check_file": "base/model.bin",
-      "_note": "模型由 prefetch_faster_whisper_model() 下载到 checkpoint_dir/base/，readiness_check_file 供 health.py 判断就绪状态",
+      "readiness_check_file": "large-v3/model.bin",
+      "_note": "模型由 prefetch_faster_whisper_model() 下载到 checkpoint_dir/large-v3/，readiness_check_file 供 health.py 判断就绪状态",
       "env_key": "FASTER_WHISPER_CHECKPOINT_DIR"
     },
     "whisper": {
@@ -459,7 +459,7 @@
       "ui": {
         "label": "FaceFusion",
         "size_display": "~540 MB",
-        "default_install": false
+        "default_install": true
       },
       "code_dir": "runtime/facefusion/engine",
       "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
@@ -727,7 +727,7 @@
       "ui": {
         "label": "GPT-SoVITS",
         "size_display": "~1.5 GB",
-        "default_install": false
+        "default_install": true
       },
       "description": "GPT-SoVITS v2 角色声音克隆 TTS（少量数据训练或加载社区模型）",
       "code_dir": "runtime/gpt_sovits/engine",

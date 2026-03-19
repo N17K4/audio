@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Faster-Whisper STT 适配器")
     parser.add_argument("--input", required=True, help="输入音频路径")
     parser.add_argument("--output", required=True, help="转录文本输出路径")
-    parser.add_argument("--model", default="base", help="Whisper 模型（默认 base）")
+    parser.add_argument("--model", default="large-v3", help="Whisper 模型（默认 large-v3）")
     parser.add_argument("--checkpoint_dir", default="", help="模型缓存目录（覆盖 manifest 默认值）")
     return parser.parse_args()
 

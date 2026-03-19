@@ -2,7 +2,7 @@
 """
 开发环境一站式初始化 — 下载嵌入式 Python + 安装 backend 依赖 + 基础引擎。
 
-Base 引擎：Fish Speech、RVC、Seed-VC
+Base 引擎：Fish Speech、GPT-SoVITS、RVC、Seed-VC、Faster Whisper、FaceFusion
 
 用法（开发全量）：
     python3 scripts/setup_base.py
@@ -46,7 +46,7 @@ MAC_PY_VERSION = "3.12.9"
 WIN_PY_VERSION = "3.10.11"
 
 # 基础引擎集合
-BASE_ENGINES = {"fish_speech", "seed_vc", "rvc"}
+BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper", "facefusion"}
 
 # HuggingFace 资产仓库
 HF_ASSETS_REPO = "N17K4/ai-workshop-assets"

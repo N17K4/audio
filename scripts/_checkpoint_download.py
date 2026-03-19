@@ -895,7 +895,7 @@ def prefetch_faster_whisper_model(
     resources_root: Path,
     checkpoints_base: "Path | None",
     check_only: bool = False,
-    model: str = "base",
+    model: str = "large-v3",
 ) -> bool:
     """预下载 faster-whisper 模型到 checkpoint_dir/{model}/。
 

@@ -154,6 +154,21 @@ def _dist_version_in_target(target: str, dist_name: str) -> str:
     return ""
 
 
+def _actual_pkg_version(target: str, pkg_name: str) -> str:
+    """读取 target 目录中包的实际 version.py，返回版本号。"""
+    version_py = Path(target) / pkg_name / "version.py"
+    if not version_py.exists():
+        return ""
+    try:
+        for line in version_py.read_text().splitlines():
+            m = re.match(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", line)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return ""
+
+
 def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) -> None:
     """检查 --target 目录中 torch 栈版本是否与嵌入式 Python 一致，不一致时强制重装。"""
     pinned: dict[str, str] = {}
@@ -161,7 +176,7 @@ def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) 
         expected = _embedded_dist_version(py, dist_name)
         if not expected:
             continue
-        actual = _dist_version_in_target(target, dist_name)
+        actual = _actual_pkg_version(target, dist_name)
         if actual and actual != expected:
             pinned[dist_name] = f"{dist_name}=={expected}"
             _emit({"type": "log", "message":
@@ -210,6 +225,20 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     env = {**os.environ, "PYTHONPATH": target} if target else None
     all_ok = True
 
+    # 生成 constraints 文件，锁定 torch 栈版本，防止 transitive dep 升级
+    import tempfile as _tmpmod
+    constraints_file = ""
+    _torch_constraints: list[str] = []
+    for dist_name in ("torch", "torchaudio", "torchvision"):
+        ver = _embedded_dist_version(py, dist_name)
+        if ver:
+            _torch_constraints.append(f"{dist_name}=={ver}")
+    if _torch_constraints:
+        _cf = _tmpmod.NamedTemporaryFile(mode="w", suffix=".txt", prefix="torch_constraints_", delete=False)
+        _cf.write("\n".join(_torch_constraints) + "\n")
+        _cf.close()
+        constraints_file = _cf.name
+
     groups = _group_by_namespace(packages)
     for group in groups:
         # 检查哪些包需要安装
@@ -231,6 +260,8 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
         cmd = [py, "-m", "pip", "install"] + to_install + ["--quiet"]
         if target:
             cmd += ["--target", target, "--upgrade"]
+        if constraints_file:
+            cmd += ["--constraint", constraints_file]
         if mirror:
             cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
 
@@ -243,6 +274,13 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             for pkg in to_install:
                 _emit({"type": "log", "message": f"  ✗ {pkg} 失败: {err}"}, json_progress)
             all_ok = False
+
+    # 清理临时 constraints 文件
+    if constraints_file:
+        try:
+            os.unlink(constraints_file)
+        except OSError:
+            pass
 
     return all_ok
 

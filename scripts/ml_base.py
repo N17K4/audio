@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """安装基础运行依赖。
 
-Base 引擎：Fish Speech、RVC、Seed-VC
+Base 引擎：Fish Speech、GPT-SoVITS、RVC、Seed-VC、Faster Whisper、FaceFusion
 
 运行模式（本地开发）：
     python scripts/ml_base.py
@@ -43,7 +43,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # 基础引擎集合（默认安装，所有环境都需要）
 BASE_ENGINES = {
+    "facefusion",
+    "faster_whisper",
     "fish_speech",
+    "gpt_sovits",
     "rvc",
     "seed_vc",
 }
@@ -214,18 +217,35 @@ def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
         _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
 
+def _actual_pkg_version(target: str, pkg_name: str) -> str:
+    """读取 target 目录中包的实际 version.py，返回版本号。
+    比 dist-info 更可靠：pip --upgrade 可能替换了包目录但留下旧的 dist-info。"""
+    version_py = Path(target) / pkg_name / "version.py"
+    if not version_py.exists():
+        return ""
+    try:
+        for line in version_py.read_text().splitlines():
+            m = re.match(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", line)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return ""
+
+
 def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) -> None:
     """检查 --target 目录中 torch 栈版本是否与嵌入式 Python 一致，不一致时强制重装。
 
     pip install --target --upgrade 安装其他包时，transitive dependency 可能将 torch/torchaudio
     升级到最新版，导致 ABI 不兼容（如 _aoti_torch_abi_version 符号缺失）。
+    通过读取 version.py（而非 dist-info）检测实际版本，避免 dist-info 残留导致误判。
     """
     pinned: dict[str, str] = {}
     for dist_name in ("torch", "torchaudio", "torchvision"):
         expected = _embedded_dist_version(py, dist_name)
         if not expected:
             continue
-        actual = _dist_version_in_target(target, dist_name)
+        actual = _actual_pkg_version(target, dist_name)
         if actual and actual != expected:
             pinned[dist_name] = f"{dist_name}=={expected}"
             _emit({"type": "log", "message":
@@ -325,6 +345,17 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
                 download_failed[pkg] = err
 
     # ── Phase 2: 从本地缓存逐个安装（快速、故障隔离）─────────────────────
+    # 生成 constraints 文件，锁定 torch 栈版本，防止 transitive dep 升级
+    constraints_file = os.path.join(cache_dir, "_constraints.txt")
+    _torch_constraints = []
+    for dist_name in ("torch", "torchaudio", "torchvision"):
+        ver = _embedded_dist_version(py, dist_name)
+        if ver:
+            _torch_constraints.append(f"{dist_name}=={ver}")
+    if _torch_constraints:
+        Path(constraints_file).write_text("\n".join(_torch_constraints) + "\n")
+        _emit({"type": "log", "message": f"  torch 版本锁定：{', '.join(_torch_constraints)}"}, json_progress)
+
     all_ok = True
     for pkg in to_install:
         if pkg in download_failed:
@@ -338,6 +369,8 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             cmd.append("--no-deps")
         if target:
             cmd += ["--target", target, "--upgrade"]
+        if _torch_constraints:
+            cmd += ["--constraint", constraints_file]
         if mirror:
             cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
@@ -348,7 +381,7 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             _emit({"type": "log", "message": f"  ✗ {pkg} 安装失败: {err}"}, json_progress)
             all_ok = False
 
-    # ── Phase 3: 修复 torch 栈版本（transitive dep 可能将其升级到最新版）────
+    # ── Phase 3: 修复 torch 栈版本（万一 constraints 未能完全阻止）─────────
     if target:
         _repair_torch_stack(py, target, mirror, json_progress)
 

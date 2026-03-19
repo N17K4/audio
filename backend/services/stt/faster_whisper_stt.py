@@ -11,7 +11,7 @@ from utils.engine import get_faster_whisper_command_template, build_engine_env
 from utils.audit import log_ai_call, log_ai_error
 
 
-async def run_faster_whisper_stt(content: bytes, filename: str, model: str = "base") -> Dict:
+async def run_faster_whisper_stt(content: bytes, filename: str, model: str = "large-v3") -> Dict:
     cmd_tpl = get_faster_whisper_command_template()
     if not cmd_tpl:
         raise HTTPException(
