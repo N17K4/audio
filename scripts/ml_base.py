@@ -135,6 +135,12 @@ def align_torch_stack_versions(packages: list[str], py: str) -> list[str]:
     return normalized
 
 
+# 这些包的 PyPI 元数据声明了过时的硬依赖（如 faiss-cpu==1.7.3），
+# 但实际运行所需的依赖已在 manifest.json 的 runtime_pip_packages 中单独列出。
+# 必须使用 --no-deps 安装以避免版本冲突。
+_NO_DEPS_PACKAGES = {"rvc-python"}
+
+
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
     """安装包列表。target 为空时直接 pip install，否则 pip install --target。"""
     if target:
@@ -159,6 +165,8 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
 
         _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
         cmd = [py, "-m", "pip", "install", pkg, "--quiet"]
+        if dist_name.lower().replace("-", "_") in {n.lower().replace("-", "_") for n in _NO_DEPS_PACKAGES}:
+            cmd.append("--no-deps")
         if target:
             cmd += ["--target", target, "--upgrade"]
         if mirror:

@@ -46,13 +46,13 @@ app.commandLine.appendSwitch('lang', 'zh-CN');
     }
   } catch { /* PID 文件不存在或格式错误，忽略 */ }
 
-  // 2. 清理孤儿后端进程（父进程死后 uvicorn/python 可能继续运行）
+  // 2. 清理孤儿后端进程 + worker 进程（父进程死后可能继续运行）
   try {
     if (process.platform === 'win32') {
       execSync('taskkill /F /FI "IMAGENAME eq uvicorn.exe" 2>nul', { stdio: 'ignore' });
     } else {
       execSync(
-        "pkill -f 'uvicorn main:app' 2>/dev/null; pkill -f 'backend/main\\.py' 2>/dev/null; true",
+        "pkill -f 'uvicorn main:app' 2>/dev/null; pkill -f 'backend/main\\.py' 2>/dev/null; pkill -f 'fish_speech_worker\\.py' 2>/dev/null; pkill -f 'seed_vc_worker\\.py' 2>/dev/null; true",
         { shell: true, stdio: 'ignore' }
       );
     }
@@ -286,6 +286,34 @@ function waitBackendReady(baseUrl, timeoutMs) {
       req.on('error', () => {
         if (Date.now() - start > timeoutMs) return reject(new Error('Backend 启动超时'));
         setTimeout(poll, 1500);
+      });
+    }
+    poll();
+  });
+}
+
+// ─── Frontend Dev Server 就绪检测（TCP → HTTP 二段階確認）────────────────
+function waitFrontendReady(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    function poll() {
+      const req = http.get(url, { timeout: 3000 }, (res) => {
+        let body = '';
+        res.on('data', d => { body += d; });
+        res.on('end', () => {
+          // TCP 通だが HTTP が HTML を返しているか確認
+          const ct = res.headers['content-type'] || '';
+          if (res.statusCode === 200 && (ct.includes('text/html') || body.includes('<'))) {
+            console.log(`[UI] Frontend HTTP ready (status=${res.statusCode} content-type=${ct})`);
+            return resolve();
+          }
+          if (Date.now() - start > timeoutMs) return reject(new Error('Frontend dev server 启动超时'));
+          setTimeout(poll, 800);
+        });
+      });
+      req.on('error', () => {
+        if (Date.now() - start > timeoutMs) return reject(new Error('Frontend dev server 启动超时'));
+        setTimeout(poll, 800);
       });
     }
     poll();
@@ -638,9 +666,19 @@ async function createWindow() {
     if (code !== 0) console.error(`[Backend] exited code=${code} signal=${signal}`);
   });
 
-  // 立即加载前端页面，不等 backend，前端自己处理连接等待状态
   if (isDev) {
-    await win.loadURL('http://localhost:3000');
+    // 开发模式：等 Next.js dev server HTTP 就绪后再加载，避免白屏
+    const frontendPort = 3000;
+    const frontendUrl = `http://localhost:${frontendPort}`;
+    console.log(`[UI] Waiting for frontend dev server at ${frontendUrl} ...`);
+    try {
+      await waitFrontendReady(frontendUrl, 60000);
+      console.log(`[UI] Frontend ready, loading ${frontendUrl}`);
+    } catch (err) {
+      console.error(`[UI] ${err.message}, loading anyway`);
+    }
+    await win.loadURL(frontendUrl);
+    win.setTitle(`AI Workshop (Dev · backend:${backendPort})`);
   } else {
     await win.loadFile(path.join(__dirname, 'frontend', 'out', 'index.html'));
   }
@@ -1243,6 +1281,18 @@ ipcMain.handle('dialog:selectDir', async () => {
 
 app.on('before-quit', () => {
   if (downloadProc) { downloadProc.kill(); downloadProc = null; }
+  // 清理 worker 子进程（backend 启动的孙进程，不会随 pyProcess 一起退出）
+  try {
+    const { execSync } = require('child_process');
+    if (process.platform === 'win32') {
+      execSync('taskkill /F /FI "IMAGENAME eq python3.exe" /FI "WINDOWTITLE eq *worker*" 2>nul', { stdio: 'ignore' });
+    } else {
+      execSync(
+        "pkill -f 'fish_speech_worker\\.py' 2>/dev/null; pkill -f 'seed_vc_worker\\.py' 2>/dev/null; true",
+        { shell: true, stdio: 'ignore' }
+      );
+    }
+  } catch { /**/ }
 });
 
 app.on('window-all-closed', () => {

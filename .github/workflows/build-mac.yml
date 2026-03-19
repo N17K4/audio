@@ -47,23 +47,32 @@ jobs:
           # Windows
           if [ -d "dist/win-unpacked" ]; then
             echo "📦 压缩 Windows..."
+            mv "dist/win-unpacked" "dist/AI-Workshop"
             if command -v 7z &> /dev/null; then
-              7z a -tzip "AI-Workshop-win-${TAG}.zip" "dist/win-unpacked"
+              (cd dist && 7z a -tzip "../AI-Workshop-win-${TAG}.zip" "AI-Workshop")
             else
-              tar -czf "AI-Workshop-win-${TAG}.tar.gz" "dist/win-unpacked"
+              (cd dist && tar -czf "../AI-Workshop-win-${TAG}.tar.gz" "AI-Workshop")
             fi
             ls -lh "AI-Workshop-"*
           fi
 
-      - name: 存储产物
+      - name: 存储 macOS 产物
         uses: actions/upload-artifact@v4
         with:
-          name: build-assets
-          path: AI-Workshop-*.zip
+          name: AI-Workshop-mac
+          path: AI-Workshop-mac-*.zip
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
 
-  # ─── 阶段 2: 四路并行分发 (4 个独立虚拟机 × 独立带宽) ────────────────────
+      - name: 存储 Windows 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Workshop-win
+          path: AI-Workshop-win-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  # ─── 阶段 2: 三路并行分发 (3 个独立虚拟机 × 独立带宽) ────────────────────
   publish:
     name: '🚀 ${{ matrix.target }}'
     needs: build
@@ -71,24 +80,31 @@ jobs:
     permissions:
       contents: write
     strategy:
-      fail-fast: false  # 关键：任一失败不影响其他，四个任务完全独立
+      fail-fast: false  # 关键：任一失败不影响其他，三个任务完全独立
       matrix:
         include:
-          - target: upyun
-            upload_args: --win --upyun-only --no-compress
+          # - target: upyun
+          #   upload_args: --win --upyun-only --no-compress
           - target: mac-release
             upload_args: --mac --release-only --no-compress
           - target: win-release
             upload_args: --win --release-only --no-compress
-          - target: artifacts-backup
     steps:
       - name: 检出脚本
         uses: actions/checkout@v4
 
-      - name: 下载构建产物
+      - name: 下载 macOS 产物
+        if: matrix.target == 'mac-release'
         uses: actions/download-artifact@v4
         with:
-          name: build-assets
+          name: AI-Workshop-mac
+          path: ./assets-temp
+
+      - name: 下载 Windows 产物
+        if: matrix.target != 'mac-release'
+        uses: actions/download-artifact@v4
+        with:
+          name: AI-Workshop-win
           path: ./assets-temp
 
       - name: 准备上传环境 (移动 ZIP 到根目录)
@@ -99,14 +115,14 @@ jobs:
           find ./assets-temp -name "*.zip" -exec mv {} . \;
           ls -lh *.zip
 
-      # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
-      - name: 📤 Windows → 又拍云
-        if: matrix.target == 'upyun'
-        env:
-          UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
-          UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh ${{ matrix.upload_args }}
+      # # ── 任务1: Windows → 又拍云 ──────────────────────────────────────
+      # - name: 📤 Windows → 又拍云
+      #   if: matrix.target == 'upyun'
+      #   env:
+      #     UPYUN_OPERATOR: ${{ secrets.UPYUN_OPERATOR }}
+      #     UPYUN_PASSWORD: ${{ secrets.UPYUN_PASSWORD }}
+      #     TAG_NAME: ${{ github.ref_name }}
+      #   run: bash scripts/upload.sh ${{ matrix.upload_args }}
 
       # ── 任务2: macOS → GitHub Release ───────────────────────────────
       - name: 📋 macOS → GitHub Release
@@ -123,15 +139,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: bash scripts/upload.sh ${{ matrix.upload_args }}
-
-      # ── 任务4: 两个 ZIP → GitHub Artifacts 备份 ──────────────────────
-      - name: 💾 Artifacts 备份
-        if: matrix.target == 'artifacts-backup'
-        uses: actions/upload-artifact@v4
-        with:
-          name: releases-${{ github.ref_name }}
-          path: AI-Workshop-*.zip
-          retention-days: 30
 
   # ─── 阶段 3: 状态汇总 ────────────────────────────────────────────────
   summary:
@@ -150,6 +157,6 @@ jobs:
           echo "   - Windows: AI-Workshop-win-${{ github.ref_name }}.zip"
           echo "🚀 分发："
           echo "   - ✓ GitHub Release (macOS + Windows)"
-          echo "   - ✓ 又拍云 (Windows)"
-          echo "   - ✓ GitHub Artifacts (备份)"
+          echo "   - ✓ 又拍云 (Windows) [已暂停]"
+          echo "   - ✓ GitHub Artifacts (macOS + Windows 独立下载)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

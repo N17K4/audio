@@ -13,13 +13,18 @@ Fish Speech 1.5 持久化推理 Worker。
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import signal
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
+
+# 空闲超时（秒）：无请求时自动退出，释放 GPU/CPU 内存
+IDLE_TIMEOUT = 600  # 10 分钟
 
 
 def parse_args() -> argparse.Namespace:
@@ -109,8 +114,22 @@ def load_engine(checkpoint_dir: str, device: str):
     return engine
 
 
-def handle_request(conn: socket.socket, engine) -> None:
+def _release_memory() -> None:
+    """推理后释放 GPU/CPU 缓存，防止内存无限蓄积。"""
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        if hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
+            torch.mps.empty_cache()
+    except Exception:
+        pass
+
+
+def handle_request(conn: socket.socket, engine, last_active: list) -> None:
     """处理单个 socket 连接：读取请求 → 推理 → 写回结果。"""
+    last_active[0] = time.monotonic()
     try:
         # 读取直到换行（请求是单行 JSON）
         buf = b""
@@ -187,6 +206,7 @@ def handle_request(conn: socket.socket, engine) -> None:
             pass
     finally:
         conn.close()
+        _release_memory()
 
 
 def _send(conn: socket.socket, payload: dict) -> None:
@@ -234,13 +254,23 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, _cleanup)
 
+    # 空闲计时器：超过 IDLE_TIMEOUT 无请求则自动退出
+    last_active = [time.monotonic()]
+    server_sock.settimeout(60.0)  # accept 每 60s 超时一次，检查空闲
+
     while True:
         try:
             conn, _ = server_sock.accept()
+        except socket.timeout:
+            idle = time.monotonic() - last_active[0]
+            if idle >= IDLE_TIMEOUT:
+                print(f"[fish_speech_worker] 空闲 {idle:.0f}s，自动退出", file=sys.stderr, flush=True)
+                _cleanup()
+            continue
         except OSError:
             break
         # 每个请求在独立线程中处理，worker 可持续接收新请求
-        t = threading.Thread(target=handle_request, args=(conn, engine), daemon=True)
+        t = threading.Thread(target=handle_request, args=(conn, engine, last_active), daemon=True)
         t.start()
 
     return 0
