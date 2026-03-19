@@ -35,6 +35,7 @@ export function useTTS({
   const [ttsText, setTtsText] = useState('你好，这是一段测试语音。');
   const [ttsModel, setTtsModel] = useState('');
   const [ttsVoice, setTtsVoice] = useState('');
+  const [ttsVoiceId, setTtsVoiceId] = useState('');
   const [ttsRefAudios, setTtsRefAudios] = useState<File[]>([]);
   const [ttsRefInputMode, setTtsRefInputMode] = useState<VcInputMode>('upload');
   const [ttsRefRecordedObjectUrl, setTtsRefRecordedObjectUrl] = useState<string | null>(null);
@@ -113,6 +114,9 @@ export function useTTS({
       if (selectedProvider === 'fish_speech') {
         ttsRefAudios.forEach(f => fd.append('reference_audio', f));
       }
+      if (selectedProvider === 'gpt_sovits' && ttsVoiceId) {
+        fd.append('voice_id', ttsVoiceId);
+      }
       const res = await fetch(`${backendBaseUrl}/tasks/tts`, { method: 'POST', body: fd });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(`任务失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
@@ -134,6 +138,7 @@ export function useTTS({
     ttsText, setTtsText,
     ttsModel, setTtsModel,
     ttsVoice, setTtsVoice,
+    ttsVoiceId, setTtsVoiceId,
     ttsRefAudios, setTtsRefAudios,
     ttsRefInputMode, setTtsRefInputMode,
     ttsRefRecordedObjectUrl,

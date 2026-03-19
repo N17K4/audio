@@ -129,6 +129,79 @@ def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
         _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
 
+def _embedded_dist_version(py: str, dist_name: str) -> str:
+    code = (
+        "import importlib.metadata as m; "
+        f"print(m.version({dist_name!r}))"
+    )
+    r = subprocess.run([py, "-c", code], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def _dist_version_in_target(target: str, dist_name: str) -> str:
+    """扫描 target 目录中的 .dist-info 目录，提取版本号。"""
+    target_path = Path(target)
+    if not target_path.exists():
+        return ""
+    normalized = dist_name.lower().replace("-", "_")
+    for item in target_path.iterdir():
+        if not item.name.endswith(".dist-info"):
+            continue
+        name_lower = item.name.lower().replace("-", "_")
+        m = re.match(r"^(.+?)[-_](\d[\w.]*?)\.dist.info$", name_lower)
+        if m and m.group(1) == normalized:
+            return m.group(2)
+    return ""
+
+
+def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) -> None:
+    """检查 --target 目录中 torch 栈版本是否与嵌入式 Python 一致，不一致时强制重装。"""
+    pinned: dict[str, str] = {}
+    for dist_name in ("torch", "torchaudio", "torchvision"):
+        expected = _embedded_dist_version(py, dist_name)
+        if not expected:
+            continue
+        actual = _dist_version_in_target(target, dist_name)
+        if actual and actual != expected:
+            pinned[dist_name] = f"{dist_name}=={expected}"
+            _emit({"type": "log", "message":
+                   f"  ⚠ {dist_name} 版本不一致：target={actual} embedded={expected}，将修复"},
+                  json_progress)
+
+    if not pinned:
+        return
+
+    pkgs = list(pinned.values())
+    _emit({"type": "log", "message": f"  修复 torch 栈版本：{', '.join(pkgs)}"}, json_progress)
+    cmd = [py, "-m", "pip", "install"] + pkgs + [
+        "--target", target, "--upgrade", "--force-reinstall", "--quiet",
+    ]
+    if mirror:
+        cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if r.returncode == 0:
+        _emit({"type": "log", "message": f"  ✓ torch 栈版本已修复"}, json_progress)
+    else:
+        _emit({"type": "log", "message":
+               f"  ✗ torch 栈修复失败: {r.stderr.strip()[:300]}"}, json_progress)
+
+    # 清理残留的旧版 dist-info
+    target_path = Path(target)
+    for dist_name, pinned_spec in pinned.items():
+        expected_ver = pinned_spec.split("==")[1]
+        for item in target_path.iterdir():
+            if not item.name.endswith(".dist-info"):
+                continue
+            name_lower = item.name.lower().replace("-", "_")
+            m = re.match(r"^(.+?)[-_](\d[\w.]*?)\.dist.info$", name_lower)
+            if m and m.group(1) == dist_name and m.group(2) != expected_ver:
+                try:
+                    shutil.rmtree(item)
+                    _emit({"type": "log", "message": f"  清理残留: {item.name}"}, json_progress)
+                except OSError:
+                    pass
+
+
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
     """安装包列表。target 为空时直接 pip install，否则 pip install --target。
     共享 namespace 的包会合并成一次 pip install 调用，避免目录覆盖问题。"""
@@ -235,6 +308,9 @@ def main():
 
     _emit({"type": "log", "message": f"共 {len(packages)} 个包待安装"}, args.json_progress)
     ok = install_packages(packages, py, args.target, args.pypi_mirror, args.json_progress)
+
+    # 修复 torch 栈版本（transitive dep 可能将其升级到最新版）
+    _repair_torch_stack(py, args.target, args.pypi_mirror, args.json_progress)
 
     # 清理 transitive dependency 中与嵌入式 Python 冲突的包
     _cleanup_protected_packages(args.target, args.json_progress)

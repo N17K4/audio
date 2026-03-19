@@ -4,6 +4,7 @@ import ProviderRow from '../shared/ProviderRow';
 import OutputDirRow from '../shared/OutputDirRow';
 import ModelInput from '../shared/ModelInput';
 import FileDrop from '../shared/FileDrop';
+import VoiceSelector from '../shared/VoiceSelector';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
 
 // ─── Fish Speech 本地 TTS 流程 ────────────────────────────────────────────────
@@ -71,6 +72,10 @@ interface TtsPanelProps {
   onStartTtsRefRecording: () => void;
   onStopTtsRefRecording: () => void;
   onClearTtsRefRecording: () => void;
+  voices: VoiceInfo[];
+  ttsVoiceId: string;
+  setTtsVoiceId: (v: string) => void;
+  onRefreshVoices: () => void;
   outputDir: string;
   setOutputDir: (v: string) => void;
   status: Status;
@@ -108,6 +113,10 @@ export default function TtsPanel({
   onStartTtsRefRecording,
   onStopTtsRefRecording,
   onClearTtsRefRecording,
+  voices,
+  ttsVoiceId,
+  setTtsVoiceId,
+  onRefreshVoices,
   outputDir,
   setOutputDir,
   status,
@@ -117,6 +126,7 @@ export default function TtsPanel({
   labelCls,
   btnSec,
 }: TtsPanelProps) {
+  const gptSovitsVoices = voices.filter(v => v.engine === 'gpt_sovits');
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-5 dark:bg-slate-900 dark:border-slate-700/80">
       <ProviderRow
@@ -145,9 +155,20 @@ export default function TtsPanel({
         ? <ProcessFlow steps={TTS_FLOW_COSYVOICE} color="#8b5cf6" />
         : <ProcessFlow steps={TTS_FLOW_CLOUD} color="#6366f1" />}
 
-      {(selectedProvider === 'fish_speech' || selectedProvider === 'gpt_sovits') ? (
+      {selectedProvider === 'gpt_sovits' ? (
+        <VoiceSelector
+          label="音色模型（GPT-SoVITS 训练模型）"
+          value={ttsVoiceId}
+          onChange={setTtsVoiceId}
+          voices={gptSovitsVoices}
+          onRefresh={onRefreshVoices}
+          fieldCls={fieldCls}
+          labelCls={labelCls}
+          btnSec={btnSec}
+        />
+      ) : selectedProvider === 'fish_speech' ? (
         <div className="space-y-3">
-          <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">{selectedProvider === 'gpt_sovits' ? '参考音频（角色音色样本）' : '目标音色（音频样本）'}</span>
+          <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">目标音色（音频样本）</span>
           {/* 上传/录音 Tab */}
           <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
             {(['upload', 'record'] as VcInputMode[]).map(m => (

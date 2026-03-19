@@ -18,7 +18,7 @@ from utils.engine import get_gpt_sovits_command_template, build_engine_env
 from utils.audit import log_ai_call, log_ai_error
 
 
-def run_local_gpt_sovits_tts_cmd(text: str, output_path: Path, voice_refs: list = []) -> None:
+def run_local_gpt_sovits_tts_cmd(text: str, output_path: Path, voice_refs: list = [], voice_meta: dict = None) -> None:
     cmd_tpl = get_gpt_sovits_command_template()
     if not cmd_tpl:
         raise HTTPException(
@@ -37,6 +37,17 @@ def run_local_gpt_sovits_tts_cmd(text: str, output_path: Path, voice_refs: list 
         .replace("{output}", str(output_path.resolve()))
         .replace("{voice_ref}", refs_arg)
     )
+    # GPT-SoVITS 模型选择模式：通过 voice_meta 传递训练好的 GPT/SoVITS 模型路径
+    if voice_meta:
+        voice_dir = voice_meta.get("path", "")
+        gpt_model = voice_meta.get("gpt_model", "")
+        sovits_model = voice_meta.get("sovits_model", "")
+        if voice_dir and gpt_model:
+            gpt_path = str(Path(voice_dir) / gpt_model)
+            cmd += f" --gpt_model {shlex.quote(gpt_path)}"
+        if voice_dir and sovits_model:
+            sovits_path = str(Path(voice_dir) / sovits_model)
+            cmd += f" --sovits_model {shlex.quote(sovits_path)}"
     log_ai_call("gpt_sovits", {"text": text, "output": str(output_path), "voice_refs": voice_refs}, command=cmd)
     try:
         completed = subprocess.run(
@@ -63,14 +74,14 @@ def run_local_gpt_sovits_tts_cmd(text: str, output_path: Path, voice_refs: list 
         raise HTTPException(status_code=500, detail="GPT-SoVITS finished but output file is missing/empty")
 
 
-async def run_gpt_sovits_tts(text: str, voice: str = "", voice_refs: list = [], api_key: str = "", endpoint: str = "") -> Dict:
+async def run_gpt_sovits_tts(text: str, voice: str = "", voice_meta: dict = None, voice_refs: list = [], api_key: str = "", endpoint: str = "") -> Dict:
     # Try local GPT-SoVITS CLI first
     local_cmd = get_gpt_sovits_command_template()
     if local_cmd:
         task_id = str(uuid.uuid4())
         output_path = DOWNLOAD_DIR / f"{task_id}_tts_gpt_sovits.wav"
         effective_refs = voice_refs if voice_refs else ([voice] if voice else [])
-        await asyncio.to_thread(run_local_gpt_sovits_tts_cmd, text, output_path, effective_refs)
+        await asyncio.to_thread(run_local_gpt_sovits_tts_cmd, text, output_path, effective_refs, voice_meta)
         return {
             "status": "success",
             "task": "tts",

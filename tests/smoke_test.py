@@ -1,7 +1,7 @@
 """基础功能烟雾测试
 
 分组：
-  - TTS（文本转语音）— Fish Speech / OpenAI / Gemini
+  - TTS（文本转语音）— Fish Speech / GPT-SoVITS / OpenAI / Gemini
   - STT（语音转文本）— Faster Whisper / OpenAI / Gemini
   - VC（音色转换）— Seed-VC / RVC
   - 训练（模型训练）— RVC 训练
@@ -131,6 +131,48 @@ class TestBasicFeatures:
                 print(f"❌ Fish Speech TTS 失败 (HTTP {resp.status_code})")
                 print(f"   响应：{resp.text}")
                 pytest.fail(f"Fish Speech TTS 失败")
+
+    def test_gpt_sovits_tts(self):
+        """测试：GPT-SoVITS TTS（本地推理，需先安装 GPT-SoVITS 引擎）。"""
+        import httpx
+
+        print("🎙️  测试 GPT-SoVITS TTS")
+
+        with httpx.Client(timeout=30) as client:
+            # 先检查 capabilities 是否包含 gpt_sovits
+            cap_resp = client.get(f"{_BASE_URL}/capabilities")
+            if cap_resp.status_code == 200:
+                caps = cap_resp.json()
+                tts_providers = caps.get("tts", [])
+                if "gpt_sovits" not in tts_providers:
+                    print("⚠️  GPT-SoVITS 未在 capabilities 中，跳过（需先安装引擎）")
+                    pytest.skip("GPT-SoVITS 引擎未安装")
+
+            data = {
+                "text": "烟雾测试文本合成",
+                "provider": "gpt_sovits",
+            }
+
+            print(f"  📤 POST /tasks/tts")
+            print(f"     请求参数：{data}")
+
+            resp = client.post(
+                f"{_BASE_URL}/tasks/tts",
+                data=data,
+            )
+
+            print(f"     HTTP {resp.status_code}")
+            if resp.status_code == 200:
+                body = resp.json()
+                print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
+                if body.get("job_id"):
+                    print(f"✅ GPT-SoVITS TTS 已排队 [job_id: {body['job_id']}]")
+                else:
+                    print(f"✅ GPT-SoVITS TTS 响应正常")
+            else:
+                print(f"❌ GPT-SoVITS TTS 失败 (HTTP {resp.status_code})")
+                print(f"   响应：{resp.text}")
+                pytest.fail(f"GPT-SoVITS TTS 失败")
 
     def test_faster_whisper_stt(self):
         """测试：Faster Whisper STT（本地推理）。"""

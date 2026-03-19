@@ -2,7 +2,7 @@
 """
 下载基础 checkpoint — 必需的模型文件。
 
-Base 引擎：Fish Speech、RVC、Seed-VC、Faster Whisper、FaceFusion + 内置音色
+Base 引擎：Fish Speech、RVC、Seed-VC + 内置音色
 
 运行模式（本地开发 — 下载全部）：
     python scripts/checkpoints_base.py
@@ -19,8 +19,6 @@ import sys
 from pathlib import Path
 
 BASE_ENGINES = {
-    "facefusion",
-    "faster_whisper",
     "fish_speech",
     "rvc",
     "seed_vc",

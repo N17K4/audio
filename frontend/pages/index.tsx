@@ -637,6 +637,10 @@ export default function Home() {
                 onStartTtsRefRecording={tts.startTtsRefRecording}
                 onStopTtsRefRecording={tts.stopTtsRefRecording}
                 onClearTtsRefRecording={tts.clearTtsRefRecording}
+                voices={backend.voices}
+                ttsVoiceId={tts.ttsVoiceId}
+                setTtsVoiceId={tts.setTtsVoiceId}
+                onRefreshVoices={backend.fetchVoices}
                 outputDir={outputDir}
                 setOutputDir={setOutputDir}
                 status={status}

@@ -1246,8 +1246,8 @@ ipcMain.handle('app:clearDiskRow', (_event, key) => {
 
 // ─── IPC：下载单个引擎 checkpoint ────────────────────────────────────────────
 // 基础引擎（setup_base.py 处理）vs 额外引擎（setup_extra.py 处理）
-const BASE_ENGINES = new Set(['fish_speech', 'seed_vc', 'rvc', 'faster_whisper', 'facefusion', 'voices']);
-const EXTRA_ENGINES = new Set(['agent_engine', 'finetune_engine', 'flux', 'got_ocr', 'liveportrait', 'rag_engine', 'sd', 'wan', 'whisper']);
+const BASE_ENGINES = new Set(['fish_speech', 'seed_vc', 'rvc', 'voices']);
+const EXTRA_ENGINES = new Set(['agent_engine', 'facefusion', 'faster_whisper', 'finetune_engine', 'flux', 'got_ocr', 'liveportrait', 'rag_engine', 'sd', 'wan', 'whisper']);
 
 // 需要 ML 依赖的引擎及其对应的 group（ml_extra.py --group）
 const ML_INSTALL_GROUPS = {

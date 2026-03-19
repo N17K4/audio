@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """安装基础运行依赖。
 
-Base 引擎：Fish Speech、RVC、Seed-VC、Faster Whisper、FaceFusion
+Base 引擎：Fish Speech、RVC、Seed-VC
 
 运行模式（本地开发）：
     python scripts/ml_base.py
@@ -43,8 +43,6 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # 基础引擎集合（默认安装，所有环境都需要）
 BASE_ENGINES = {
-    "facefusion",
-    "faster_whisper",
     "fish_speech",
     "rvc",
     "seed_vc",
@@ -216,6 +214,59 @@ def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
         _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
 
+def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) -> None:
+    """检查 --target 目录中 torch 栈版本是否与嵌入式 Python 一致，不一致时强制重装。
+
+    pip install --target --upgrade 安装其他包时，transitive dependency 可能将 torch/torchaudio
+    升级到最新版，导致 ABI 不兼容（如 _aoti_torch_abi_version 符号缺失）。
+    """
+    pinned: dict[str, str] = {}
+    for dist_name in ("torch", "torchaudio", "torchvision"):
+        expected = _embedded_dist_version(py, dist_name)
+        if not expected:
+            continue
+        actual = _dist_version_in_target(target, dist_name)
+        if actual and actual != expected:
+            pinned[dist_name] = f"{dist_name}=={expected}"
+            _emit({"type": "log", "message":
+                   f"  ⚠ {dist_name} 版本不一致：target={actual} embedded={expected}，将修复"},
+                  json_progress)
+
+    if not pinned:
+        return
+
+    # 强制重装正确版本（--force-reinstall 确保覆盖 .so 文件）
+    pkgs = list(pinned.values())
+    _emit({"type": "log", "message": f"  修复 torch 栈版本：{', '.join(pkgs)}"}, json_progress)
+    cmd = [py, "-m", "pip", "install"] + pkgs + [
+        "--target", target, "--upgrade", "--force-reinstall", "--quiet",
+    ]
+    if mirror:
+        cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if r.returncode == 0:
+        _emit({"type": "log", "message": f"  ✓ torch 栈版本已修复"}, json_progress)
+    else:
+        _emit({"type": "log", "message":
+               f"  ✗ torch 栈修复失败: {r.stderr.strip()[:300]}"}, json_progress)
+
+    # 清理残留的旧版 dist-info（如 torch-2.10.0.dist-info）
+    target_path = Path(target)
+    for dist_name, pinned_spec in pinned.items():
+        expected_ver = pinned_spec.split("==")[1]
+        for item in target_path.iterdir():
+            if not item.name.endswith(".dist-info"):
+                continue
+            name_lower = item.name.lower().replace("-", "_")
+            m = re.match(r"^(.+?)[-_](\d[\w.]*?)\.dist.info$", name_lower)
+            if m and m.group(1) == dist_name and m.group(2) != expected_ver:
+                try:
+                    shutil.rmtree(item)
+                    _emit({"type": "log", "message": f"  清理残留: {item.name}"}, json_progress)
+                except OSError:
+                    pass
+
+
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
     """并行下载 + 逐个安装。单个失败不影响其他包。"""
     if target:
@@ -296,6 +347,10 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             err = r.stderr.strip()[:300]
             _emit({"type": "log", "message": f"  ✗ {pkg} 安装失败: {err}"}, json_progress)
             all_ok = False
+
+    # ── Phase 3: 修复 torch 栈版本（transitive dep 可能将其升级到最新版）────
+    if target:
+        _repair_torch_stack(py, target, mirror, json_progress)
 
     # ── 清理临时缓存 ──────────────────────────────────────────────────────
     shutil.rmtree(cache_dir, ignore_errors=True)

@@ -346,7 +346,7 @@
       "ui": {
         "label": "Faster Whisper",
         "size_display": "base · ~150 MB",
-        "default_install": true
+        "default_install": false
       },
       "code_dir": "runtime/faster_whisper",
       "checkpoint_dir": "checkpoints/faster_whisper",
@@ -459,7 +459,7 @@
       "ui": {
         "label": "FaceFusion",
         "size_display": "~540 MB",
-        "default_install": true
+        "default_install": false
       },
       "code_dir": "runtime/facefusion/engine",
       "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
@@ -570,7 +570,7 @@
           "repo_type": "dataset",
           "filename": "raiden/model.pth",
           "size_mb": 55,
-          "required": true,
+          "required": false,
           "sha256": "f038cbf92ee58522831e8c6a723f53d11df8b7d157e39cd68d477f70d7e444b2"
         },
         {

@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="输出音频路径")
     parser.add_argument("--voice_ref", nargs="*", default=[], help="参考音频路径（可选，可多个）")
     parser.add_argument("--checkpoint_dir", default="", help="模型权重目录（覆盖 manifest 默认值）")
+    parser.add_argument("--gpt_model", default="", help="GPT 模型文件路径（.ckpt）")
+    parser.add_argument("--sovits_model", default="", help="SoVITS 模型文件路径（.pth）")
     parser.add_argument("--text_lang", default="auto", help="文本语言（auto / zh / ja / en 等）")
     return parser.parse_args()
 
@@ -136,6 +138,10 @@ def main() -> int:
     ]
     if ref_audio:
         cmd.extend(["--ref_audio", ref_audio])
+    if args.gpt_model:
+        cmd.extend(["--gpt_model", args.gpt_model])
+    if args.sovits_model:
+        cmd.extend(["--sovits_model", args.sovits_model])
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(engine_dir) + os.pathsep + env.get("PYTHONPATH", "")

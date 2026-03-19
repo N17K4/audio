@@ -39,13 +39,18 @@ def read_voice_meta(voice_dir: Path, is_builtin: bool = False) -> Dict:
     ref_candidates = ["reference.wav", "reference.mp3", "ref.wav"]
     found_ref = next((str((voice_dir / r).resolve()) for r in ref_candidates if (voice_dir / r).exists()), "")
     engine = meta.get("engine", "rvc")
-    # RVC 需要模型文件(.pth)；Fish Speech / Seed-VC 只需参考音频
+    # RVC 需要模型文件(.pth)；GPT-SoVITS 需要 GPT + SoVITS 两个模型文件；Fish Speech / Seed-VC 只需参考音频
     if engine == "rvc":
         is_ready = bool(found_model)
+    elif engine == "gpt_sovits":
+        gpt_model = meta.get("gpt_model", "")
+        sovits_model = meta.get("sovits_model", "")
+        is_ready = bool(gpt_model and (voice_dir / gpt_model).exists()
+                        and sovits_model and (voice_dir / sovits_model).exists())
     else:
         is_ready = bool(found_ref) or bool(found_model)
 
-    return {
+    result = {
         "voice_id": voice_id,
         "name": name,
         "engine": engine,
@@ -60,6 +65,10 @@ def read_voice_meta(voice_dir: Path, is_builtin: bool = False) -> Dict:
         "reference_audio": found_ref,
         "updated_at": datetime.fromtimestamp(voice_dir.stat().st_mtime).isoformat(),
     }
+    if engine == "gpt_sovits":
+        result["gpt_model"] = meta.get("gpt_model", "")
+        result["sovits_model"] = meta.get("sovits_model", "")
+    return result
 
 
 def list_voices() -> List[Dict]:

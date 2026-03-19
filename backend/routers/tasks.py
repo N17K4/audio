@@ -127,12 +127,14 @@ async def task_tts(
             voice_refs_list = [fallback]
 
     voice_id_str = voice_id.strip()
-    if voice_id_str and p in ("fish_speech", "gpt_sovits") and not voice_refs_list:
+    voice_meta = None
+    if voice_id_str and p in ("fish_speech", "gpt_sovits"):
         try:
-            v = get_voice_or_404(voice_id_str)
-            ref_path = v.get("reference_audio", "")
-            if ref_path:
-                voice_refs_list = [ref_path]
+            voice_meta = get_voice_or_404(voice_id_str)
+            if p == "fish_speech" and not voice_refs_list:
+                ref_path = voice_meta.get("reference_audio", "")
+                if ref_path:
+                    voice_refs_list = [ref_path]
         except Exception:
             pass
 
@@ -181,7 +183,7 @@ async def task_tts(
         elif p == "minimax_tts":
             return await run_minimax_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
         elif p == "gpt_sovits":
-            return await run_gpt_sovits_tts(text=text, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint)
+            return await run_gpt_sovits_tts(text=text, voice_meta=voice_meta, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint)
         elif p == "cosyvoice":
             raise HTTPException(status_code=501, detail="CosyVoice 2 引擎即将支持，敬请期待。")
         else:
