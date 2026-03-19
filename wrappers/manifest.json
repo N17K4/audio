@@ -721,6 +721,60 @@
         }
       ],
       "env_key": "SD_CHECKPOINT_DIR"
+    },
+    "gpt_sovits": {
+      "version": "2.0",
+      "ui": {
+        "label": "GPT-SoVITS",
+        "size_display": "~1.5 GB",
+        "default_install": false
+      },
+      "description": "GPT-SoVITS v2 角色声音克隆 TTS（少量数据训练或加载社区模型）",
+      "code_dir": "runtime/gpt_sovits/engine",
+      "checkpoint_dir": "checkpoints/gpt_sovits",
+      "pip_packages": [
+        "huggingface_hub>=1.3.0,<2.0",
+        "setuptools",
+        "wheel",
+        "cn2an",
+        "pypinyin",
+        "jieba",
+        "wordsegment",
+        "g2p_en",
+        "LangSegment"
+      ],
+      "runtime_pip_packages": [
+        "torch",
+        "torchaudio",
+        "transformers",
+        "einops",
+        "soundfile",
+        "librosa"
+      ],
+      "checkpoint_files": [],
+      "env_key": "GPT_SOVITS_CHECKPOINT_DIR"
+    },
+    "cosyvoice": {
+      "version": "2.0",
+      "ui": {
+        "label": "CosyVoice 2",
+        "size_display": "~3 GB",
+        "default_install": false
+      },
+      "description": "CosyVoice 2 零样本语音克隆 TTS（阿里通义实验室，即将支持）",
+      "code_dir": "runtime/cosyvoice/engine",
+      "checkpoint_dir": "checkpoints/cosyvoice",
+      "pip_packages": [],
+      "runtime_pip_packages": [
+        "torch",
+        "torchaudio",
+        "transformers",
+        "onnxruntime",
+        "conformer",
+        "hyperpyyaml"
+      ],
+      "checkpoint_files": [],
+      "env_key": "COSYVOICE_CHECKPOINT_DIR"
     }
   }
 }

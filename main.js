@@ -391,9 +391,8 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
     ...process.env,
     RESOURCES_ROOT: app.isPackaged ? process.resourcesPath : __dirname,
     CHECKPOINTS_DIR: ckptDir,
-    // 首次安装阶段把 userData/python-packages 暴露给后续脚本，
-    // 这样 checkpoints 阶段才能 import 刚刚装入的 faster-whisper / rvc-python。
-    PYTHONPATH: userPkgDir,
+    // 与后端启动时保持一致：backend/ + python-packages/
+    PYTHONPATH: [path.join(__dirname, 'backend'), userPkgDir].join(path.delimiter),
     ...(hfEndpoint ? { HF_ENDPOINT: hfEndpoint } : {}),
   };
   const setupLog = createAppendLogger('setup-download.log');
@@ -449,39 +448,72 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
   const runtimeDepsScript = path.join(__dirname, 'scripts', 'ml_base.py');
   const downloadScript   = path.join(__dirname, 'scripts', 'checkpoints_base.py');
 
-  // 阶段1：安装 runtime_pip_packages（torch 等 ML 包）到 userData/python-packages/
+  // ── 并行执行：ml_base（pip 安装）+ checkpoints（模型下载）──────────────
   const enginesArgs = ['--target', userPkgDir, '--json-progress'];
   if (pypiMirror) enginesArgs.push('--pypi-mirror', pypiMirror);
 
+  const dlArgs = ['--json-progress'];
+  if (hfEndpoint) dlArgs.push('--hf-endpoint', hfEndpoint);
+  if (pypiMirror) dlArgs.push('--pypi-mirror', pypiMirror);
+
   sendProgress({ type: 'log', message: `详细日志：${setupLog.path}` });
-  downloadProc = spawnScript('phase1-ml-base', runtimeDepsScript, enginesArgs, (code1) => {
+  setupLog.write('INFO', 'parallel start: ml-base + checkpoints');
+
+  let mlDone = false, ckptDone = false;
+  let mlCode = null, ckptCode = null;
+  const downloadProcs = [];
+
+  function onBothDone() {
+    if (!mlDone || !ckptDone) return;
     downloadProc = null;
-    if (code1 !== 0) {
-      setupLog.write('ERROR', `[phase1-ml-base] failed with exitCode=${String(code1)}`);
-      setupLog.close();
-      if (setupGuideWin && !setupGuideWin.isDestroyed()) {
-        setupGuideWin.webContents.send('setup:done', { exitCode: code1 });
-      }
-      return;
+    const finalCode = (mlCode === 0 && ckptCode === 0) ? 0 : 1;
+    const summary = [];
+    if (mlCode !== 0) summary.push(`pip安装(exitCode=${mlCode})`);
+    if (ckptCode !== 0) summary.push(`模型下载(exitCode=${ckptCode})`);
+    if (summary.length) {
+      const msg = `部分任务失败: ${summary.join(', ')}`;
+      setupLog.write('ERROR', msg);
+      sendProgress({ type: 'log', message: `✗ ${msg}` });
+    } else {
+      setupLog.write('INFO', 'all parallel tasks success');
     }
-    // 阶段2：下载 HuggingFace 模型 + FaceFusion pip 依赖
-    const dlArgs = ['--json-progress'];
-    if (hfEndpoint) dlArgs.push('--hf-endpoint', hfEndpoint);
-    if (pypiMirror) dlArgs.push('--pypi-mirror', pypiMirror);
-    setupLog.write('INFO', '[phase1-ml-base] success; start phase2-checkpoints');
-    downloadProc = spawnScript('phase2-checkpoints', downloadScript, dlArgs, (code2) => {
-      downloadProc = null;
-      if (code2 !== 0) {
-        setupLog.write('ERROR', `[phase2-checkpoints] failed with exitCode=${String(code2)}`);
-      } else {
-        setupLog.write('INFO', '[phase2-checkpoints] success');
-      }
-      setupLog.close();
-      if (setupGuideWin && !setupGuideWin.isDestroyed()) {
-        setupGuideWin.webContents.send('setup:done', { exitCode: code2 });
-      }
-    });
+    setupLog.close();
+    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+      setupGuideWin.webContents.send('setup:done', { exitCode: finalCode });
+    }
+  }
+
+  const proc1 = spawnScript('ml-base', runtimeDepsScript, enginesArgs, (code) => {
+    mlCode = code;
+    mlDone = true;
+    if (code !== 0) {
+      setupLog.write('ERROR', `[ml-base] failed exitCode=${String(code)}`);
+      sendProgress({ type: 'log', message: `✗ pip安装阶段失败 (exitCode=${code})，模型下载继续进行` });
+    } else {
+      setupLog.write('INFO', '[ml-base] success');
+      sendProgress({ type: 'log', message: '✓ pip安装完成' });
+    }
+    onBothDone();
   });
+
+  const proc2 = spawnScript('checkpoints', downloadScript, dlArgs, (code) => {
+    ckptCode = code;
+    ckptDone = true;
+    if (code !== 0) {
+      setupLog.write('ERROR', `[checkpoints] failed exitCode=${String(code)}`);
+      sendProgress({ type: 'log', message: `✗ 模型下载阶段失败 (exitCode=${code})，pip安装继续进行` });
+    } else {
+      setupLog.write('INFO', '[checkpoints] success');
+      sendProgress({ type: 'log', message: '✓ 模型下载完成' });
+    }
+    onBothDone();
+  });
+
+  downloadProcs.push(proc1, proc2);
+  // downloadProc 用于 cancel，指向一个代理对象同时 kill 两个进程
+  downloadProc = {
+    kill: () => { downloadProcs.forEach(p => { try { p.kill(); } catch {} }); },
+  };
 
   return { ok: true };
 });
@@ -629,27 +661,61 @@ async function createWindow() {
     cwd = __dirname;
   }
 
+  // ── 防御：清理 python-packages/ 中与嵌入式 Python 冲突的包 ──
+  // transitive dependency（如 pydantic_core）可能被 pip install --target 引入，
+  // 导致 PYTHONPATH 优先加载版本不一致的包，FastAPI/pydantic 启动崩溃。
+  // 开发/生产统一处理，确保行为一致。
+  const mlPkgDir = app.isPackaged
+    ? getUserPackagesDir()
+    : path.join(__dirname, 'local_data', 'python-packages');
+  if (fs.existsSync(mlPkgDir)) {
+    const protectedPrefixes = [
+      'pydantic_core', 'pydantic-', 'pydantic.',
+      'fastapi', 'starlette', 'uvicorn',
+      'httpx', 'httpcore', 'anyio', 'sniffio',
+      'typing_extensions', 'annotated_types',
+    ];
+    try {
+      for (const name of fs.readdirSync(mlPkgDir)) {
+        const lower = name.toLowerCase().replace(/-/g, '_');
+        const isConflict = protectedPrefixes.some(prefix => {
+          const p = prefix.replace(/-/g, '_');
+          return lower === p || lower.startsWith(p + '-') || lower.startsWith(p + '.');
+        });
+        if (isConflict) {
+          const fullPath = path.join(mlPkgDir, name);
+          try {
+            fs.rmSync(fullPath, { recursive: true, force: true });
+            console.log(`[cleanup] 删除冲突包: ${name}`);
+          } catch (e) {
+            console.warn(`[cleanup] 删除失败: ${name}`, e.message);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[cleanup] 扫描 python-packages 失败:', e.message);
+    }
+  }
+
+  // ── 统一环境变量（开发/生产仅目录不同，逻辑完全一致）──
+  const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
+  const backendEnv = {
+    ...process.env,
+    BACKEND_HOST: '127.0.0.1',
+    BACKEND_PORT: backendPort,
+    RESOURCES_ROOT: resRoot,
+    CHECKPOINTS_DIR: getCheckpointsDir(),
+    PYTHONPATH: [path.join(__dirname, 'backend'), mlPkgDir].join(path.delimiter),
+    ...(LOGS_DIR ? { LOGS_DIR } : {}),
+  };
+
   console.log(`Start backend: ${pyCmd} ${pyArgs.join(' ')}`);
   console.log(`Backend URL: ${backendBaseUrl}`);
 
   pyProcess = spawn(pyCmd, pyArgs, {
     cwd,
     shell: isDev, // 开发模式需要 shell 来执行 mise exec
-    env: {
-      ...process.env,
-      BACKEND_HOST: '127.0.0.1',
-      BACKEND_PORT: backendPort,
-      ...(LOGS_DIR ? { LOGS_DIR } : {}),
-      ...(app.isPackaged ? {
-        // 生产模式：PYTHONPATH 指向 userData/python-packages/（torch 等 ML 包首次启动后安装于此）
-        RESOURCES_ROOT: process.resourcesPath,
-        CHECKPOINTS_DIR: getCheckpointsDir(),
-        PYTHONPATH: [path.join(__dirname, 'backend'), getUserPackagesDir()].join(path.delimiter),
-      } : {
-        // 开发模式：PYTHONPATH 指向 local_data/python-packages/（pnpm run ml 安装的 ML 包）
-        PYTHONPATH: [path.join(__dirname, 'backend'), path.join(__dirname, 'local_data', 'python-packages')].join(path.delimiter),
-      }),
-    },
+    env: backendEnv,
   });
 
   // Python stdout/stderr 同时写 electron.log，方便排查启动失败
@@ -926,6 +992,40 @@ ipcMain.handle('app:getDiskUsage', () => {
       })(),
       estimatedSizeMb: 350,  // 源码 ~20 MB + 模型 ~330 MB（人脸检测/识别/关键点/换脸）
       default_install: _ui('facefusion').default_install,
+      deletable: false,
+    },
+    // ── TTS：GPT-SoVITS ──────────────────────────────────────────────────────
+    {
+      key: 'gpt_sovits_ckpt',
+      label: _ckptLabel('gpt_sovits', '模型'),
+      version: _fmtVer(_ver('gpt_sovits')),
+      sub: path.join(ckptRoot, 'gpt_sovits'),
+      size: (() => {
+        const d = path.join(ckptRoot, 'gpt_sovits');
+        if (dirExists(d)) return getDirSize(d);
+        return 0;
+      })(),
+      engineKey: 'gpt_sovits',
+      ready: dirExists(path.join(resRoot, 'runtime', 'gpt_sovits', 'engine')),
+      estimatedSizeMb: 1500,
+      default_install: _ui('gpt_sovits').default_install,
+      deletable: false,
+    },
+    // ── TTS：CosyVoice 2 ─────────────────────────────────────────────────────
+    {
+      key: 'cosyvoice_ckpt',
+      label: _ckptLabel('cosyvoice', '模型'),
+      version: _fmtVer(_ver('cosyvoice')),
+      sub: path.join(ckptRoot, 'cosyvoice'),
+      size: (() => {
+        const d = path.join(ckptRoot, 'cosyvoice');
+        if (dirExists(d)) return getDirSize(d);
+        return 0;
+      })(),
+      engineKey: 'cosyvoice',
+      ready: dirExists(path.join(resRoot, 'runtime', 'cosyvoice', 'engine')),
+      estimatedSizeMb: 3000,
+      default_install: _ui('cosyvoice').default_install,
       deletable: false,
     },
     // ── seed_vc 附属 HF cache（checkpoints/ 根目录下，非 hf_cache 子目录）───────

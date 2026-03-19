@@ -1093,18 +1093,20 @@ def main() -> int:
     print(f"resources_root: {resources_root}\n")
 
     sha256_updates: dict = {}
+    sha256_lock = threading.Lock()
     all_ready = True
+    ready_lock = threading.Lock()
 
     # 明确指定 --engine 或 --engines 时视为用户主动请求，required=false 的项目也要下载
     explicit = bool(args.engine or args.engines)
 
-    for engine_name, cfg in engines.items():
-        if args.engine and engine_name != args.engine:
-            continue
+    def _process_engine(engine_name: str, cfg: dict) -> bool:
+        """处理单个引擎的 checkpoint 下载。返回是否全部就绪。"""
+        engine_ready = True
         print(f"▶ {engine_name} (v{cfg.get('version', '?')})")
         emit("engine_start", engine=engine_name, version=cfg.get("version", "?"))
 
-        # FaceFusion：先 clone 引擎源码，再下载模型（clone 会删除 engine/ 目录，必须先 clone）
+        # FaceFusion：先 clone 引擎源码，再下载模型
         if engine_name == "facefusion" and not args.check_only:
             ok_ff = setup_facefusion_engine(
                 project_root,
@@ -1113,36 +1115,69 @@ def main() -> int:
                 pypi_mirror=args.pypi_mirror,
             )
             if not ok_ff:
-                all_ready = False
+                engine_ready = False
 
-        # 下载 manifest checkpoint_files
+        # 下载 manifest checkpoint_files（线程安全：sha256_updates 用锁保护）
+        local_sha256: dict = {}
         ok = check_and_download(engine_name, cfg, resources_root, args.check_only, args.force,
-                                sha256_updates, checkpoints_base=checkpoints_base,
+                                local_sha256, checkpoints_base=checkpoints_base,
                                 explicit=explicit)
+        if local_sha256:
+            with sha256_lock:
+                sha256_updates.update(local_sha256)
         if not ok:
-            all_ready = False
+            engine_ready = False
 
         # 下载额外 HF 缓存模型
         if cfg.get("hf_cache_downloads"):
             ok2 = download_hf_cache(engine_name, cfg, resources_root, args.check_only, args.force,
                                     checkpoints_base=checkpoints_base, explicit=explicit)
             if not ok2:
-                all_ready = False
+                engine_ready = False
 
-        # faster-whisper 模型预下载（需 setup 阶段已装好 faster-whisper）
+        # faster-whisper 模型预下载
         if engine_name == "faster_whisper":
             ok3 = prefetch_faster_whisper_model(
                 project_root, cfg, resources_root, checkpoints_base,
                 check_only=args.check_only,
             )
             if not ok3:
-                all_ready = False
+                engine_ready = False
 
-        # RVC base model 预下载（rvc-python 触发内置下载，需 setup 阶段已装好 rvc-python）
+        # RVC base model 预下载
         if engine_name == "rvc" and not args.check_only:
             prefetch_rvc_base_models(project_root, resources_root)
 
         print()
+        return engine_ready
+
+    # 并行下载各引擎 checkpoint（I/O 密集型，线程池显著提升速度）
+    engine_items = [(k, v) for k, v in engines.items()
+                    if not args.engine or k == args.engine]
+
+    if len(engine_items) <= 1:
+        # 单引擎时无需线程池
+        for engine_name, cfg in engine_items:
+            if not _process_engine(engine_name, cfg):
+                all_ready = False
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # 限制并发数为 3，避免带宽和连接数过高
+        max_workers = min(3, len(engine_items))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_process_engine, name, cfg): name
+                for name, cfg in engine_items
+            }
+            for future in as_completed(futures):
+                engine_name = futures[future]
+                try:
+                    if not future.result():
+                        all_ready = False
+                except Exception as exc:
+                    print(f"  ✗ {engine_name} 处理异常: {exc}")
+                    emit("log", message=f"  ✗ {engine_name} 处理异常: {str(exc)[:200]}")
+                    all_ready = False
 
     if sha256_updates and not args.check_only:
         save_sha256_to_manifest(manifest, manifest_path, sha256_updates)

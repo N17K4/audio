@@ -26,6 +26,8 @@ USER_VOICES_DIR = VOICES_DIR / "user"
 UPLOADS_DIR = MODEL_ROOT / "uploads"
 RVC_RUNTIME_CONFIG_PATH = MODEL_ROOT / "rvc_runtime.json"
 FISH_SPEECH_ENGINE_JSON = WRAPPERS_ROOT / "fish_speech" / "engine.json"
+GPT_SOVITS_ENGINE_JSON = WRAPPERS_ROOT / "gpt_sovits" / "engine.json"
+COSYVOICE_ENGINE_JSON = WRAPPERS_ROOT / "cosyvoice" / "engine.json"
 SEED_VC_ENGINE_JSON = WRAPPERS_ROOT / "seed_vc" / "engine.json"
 WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "whisper" / "engine.json"
 FASTER_WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "faster_whisper" / "engine.json"
@@ -65,7 +67,7 @@ _SETTINGS: Dict = load_settings()
 LOCAL_CONCURRENCY: int = max(1, min(4, int(_SETTINGS.get("local_concurrency", 1))))
 
 TASK_CAPABILITIES = {
-    "tts": ["fish_speech", "openai", "gemini", "elevenlabs", "cartesia", "dashscope", "minimax_tts"],
+    "tts": ["fish_speech", "gpt_sovits", "cosyvoice", "openai", "gemini", "elevenlabs", "cartesia", "dashscope", "minimax_tts"],
     "asr": ["faster_whisper", "whisper", "openai", "gemini", "groq", "deepgram", "dashscope"],
     "llm": ["gemini", "openai", "claude", "groq", "deepseek", "mistral", "xai", "ollama", "github",
             "qwen", "doubao", "hunyuan", "glm", "moonshot", "spark", "minimax", "baichuan"],

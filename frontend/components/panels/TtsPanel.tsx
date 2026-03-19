@@ -16,6 +16,26 @@ const TTS_FLOW_FISH: FlowStep[] = [
   { label: '音频输出' },
 ];
 
+// ─── GPT-SoVITS 本地 TTS 流程 ─────────────────────────────────────────────────
+const TTS_FLOW_GPT_SOVITS: FlowStep[] = [
+  { label: '文字输入' },
+  { label: '分词/G2P',    tech: 'Tokenizer' },
+  { label: '语义预测',    tech: 'GPT 模型' },
+  { label: '参考音色',    tech: '声纹提取' },
+  { label: '声学合成',    tech: 'SoVITS VITS' },
+  { label: '音频输出' },
+];
+
+// ─── CosyVoice 2 本地 TTS 流程 ───────────────────────────────────────────────
+const TTS_FLOW_COSYVOICE: FlowStep[] = [
+  { label: '文字输入' },
+  { label: '文本编码',    tech: 'LLM Encoder' },
+  { label: '参考音色',    tech: 'Speaker Embedding' },
+  { label: 'Flow 解码',   tech: 'Flow Matching' },
+  { label: '声码器',      tech: 'HiFi-GAN' },
+  { label: '音频输出' },
+];
+
 // ─── 云端 TTS（OpenAI / ElevenLabs 等）流程 ──────────────────────────────────
 const TTS_FLOW_CLOUD: FlowStep[] = [
   { label: '文字输入' },
@@ -119,11 +139,15 @@ export default function TtsPanel({
       {/* 实际运行流程 */}
       {selectedProvider === 'fish_speech'
         ? <ProcessFlow steps={TTS_FLOW_FISH} color="#f59e0b" />
+        : selectedProvider === 'gpt_sovits'
+        ? <ProcessFlow steps={TTS_FLOW_GPT_SOVITS} color="#10b981" />
+        : selectedProvider === 'cosyvoice'
+        ? <ProcessFlow steps={TTS_FLOW_COSYVOICE} color="#8b5cf6" />
         : <ProcessFlow steps={TTS_FLOW_CLOUD} color="#6366f1" />}
 
-      {selectedProvider === 'fish_speech' ? (
+      {(selectedProvider === 'fish_speech' || selectedProvider === 'gpt_sovits') ? (
         <div className="space-y-3">
-          <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">目标音色（音频样本）</span>
+          <span className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">{selectedProvider === 'gpt_sovits' ? '参考音频（角色音色样本）' : '目标音色（音频样本）'}</span>
           {/* 上传/录音 Tab */}
           <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
             {(['upload', 'record'] as VcInputMode[]).map(m => (

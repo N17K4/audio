@@ -35,6 +35,7 @@ from services.tts.dashscope_tts import run_dashscope_tts
 from services.tts.minimax_tts import run_minimax_tts
 from services.tts.elevenlabs_tts import run_elevenlabs_tts
 from services.tts.fish_speech_tts import run_fish_speech_tts
+from services.tts.gpt_sovits_tts import run_gpt_sovits_tts
 from services.tts.gemini_tts import run_gemini_tts
 from services.tts.openai_tts import run_openai_tts
 from utils.engine import get_ffmpeg_binary, get_pandoc_binary, build_ffmpeg_video_encode_flags
@@ -126,7 +127,7 @@ async def task_tts(
             voice_refs_list = [fallback]
 
     voice_id_str = voice_id.strip()
-    if voice_id_str and p == "fish_speech" and not voice_refs_list:
+    if voice_id_str and p in ("fish_speech", "gpt_sovits") and not voice_refs_list:
         try:
             v = get_voice_or_404(voice_id_str)
             ref_path = v.get("reference_audio", "")
@@ -135,7 +136,7 @@ async def task_tts(
         except Exception:
             pass
 
-    is_local = p == "fish_speech" and not cloud_endpoint.strip()
+    is_local = p in ("fish_speech", "gpt_sovits") and not cloud_endpoint.strip()
 
     # 本地队列容量检查
     if is_local:
@@ -179,6 +180,10 @@ async def task_tts(
             return await run_dashscope_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
         elif p == "minimax_tts":
             return await run_minimax_tts(text=text, api_key=api_key, voice=voice or "", model=model or "")
+        elif p == "gpt_sovits":
+            return await run_gpt_sovits_tts(text=text, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint)
+        elif p == "cosyvoice":
+            raise HTTPException(status_code=501, detail="CosyVoice 2 引擎即将支持，敬请期待。")
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported TTS provider: {provider}")
 

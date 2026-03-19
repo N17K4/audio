@@ -31,7 +31,7 @@ export const TASK_PHASES: Record<string, string[]> = {
 };
 
 export const DEFAULT_CAPS: CapabilityMap = {
-  tts: ['fish_speech', 'gemini', 'openai', 'elevenlabs', 'cartesia', 'dashscope', 'minimax_tts'],
+  tts: ['fish_speech', 'gpt_sovits', 'cosyvoice', 'gemini', 'openai', 'elevenlabs', 'cartesia', 'dashscope', 'minimax_tts'],
   vc: ['seed_vc', 'local_rvc', 'elevenlabs'],
   asr: ['faster_whisper', 'whisper', 'gemini', 'openai', 'groq', 'deepgram', 'dashscope'],
   llm: ['gemini', 'openai', 'claude', 'groq', 'deepseek', 'mistral', 'xai', 'ollama', 'github',
@@ -48,6 +48,8 @@ export const DEFAULT_CAPS: CapabilityMap = {
 export const PROVIDER_LABELS: Record<string, string> = {
   // ── 本地引擎 ──
   fish_speech:    'Fish Speech（本地）',
+  gpt_sovits:     'GPT-SoVITS（本地 · 角色克隆，需训练模型）',
+  cosyvoice:      'CosyVoice 2（本地 · 零样本克隆）【即将支持】',
   seed_vc:        'Seed-VC（本地 · zero-shot，仅需参考音频，无需训练模型）',
   local_rvc:      'RVC（本地 · 需提前训练专属音色，音质精准）',
   faster_whisper: 'Faster Whisper（本地 · 推荐，速度快）',
@@ -104,6 +106,8 @@ export const DEFAULT_MODELS: Record<string, Record<string, string>> = {
     cartesia:    'sonic-2',
     dashscope:   'cosyvoice-v2',
     fish_speech: '',
+    gpt_sovits:  '',
+    cosyvoice:   '',
     minimax_tts: 'speech-02-hd',
   },
   asr: {
@@ -183,6 +187,8 @@ export const PROVIDER_MODELS: Record<string, Record<string, string[]>> = {
     cartesia:    ['sonic-2', 'sonic-english'],
     dashscope:   ['cosyvoice-v2', 'cosyvoice-v1'],
     fish_speech: [],
+    gpt_sovits:  [],
+    cosyvoice:   [],
     minimax_tts: ['speech-02-hd', 'speech-02-turbo', 'speech-01-hd'],
   },
   asr: {
@@ -296,10 +302,12 @@ export const TRANSLATE_PROVIDERS = ['gemini', 'openai', 'claude', 'deepseek', 'g
   'qwen', 'doubao', 'hunyuan', 'glm', 'moonshot', 'spark', 'minimax', 'baichuan'];
 export const TRANSLATE_LANGUAGES = ['中文', '英文', '日文', '韩文', '法文', '德文', '西班牙文', '俄文', '阿拉伯文', '葡萄牙文'];
 
-export const LOCAL_PROVIDERS = new Set(['faster_whisper', 'whisper', 'local_rvc', 'seed_vc', 'fish_speech', 'comfyui', 'flux', 'sd_local', 'facefusion', 'wan_local', 'got_ocr', 'liveportrait', 'sadtalker']);
+export const LOCAL_PROVIDERS = new Set(['faster_whisper', 'whisper', 'local_rvc', 'seed_vc', 'fish_speech', 'gpt_sovits', 'cosyvoice', 'comfyui', 'flux', 'sd_local', 'facefusion', 'wan_local', 'got_ocr', 'liveportrait', 'sadtalker']);
 // 前端 provider 名 → manifest engine key
 export const PROVIDER_TO_ENGINE: Record<string, string> = {
   fish_speech: 'fish_speech',
+  gpt_sovits: 'gpt_sovits',
+  cosyvoice: 'cosyvoice',
   seed_vc: 'seed_vc',
   local_rvc: 'rvc',
   faster_whisper: 'faster_whisper',
@@ -319,6 +327,7 @@ export const UNSUPPORTED_PROVIDERS = new Set([
   'pika',        // video_gen：Pika API 暂未实现
   'sora',        // video_gen：Sora API 暂未实现
   'azure_doc',   // ocr：Azure Document Intelligence 暂未实现
+  'cosyvoice',   // tts：CosyVoice 2 本地引擎暂未实现
   'sadtalker',   // lipsync：SadTalker 本地引擎暂未实现
   'heygen',      // lipsync：HeyGen API 暂未实现
   'did',         // lipsync：D-ID API 暂未实现

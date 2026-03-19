@@ -11,6 +11,8 @@ from config import (
     WRAPPERS_ROOT,
     RVC_RUNTIME_CONFIG_PATH,
     FISH_SPEECH_ENGINE_JSON,
+    GPT_SOVITS_ENGINE_JSON,
+    COSYVOICE_ENGINE_JSON,
     SEED_VC_ENGINE_JSON,
     WHISPER_ENGINE_JSON,
     FASTER_WHISPER_ENGINE_JSON,
@@ -144,6 +146,47 @@ def get_fish_speech_command_template() -> str:
             logger.error("[fish-cmd] 获取嵌入式 Python 失败: %s", e)
             return ""
     logger.warning("[fish-cmd] 未找到 Fish Speech 脚本，本地推理不可用")
+    return ""
+
+
+def detect_gpt_sovits_script() -> str:
+    candidates = [
+        WRAPPERS_ROOT / "gpt_sovits" / "inference.py",
+        RUNTIME_ROOT / "gpt_sovits" / "engine" / "inference.py",
+    ]
+    for p in candidates:
+        exists = p.exists()
+        logger.debug("[detect-gpt_sovits] 检查 %s → %s", p, "✓" if exists else "✗")
+        if exists:
+            logger.debug("[detect-gpt_sovits] 找到脚本: %s", p)
+            return str(p.resolve())
+    logger.warning("[detect-gpt_sovits] 未找到任何 GPT-SoVITS 脚本，检查路径: %s", [str(c) for c in candidates])
+    return ""
+
+
+def get_gpt_sovits_command_template() -> str:
+    logger.debug("[gpt_sovits-cmd] engine.json=%s exists=%s", GPT_SOVITS_ENGINE_JSON, GPT_SOVITS_ENGINE_JSON.exists())
+    if GPT_SOVITS_ENGINE_JSON.exists():
+        try:
+            data = json.loads(GPT_SOVITS_ENGINE_JSON.read_text(encoding="utf-8"))
+            cmd = (data.get("command") or "").strip()
+            if cmd:
+                logger.debug("[gpt_sovits-cmd] engine.json command: %s", cmd)
+                return cmd
+            logger.debug("[gpt_sovits-cmd] engine.json command 为空，转入自动探测")
+        except Exception as e:
+            logger.warning("[gpt_sovits-cmd] engine.json 读取失败: %s", e)
+    script = detect_gpt_sovits_script()
+    if script:
+        try:
+            py = get_embedded_python()
+            tpl = f'"{py}" "{script}" --text {{text}} --output {{output}} --voice_ref {{voice_ref}}'
+            logger.debug("[gpt_sovits-cmd] 自动构建命令模板: %s", tpl)
+            return tpl
+        except RuntimeError as e:
+            logger.error("[gpt_sovits-cmd] 获取嵌入式 Python 失败: %s", e)
+            return ""
+    logger.warning("[gpt_sovits-cmd] 未找到 GPT-SoVITS 脚本，本地推理不可用")
     return ""
 
 

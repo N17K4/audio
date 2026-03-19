@@ -28,8 +28,11 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # Windows 控制台 UTF-8
@@ -88,6 +91,9 @@ def _exact_version_spec(pkg: str) -> str | None:
 
 
 def _installed_dist_version(py: str, target: str, dist_name: str) -> str:
+    if target:
+        # --target 模式：只检查 target 目录中的 .dist-info，不查嵌入式 Python
+        return _dist_version_in_target(target, dist_name)
     env = {**os.environ, "PYTHONPATH": target} if target else None
     code = (
         "import importlib.metadata as m; "
@@ -95,6 +101,34 @@ def _installed_dist_version(py: str, target: str, dist_name: str) -> str:
     )
     r = subprocess.run([py, "-c", code], capture_output=True, text=True, env=env)
     return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def _dist_version_in_target(target: str, dist_name: str) -> str:
+    """直接扫描 target 目录中的 .dist-info 目录，提取版本号。
+    不依赖 Python import，避免嵌入式 Python 自带包干扰判断。"""
+    target_path = Path(target)
+    if not target_path.exists():
+        return ""
+    normalized = dist_name.lower().replace("-", "_")
+    for item in target_path.iterdir():
+        if not item.name.endswith(".dist-info"):
+            continue
+        # 格式: {name}-{version}.dist-info
+        name_lower = item.name.lower().replace("-", "_")
+        # 提取包名和版本: torch-2.5.1.dist_info → torch, 2.5.1
+        m = re.match(r"^(.+?)[-_](\d[\w.]*?)\.dist.info$", name_lower)
+        if m and m.group(1) == normalized:
+            return m.group(2)
+    return ""
+
+
+def _is_importable_in_target(target: str, module_name: str) -> bool:
+    """检查模块是否存在于 target 目录中（检查目录或 .py 文件）。"""
+    target_path = Path(target)
+    if not target_path.exists():
+        return False
+    # 检查包目录或单文件模块
+    return (target_path / module_name).is_dir() or (target_path / f"{module_name}.py").is_file()
 
 
 def _embedded_dist_version(py: str, dist_name: str) -> str:
@@ -140,21 +174,69 @@ def align_torch_stack_versions(packages: list[str], py: str) -> list[str]:
 # 必须使用 --no-deps 安装以避免版本冲突。
 _NO_DEPS_PACKAGES = {"rvc-python"}
 
+# 嵌入式 Python 的 site-packages 已包含这些包（pip_packages 阶段安装）。
+# 如果 runtime_pip_packages 的 transitive dependency 把它们安装到 --target 目录，
+# PYTHONPATH 会导致 --target 里的版本优先加载，与嵌入式版本不一致而崩溃。
+# 安装完成后从 --target 目录中删除这些包，确保运行时总是使用嵌入式版本。
+_EMBEDDED_PROTECTED_PACKAGES = {
+    "pydantic", "pydantic_core",
+    "fastapi", "starlette",
+    "uvicorn", "httpx", "httpcore",
+    "anyio", "sniffio",
+    "typing_extensions",
+    "annotated_types",
+}
+
+
+def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
+    """从 --target 目录中删除嵌入式 Python 已有的包，避免 PYTHONPATH 版本冲突。"""
+    if not target:
+        return
+    target_path = Path(target)
+    if not target_path.exists():
+        return
+    removed = []
+    for item in target_path.iterdir():
+        # 匹配包目录（如 pydantic_core/）和 dist-info 目录（如 pydantic_core-2.x.dist-info/）
+        name_lower = item.name.lower().replace("-", "_")
+        base_name = name_lower.split(".")[0]  # 处理 .dist-info 等
+        # 也匹配 dist-info: pydantic_core-2.27.2.dist-info → pydantic_core
+        dist_match = re.match(r"^([a-z0-9_]+?)[-_]\d", name_lower)
+        pkg_name = dist_match.group(1) if dist_match else base_name
+        if pkg_name in _EMBEDDED_PROTECTED_PACKAGES:
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+                removed.append(item.name)
+            except OSError:
+                pass
+    if removed:
+        _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
+
 
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
-    """安装包列表。target 为空时直接 pip install，否则 pip install --target。"""
+    """并行下载 + 逐个安装。单个失败不影响其他包。"""
     if target:
         Path(target).mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PYTHONPATH": target} if target else None
-    all_ok = True
+    no_deps_names = {n.lower().replace("-", "_") for n in _NO_DEPS_PACKAGES}
 
+    # ── 筛选需要安装的包 ──────────────────────────────────────────────────
+    # --target 模式：只检查 target 目录，不受嵌入式 Python 自带包干扰
+    # 无 target：检查全局 Python 环境
+    to_install: list[str] = []
     for pkg in packages:
         module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
         dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
         exact_version = _exact_version_spec(pkg)
         if exact_version:
-            installed_version = _installed_dist_version(py, target, dist_name)
-            if installed_version == exact_version:
+            if _installed_dist_version(py, target, dist_name) == exact_version:
+                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                continue
+        elif target:
+            if _is_importable_in_target(target, module_name):
                 _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
                 continue
         else:
@@ -162,23 +244,84 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             if check.returncode == 0:
                 _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
                 continue
+        to_install.append(pkg)
 
+    if not to_install:
+        return True
+
+    # ── Phase 1: 并行下载 wheel 到临时缓存目录 ───────────────────────────
+    cache_dir = tempfile.mkdtemp(prefix="ml_pip_cache_")
+    download_failed: dict[str, str] = {}  # pkg → error message
+
+    def _download_one(pkg: str) -> tuple[str, bool, str]:
+        cmd = [py, "-m", "pip", "download", pkg, "--no-deps",
+               "-d", cache_dir, "--quiet"]
+        if mirror:
+            cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        return (pkg, r.returncode == 0, r.stderr.strip()[:300])
+
+    _emit({"type": "log", "message": f"  并行下载 {len(to_install)} 个包…"}, json_progress)
+    max_workers = min(4, len(to_install))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_download_one, pkg): pkg for pkg in to_install}
+        for future in as_completed(futures):
+            pkg, ok, err = future.result()
+            if ok:
+                _emit({"type": "log", "message": f"  ↓ {pkg}"}, json_progress)
+            else:
+                _emit({"type": "log", "message": f"  ✗ {pkg} 下载失败: {err}"}, json_progress)
+                download_failed[pkg] = err
+
+    # ── Phase 2: 从本地缓存逐个安装（快速、故障隔离）─────────────────────
+    all_ok = True
+    for pkg in to_install:
+        if pkg in download_failed:
+            all_ok = False
+            continue
+        dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
         _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
-        cmd = [py, "-m", "pip", "install", pkg, "--quiet"]
-        if dist_name.lower().replace("-", "_") in {n.lower().replace("-", "_") for n in _NO_DEPS_PACKAGES}:
+        cmd = [py, "-m", "pip", "install", pkg,
+               "--find-links", cache_dir, "--quiet"]
+        if dist_name.lower().replace("-", "_") in no_deps_names:
             cmd.append("--no-deps")
         if target:
             cmd += ["--target", target, "--upgrade"]
         if mirror:
             cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
-
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if r.returncode == 0:
             _emit({"type": "log", "message": f"  ✓ {pkg}"}, json_progress)
         else:
             err = r.stderr.strip()[:300]
-            _emit({"type": "log", "message": f"  ✗ {pkg} 失败: {err}"}, json_progress)
+            _emit({"type": "log", "message": f"  ✗ {pkg} 安装失败: {err}"}, json_progress)
             all_ok = False
+
+    # ── 清理临时缓存 ──────────────────────────────────────────────────────
+    shutil.rmtree(cache_dir, ignore_errors=True)
+
+    # ── 汇总失败项 ────────────────────────────────────────────────────────
+    if not all_ok:
+        failed = [p for p in to_install if p in download_failed]
+        # 也检查安装阶段失败的
+        for pkg in to_install:
+            if pkg not in download_failed:
+                dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
+                module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+                exact_ver = _exact_version_spec(pkg)
+                if exact_ver:
+                    if _installed_dist_version(py, target, dist_name) != exact_ver:
+                        failed.append(pkg)
+                elif target:
+                    if not _is_importable_in_target(target, module_name):
+                        failed.append(pkg)
+                else:
+                    chk = subprocess.run([py, "-c", f"import {module_name}"],
+                                         capture_output=True, env=env)
+                    if chk.returncode != 0:
+                        failed.append(pkg)
+        if failed:
+            _emit({"type": "log", "message": f"  ══ 失败汇总: {', '.join(failed)}"}, json_progress)
 
     return all_ok
 
@@ -236,6 +379,9 @@ def main():
 
     _emit({"type": "log", "message": f"共 {len(packages)} 个包待安装"}, args.json_progress)
     ok = install_packages(packages, py, args.target, args.pypi_mirror, args.json_progress)
+
+    # 清理 transitive dependency 中与嵌入式 Python 冲突的包
+    _cleanup_protected_packages(args.target, args.json_progress)
 
     if ok:
         _emit({"type": "log", "message": "✓ 运行库安装完成"}, args.json_progress)

@@ -21,6 +21,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -89,6 +90,43 @@ def _group_by_namespace(packages: list[str]) -> list[list[str]]:
         result.append(group)
     result.extend(singles)
     return result
+
+
+# 嵌入式 Python 已有的包——防止 transitive dependency 覆盖导致版本冲突
+_EMBEDDED_PROTECTED_PACKAGES = {
+    "pydantic", "pydantic_core",
+    "fastapi", "starlette",
+    "uvicorn", "httpx", "httpcore",
+    "anyio", "sniffio",
+    "typing_extensions",
+    "annotated_types",
+}
+
+
+def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
+    """从 --target 目录中删除嵌入式 Python 已有的包，避免 PYTHONPATH 版本冲突。"""
+    if not target:
+        return
+    target_path = Path(target)
+    if not target_path.exists():
+        return
+    removed = []
+    for item in target_path.iterdir():
+        name_lower = item.name.lower().replace("-", "_")
+        base_name = name_lower.split(".")[0]
+        dist_match = re.match(r"^([a-z0-9_]+?)[-_]\d", name_lower)
+        pkg_name = dist_match.group(1) if dist_match else base_name
+        if pkg_name in _EMBEDDED_PROTECTED_PACKAGES:
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+                removed.append(item.name)
+            except OSError:
+                pass
+    if removed:
+        _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
 
 def install_packages(packages: list[str], py: str, target: str, mirror: str, json_progress: bool) -> bool:
@@ -197,6 +235,9 @@ def main():
 
     _emit({"type": "log", "message": f"共 {len(packages)} 个包待安装"}, args.json_progress)
     ok = install_packages(packages, py, args.target, args.pypi_mirror, args.json_progress)
+
+    # 清理 transitive dependency 中与嵌入式 Python 冲突的包
+    _cleanup_protected_packages(args.target, args.json_progress)
 
     if ok:
         _emit({"type": "log", "message": "✓ 运行库安装完成"}, args.json_progress)

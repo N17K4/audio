@@ -1,0 +1,4 @@
+{
+  "command": "",
+  "note": "CosyVoice 2 本地推理引擎（即将支持）。command 为空时自动探测 inference.py 脚本。"
+}
