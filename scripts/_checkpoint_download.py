@@ -164,7 +164,7 @@ def download_via_requests(url: str, dest_path: Path) -> None:
     last_reported = -1
     mode = "ab" if resume_pos > 0 else "wb"
     with open(dest_path, mode) as f:
-        for chunk in resp.iter_content(chunk_size=65536):
+        for chunk in resp.iter_content(chunk_size=1048576):  # 1 MB chunks
             f.write(chunk)
             done += len(chunk)
             if total:
@@ -297,47 +297,54 @@ def check_and_download(
             hf_info = parse_hf_url(url)
             if hf_info:
                 repo_id, filename, revision = hf_info
-                if _JSON_MODE:
-                    # JSON 模式优先走 HTTP 直连，进度条实时更新；鉴权失败再回退 hf_hub
-                    try:
-                        download_via_requests(url, dest)
-                    except Exception as http_err:
-                        if "401" in str(http_err) or "403" in str(http_err):
-                            emit("log", message=f"    需要认证，尝试 hf_hub_download…")
-                            downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
-                            if downloaded.resolve() != dest.resolve():
-                                downloaded.rename(dest)
-                        else:
-                            raise
-                else:
+                # 统一优先 hf_hub_download（支持 HF_ENDPOINT 镜像、连接池、CDN），
+                # 失败时回退 HTTP 直连
+                try:
+                    # JSON 模式：用监视线程报告进度
+                    stop_monitor = threading.Event()
+                    monitor = None
+                    if _JSON_MODE and size_mb:
+                        monitor = threading.Thread(
+                            target=_monitor_file_progress,
+                            args=(dest, rel_path, size_mb, stop_monitor),
+                            daemon=True,
+                        )
+                        monitor.start()
                     try:
                         downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
                         if downloaded.resolve() != dest.resolve():
                             downloaded.rename(dest)
-                    except Exception as hf_err:
-                        is_auth_err = ("401" in str(hf_err) or "403" in str(hf_err)
-                                       or "authentication" in str(hf_err).lower()
-                                       or "Unauthorized" in str(hf_err))
-                        is_import_err = isinstance(hf_err, ImportError)
-                        if is_import_err:
-                            print(f"    [提示] huggingface_hub 未安装，回退到 HTTP 直连下载")
+                    finally:
+                        stop_monitor.set()
+                        if monitor:
+                            monitor.join(timeout=5)
+                except Exception as hf_err:
+                    is_auth_err = ("401" in str(hf_err) or "403" in str(hf_err)
+                                   or "authentication" in str(hf_err).lower()
+                                   or "Unauthorized" in str(hf_err))
+                    is_import_err = isinstance(hf_err, ImportError)
+                    if is_import_err:
+                        print(f"    [提示] huggingface_hub 未安装，回退到 HTTP 直连下载")
+                        download_via_requests(url, dest)
+                    elif is_auth_err:
+                        emit("log", message=f"    需要认证，回退 HTTP 直连…")
+                        try:
                             download_via_requests(url, dest)
-                        elif is_auth_err:
-                            try:
-                                download_via_requests(url, dest)
-                            except Exception as http_err:
-                                if "401" in str(http_err) or "403" in str(http_err):
-                                    if ensure_hf_login():
-                                        print(f"  [HF] 重试下载 {filename}")
-                                        downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
-                                        if downloaded.resolve() != dest.resolve():
-                                            downloaded.rename(dest)
-                                    else:
-                                        raise http_err
+                        except Exception as http_err:
+                            if "401" in str(http_err) or "403" in str(http_err):
+                                if ensure_hf_login():
+                                    print(f"  [HF] 重试下载 {filename}")
+                                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
+                                    if downloaded.resolve() != dest.resolve():
+                                        downloaded.rename(dest)
                                 else:
                                     raise http_err
-                        else:
-                            raise
+                            else:
+                                raise http_err
+                    else:
+                        # 其他错误（网络超时等）：回退 HTTP 直连
+                        emit("log", message=f"    hf_hub_download 失败 ({hf_err.__class__.__name__})，回退 HTTP 直连…")
+                        download_via_requests(url, dest)
             else:
                 download_via_requests(url, dest)
 
@@ -382,6 +389,32 @@ def save_sha256_to_manifest(manifest: dict, manifest_path: Path, sha256_updates:
             encoding="utf-8",
         )
         print(f"  manifest.json 已更新（sha256 写入）")
+
+
+def _monitor_file_progress(dest: Path, label: str, size_mb: float, stop_event: threading.Event) -> None:
+    """后台线程：每 2 秒报告一次单文件下载进度（用于 hf_hub_download 等无进度回调的场景）。"""
+    if not size_mb:
+        return
+    while not stop_event.wait(timeout=2.0):
+        try:
+            # hf_hub_download 先写到临时文件再 rename，检查同目录下最大的临时文件
+            parent = dest.parent
+            current = 0
+            if dest.exists():
+                current = dest.stat().st_size / 1024 / 1024
+            else:
+                # 查找 hf_hub 的临时下载文件（.incomplete 后缀或无后缀的大文件）
+                for f in parent.iterdir():
+                    if f.is_file():
+                        sz = f.stat().st_size / 1024 / 1024
+                        if sz > current:
+                            current = sz
+            if current > 0:
+                pct = min(99, int(current / size_mb * 100))
+                emit("progress", file=label, pct=pct,
+                     mb=round(current, 1), total_mb=float(size_mb))
+        except Exception:
+            pass
 
 
 def _monitor_hf_cache_progress(cache_dir: Path, label: str, size_mb: float, stop_event: threading.Event) -> None:
@@ -526,34 +559,35 @@ def download_hf_cache(
             if filename:
                 final_dest = cache_dir / filename
                 final_dest.parent.mkdir(parents=True, exist_ok=True)
-                # 单文件：JSON 模式用 HTTP 直连以获得实时进度，否则用 hf_hub_download
-                if _JSON_MODE:
-                    hf_url = f"{HF_ENDPOINT}/{repo_id}/resolve/{revision}/{filename}"
-                    # HTTP 下载到最终目标路径，确保离线模式能直接命中本地文件
-                    tmp_dest = final_dest
-                    msg2 = f"  [HTTP 单文件] {hf_url}"
-                    print(msg2)
-                    emit("log", message=msg2)
-                    try:
-                        download_via_requests(hf_url, tmp_dest)
-                    except Exception as http_err:
-                        emit("log", message=f"    HTTP 下载失败 ({http_err.__class__.__name__})，回退 hf_hub_download…")
-                        downloaded = Path(hf_hub_download(
-                            repo_id=repo_id, filename=filename,
-                            revision=revision, cache_dir=str(cache_dir), token=token,
-                        ))
-                        if downloaded.resolve() != final_dest.resolve():
-                            shutil.copy2(downloaded, final_dest)
-                else:
-                    msg2 = f"  [HF单文件] {repo_id}  {filename}  revision={revision}  cache_dir={cache_dir}"
-                    print(msg2)
-                    emit("log", message=msg2)
+                # 统一优先 hf_hub_download（支持镜像、CDN），失败时回退 HTTP 直连
+                msg2 = f"  [HF单文件] {repo_id}  {filename}  revision={revision}  cache_dir={cache_dir}"
+                print(msg2)
+                emit("log", message=msg2)
+                # JSON 模式：用监视线程报告进度
+                stop_file_mon = threading.Event()
+                file_mon = None
+                if _JSON_MODE and size_mb:
+                    file_mon = threading.Thread(
+                        target=_monitor_file_progress,
+                        args=(final_dest, label, size_mb, stop_file_mon),
+                        daemon=True,
+                    )
+                    file_mon.start()
+                try:
                     downloaded = Path(hf_hub_download(
                         repo_id=repo_id, filename=filename,
                         revision=revision, cache_dir=str(cache_dir), token=token,
                     ))
                     if downloaded.resolve() != final_dest.resolve():
                         shutil.copy2(downloaded, final_dest)
+                except Exception as hf_err:
+                    emit("log", message=f"    hf_hub_download 失败 ({hf_err.__class__.__name__})，回退 HTTP 直连…")
+                    hf_url = f"{HF_ENDPOINT}/{repo_id}/resolve/{revision}/{filename}"
+                    download_via_requests(hf_url, final_dest)
+                finally:
+                    stop_file_mon.set()
+                    if file_mon:
+                        file_mon.join(timeout=5)
 
                 if not final_dest.exists() or final_dest.stat().st_size <= 0:
                     raise FileNotFoundError(f"下载完成后目标文件不存在: {final_dest}")
