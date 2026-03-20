@@ -2,25 +2,255 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
 
 from config import (
     APP_ROOT,
     RESOURCES_ROOT,
     RUNTIME_ROOT,
     WRAPPERS_ROOT,
-    RVC_ENGINE_JSON,
-    FISH_SPEECH_ENGINE_JSON,
-    GPT_SOVITS_ENGINE_JSON,
-    COSYVOICE_ENGINE_JSON,
-    SEED_VC_ENGINE_JSON,
-    WHISPER_ENGINE_JSON,
-    FASTER_WHISPER_ENGINE_JSON,
     _MANIFEST,
     CHECKPOINTS_ROOT,
 )
 from logging_setup import logger
 
+
+# ---------------------------------------------------------------------------
+# 引擎レジストリ（データ駆動）
+# ---------------------------------------------------------------------------
+# 各引擎の探索パスとコマンドテンプレート書式を一元管理する。
+#
+# candidates      : detect_engine_script() が順番に存在確認するパスリスト
+# template_format : 自動構築時のコマンドテンプレート（{script} はスクリプトパスに置換）
+# engine_json_key : engine.json 内で読み取るキー名（デフォルト "command"）
+#
+# engine.json は常に WRAPPERS_ROOT / <engine> / "engine.json" を参照する。
+
+_ENGINE_REGISTRY: Dict[str, dict] = {
+    "rvc": {
+        "candidates": [
+            RUNTIME_ROOT / "engine" / "rvc" / "infer.py",
+            WRAPPERS_ROOT / "rvc" / "infer_cli.py",
+            APP_ROOT / "rvc" / "infer_cli.py",
+            APP_ROOT / "tools" / "rvc" / "infer_cli.py",
+        ],
+        "template_format": '--input {input} --output {output} --model {model} --index {index}',
+        "engine_json_key": "cmd_template",
+    },
+    "fish_speech": {
+        "candidates": [
+            WRAPPERS_ROOT / "fish_speech" / "inference.py",
+            RUNTIME_ROOT / "engine" / "fish_speech" / "tools" / "inference_engine.py",
+            RUNTIME_ROOT / "engine" / "fish_speech" / "fish_speech" / "inference.py",
+        ],
+        "template_format": '--text {text} --output {output} --voice_ref {voice_ref}',
+    },
+    "gpt_sovits": {
+        "candidates": [
+            WRAPPERS_ROOT / "gpt_sovits" / "inference.py",
+            RUNTIME_ROOT / "engine" / "gpt_sovits" / "inference.py",
+        ],
+        "template_format": '--text {text} --output {output} --voice_ref {voice_ref}',
+    },
+    "seed_vc": {
+        "candidates": [
+            WRAPPERS_ROOT / "seed_vc" / "inference.py",
+            RUNTIME_ROOT / "engine" / "seed_vc" / "inference.py",
+            RUNTIME_ROOT / "engine" / "seed_vc" / "run_inference.py",
+            RUNTIME_ROOT / "engine" / "seed_vc" / "seed_vc" / "inference.py",
+        ],
+        "template_format": '--source {input} --target {voice_ref} --output {output}',
+    },
+    "whisper": {
+        "candidates": [
+            WRAPPERS_ROOT / "whisper" / "inference.py",
+        ],
+        "template_format": '--input {input} --output {output} --model {model}',
+    },
+    "faster_whisper": {
+        "candidates": [
+            WRAPPERS_ROOT / "faster_whisper" / "inference.py",
+        ],
+        "template_format": '--input {input} --output {output} --model {model}',
+    },
+    "got_ocr": {
+        "candidates": [
+            WRAPPERS_ROOT / "got_ocr" / "inference.py",
+        ],
+        "template_format": '--input {input} --output {output} --model {model}',
+    },
+    "liveportrait": {
+        "candidates": [
+            WRAPPERS_ROOT / "liveportrait" / "inference.py",
+        ],
+        "template_format": '--source {source} --audio {audio} --output {output}',
+    },
+    "facefusion": {
+        "candidates": [
+            WRAPPERS_ROOT / "facefusion" / "inference.py",
+            RUNTIME_ROOT / "engine" / "facefusion" / "facefusion.py",
+        ],
+        "template_format": '--source {source} --target {target} --output {output}',
+    },
+    "wan": {
+        "candidates": [
+            WRAPPERS_ROOT / "wan" / "inference.py",
+        ],
+        "template_format": '--prompt {prompt} --output {output} --model {model}',
+    },
+    "flux": {
+        "candidates": [
+            WRAPPERS_ROOT / "flux" / "inference.py",
+        ],
+        "template_format": '--prompt {prompt} --output {output}',
+    },
+    "sd": {
+        "candidates": [
+            WRAPPERS_ROOT / "sd" / "inference.py",
+        ],
+        "template_format": '--prompt {prompt} --output {output}',
+    },
+}
+
+
+def detect_engine_script(engine: str) -> str:
+    """汎用エンジンスクリプト探索。
+
+    _ENGINE_REGISTRY に登録された候補パスを順番に確認し、
+    最初に見つかったスクリプトの絶対パスを返す。見つからなければ空文字列。
+    """
+    cfg = _ENGINE_REGISTRY.get(engine)
+    if cfg is None:
+        logger.warning("[detect-%s] レジストリに未登録のエンジン", engine)
+        return ""
+    candidates: List[Path] = cfg["candidates"]
+    for p in candidates:
+        exists = p.exists()
+        logger.debug("[detect-%s] 检查 %s -> %s", engine, p, "OK" if exists else "NG")
+        if exists:
+            logger.debug("[detect-%s] 找到脚本: %s", engine, p)
+            return str(p.resolve())
+    logger.warning("[detect-%s] 未找到任何推理脚本，检查路径: %s", engine, [str(c) for c in candidates])
+    return ""
+
+
+def get_engine_command_template(engine: str) -> str:
+    """汎用コマンドテンプレート取得。
+
+    解析優先度:
+    1) wrappers/<engine>/engine.json の command (または engine_json_key で指定されたキー)
+    2) 自動探索スクリプト + 嵌入式 Python からテンプレートを構築
+    """
+    cfg = _ENGINE_REGISTRY.get(engine)
+    if cfg is None:
+        logger.warning("[%s-cmd] レジストリに未登録のエンジン", engine)
+        return ""
+
+    engine_json_key: str = cfg.get("engine_json_key", "command")
+    engine_json_path = WRAPPERS_ROOT / engine / "engine.json"
+
+    # 1) engine.json から読み取り
+    logger.debug("[%s-cmd] engine.json=%s exists=%s", engine, engine_json_path, engine_json_path.exists())
+    if engine_json_path.exists():
+        try:
+            data = json.loads(engine_json_path.read_text(encoding="utf-8"))
+            cmd = (data.get(engine_json_key) or "").strip()
+            if cmd:
+                logger.debug("[%s-cmd] engine.json %s: %s", engine, engine_json_key, cmd)
+                return cmd
+            logger.debug("[%s-cmd] engine.json %s 为空，转入自动探测", engine, engine_json_key)
+        except Exception as e:
+            logger.warning("[%s-cmd] engine.json 读取失败: %s", engine, e)
+
+    # 2) 自動探索 + テンプレート構築
+    script = detect_engine_script(engine)
+    if script:
+        try:
+            py = get_embedded_python()
+            tpl = f'"{py}" "{script}" {cfg["template_format"]}'
+            logger.debug("[%s-cmd] 自动构建命令模板: %s", engine, tpl)
+            return tpl
+        except RuntimeError as e:
+            logger.error("[%s-cmd] 获取嵌入式 Python 失败: %s", engine, e)
+            return ""
+    logger.warning("[%s-cmd] 未找到推理脚本，本地推理不可用", engine)
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# 後方互換エイリアス — 既存の呼び出し元がそのまま動作するように維持
+# ---------------------------------------------------------------------------
+
+def detect_rvc_infer_script() -> str:
+    return detect_engine_script("rvc")
+
+def detect_fish_speech_script() -> str:
+    return detect_engine_script("fish_speech")
+
+def detect_gpt_sovits_script() -> str:
+    return detect_engine_script("gpt_sovits")
+
+def detect_seed_vc_script() -> str:
+    return detect_engine_script("seed_vc")
+
+def detect_whisper_script() -> str:
+    return detect_engine_script("whisper")
+
+def detect_faster_whisper_script() -> str:
+    return detect_engine_script("faster_whisper")
+
+def detect_got_ocr_script() -> str:
+    return detect_engine_script("got_ocr")
+
+def detect_liveportrait_script() -> str:
+    return detect_engine_script("liveportrait")
+
+def detect_facefusion_script() -> str:
+    return detect_engine_script("facefusion")
+
+def detect_wan_script() -> str:
+    return detect_engine_script("wan")
+
+def detect_flux_script() -> str:
+    return detect_engine_script("flux")
+
+def get_fish_speech_command_template() -> str:
+    return get_engine_command_template("fish_speech")
+
+def get_gpt_sovits_command_template() -> str:
+    return get_engine_command_template("gpt_sovits")
+
+def get_seed_vc_command_template() -> str:
+    return get_engine_command_template("seed_vc")
+
+def get_whisper_command_template() -> str:
+    return get_engine_command_template("whisper")
+
+def get_faster_whisper_command_template() -> str:
+    return get_engine_command_template("faster_whisper")
+
+def get_default_rvc_command_template() -> str:
+    return get_engine_command_template("rvc")
+
+def get_got_ocr_command_template() -> str:
+    return get_engine_command_template("got_ocr")
+
+def get_liveportrait_command_template() -> str:
+    return get_engine_command_template("liveportrait")
+
+def get_facefusion_command_template() -> str:
+    return get_engine_command_template("facefusion")
+
+def get_wan_command_template() -> str:
+    return get_engine_command_template("wan")
+
+def get_flux_command_template() -> str:
+    return get_engine_command_template("flux")
+
+
+# ---------------------------------------------------------------------------
+# ユーティリティ（固有ロジックのためリファクタリング対象外）
+# ---------------------------------------------------------------------------
 
 def get_embedded_python() -> str:
     """返回平台对应的嵌入式 Python 路径。
@@ -96,264 +326,6 @@ def get_pandoc_binary() -> str:
         logger.debug("[pandoc] 使用系统 pandoc: %s", system_pandoc)
         return system_pandoc
     logger.warning("[pandoc] 未找到 pandoc，文档互转功能不可用")
-    return ""
-
-
-def detect_rvc_infer_script() -> str:
-    candidates = [
-        RUNTIME_ROOT / "engine" / "rvc" / "infer.py",   # runtime.py 自动生成
-        WRAPPERS_ROOT / "rvc" / "infer_cli.py",
-        APP_ROOT / "rvc" / "infer_cli.py",
-        APP_ROOT / "tools" / "rvc" / "infer_cli.py",
-    ]
-    for p in candidates:
-        exists = p.exists()
-        logger.debug("[detect-rvc] 检查 %s → %s", p, "✓" if exists else "✗")
-        if exists:
-            logger.debug("[detect-rvc] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-rvc] 未找到任何 RVC 推理脚本，检查路径: %s", [str(c) for c in candidates])
-    return ""
-
-
-def detect_fish_speech_script() -> str:
-    candidates = [
-        WRAPPERS_ROOT / "fish_speech" / "inference.py",
-        RUNTIME_ROOT / "engine" / "fish_speech" / "tools" / "inference_engine.py",
-        RUNTIME_ROOT / "engine" / "fish_speech" / "fish_speech" / "inference.py",
-    ]
-    for p in candidates:
-        exists = p.exists()
-        logger.debug("[detect-fish] 检查 %s → %s", p, "✓" if exists else "✗")
-        if exists:
-            logger.debug("[detect-fish] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-fish] 未找到任何 Fish Speech 脚本，检查路径: %s", [str(c) for c in candidates])
-    return ""
-
-
-def get_fish_speech_command_template() -> str:
-    logger.debug("[fish-cmd] engine.json=%s exists=%s", FISH_SPEECH_ENGINE_JSON, FISH_SPEECH_ENGINE_JSON.exists())
-    if FISH_SPEECH_ENGINE_JSON.exists():
-        try:
-            data = json.loads(FISH_SPEECH_ENGINE_JSON.read_text(encoding="utf-8"))
-            cmd = (data.get("command") or "").strip()
-            if cmd:
-                logger.debug("[fish-cmd] engine.json command: %s", cmd)
-                return cmd
-            logger.debug("[fish-cmd] engine.json command 为空，转入自动探测")
-        except Exception as e:
-            logger.warning("[fish-cmd] engine.json 读取失败: %s", e)
-    script = detect_fish_speech_script()
-    if script:
-        try:
-            py = get_embedded_python()
-            tpl = f'"{py}" "{script}" --text {{text}} --output {{output}} --voice_ref {{voice_ref}}'
-            logger.debug("[fish-cmd] 自动构建命令模板: %s", tpl)
-            return tpl
-        except RuntimeError as e:
-            logger.error("[fish-cmd] 获取嵌入式 Python 失败: %s", e)
-            return ""
-    logger.warning("[fish-cmd] 未找到 Fish Speech 脚本，本地推理不可用")
-    return ""
-
-
-def detect_gpt_sovits_script() -> str:
-    candidates = [
-        WRAPPERS_ROOT / "gpt_sovits" / "inference.py",
-        RUNTIME_ROOT / "engine" / "gpt_sovits" / "inference.py",
-    ]
-    for p in candidates:
-        exists = p.exists()
-        logger.debug("[detect-gpt_sovits] 检查 %s → %s", p, "✓" if exists else "✗")
-        if exists:
-            logger.debug("[detect-gpt_sovits] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-gpt_sovits] 未找到任何 GPT-SoVITS 脚本，检查路径: %s", [str(c) for c in candidates])
-    return ""
-
-
-def get_gpt_sovits_command_template() -> str:
-    logger.debug("[gpt_sovits-cmd] engine.json=%s exists=%s", GPT_SOVITS_ENGINE_JSON, GPT_SOVITS_ENGINE_JSON.exists())
-    if GPT_SOVITS_ENGINE_JSON.exists():
-        try:
-            data = json.loads(GPT_SOVITS_ENGINE_JSON.read_text(encoding="utf-8"))
-            cmd = (data.get("command") or "").strip()
-            if cmd:
-                logger.debug("[gpt_sovits-cmd] engine.json command: %s", cmd)
-                return cmd
-            logger.debug("[gpt_sovits-cmd] engine.json command 为空，转入自动探测")
-        except Exception as e:
-            logger.warning("[gpt_sovits-cmd] engine.json 读取失败: %s", e)
-    script = detect_gpt_sovits_script()
-    if script:
-        try:
-            py = get_embedded_python()
-            tpl = f'"{py}" "{script}" --text {{text}} --output {{output}} --voice_ref {{voice_ref}}'
-            logger.debug("[gpt_sovits-cmd] 自动构建命令模板: %s", tpl)
-            return tpl
-        except RuntimeError as e:
-            logger.error("[gpt_sovits-cmd] 获取嵌入式 Python 失败: %s", e)
-            return ""
-    logger.warning("[gpt_sovits-cmd] 未找到 GPT-SoVITS 脚本，本地推理不可用")
-    return ""
-
-
-def detect_seed_vc_script() -> str:
-    candidates = [
-        WRAPPERS_ROOT / "seed_vc" / "inference.py",
-        RUNTIME_ROOT / "engine" / "seed_vc" / "inference.py",
-        RUNTIME_ROOT / "engine" / "seed_vc" / "run_inference.py",
-        RUNTIME_ROOT / "engine" / "seed_vc" / "seed_vc" / "inference.py",
-    ]
-    for p in candidates:
-        exists = p.exists()
-        logger.debug("[detect-seedvc] 检查 %s → %s", p, "✓" if exists else "✗")
-        if exists:
-            logger.debug("[detect-seedvc] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-seedvc] 未找到任何 Seed-VC 脚本，检查路径: %s", [str(c) for c in candidates])
-    return ""
-
-
-def get_seed_vc_command_template() -> str:
-    logger.debug("[seedvc-cmd] engine.json=%s exists=%s", SEED_VC_ENGINE_JSON, SEED_VC_ENGINE_JSON.exists())
-    if SEED_VC_ENGINE_JSON.exists():
-        try:
-            data = json.loads(SEED_VC_ENGINE_JSON.read_text(encoding="utf-8"))
-            cmd = (data.get("command") or "").strip()
-            if cmd:
-                logger.debug("[seedvc-cmd] engine.json command: %s", cmd)
-                return cmd
-            logger.debug("[seedvc-cmd] engine.json command 为空，转入自动探测")
-        except Exception as e:
-            logger.warning("[seedvc-cmd] engine.json 读取失败: %s", e)
-    script = detect_seed_vc_script()
-    if script:
-        try:
-            py = get_embedded_python()
-            tpl = f'"{py}" "{script}" --source {{input}} --target {{voice_ref}} --output {{output}}'
-            logger.debug("[seedvc-cmd] 自动构建命令模板: %s", tpl)
-            return tpl
-        except RuntimeError as e:
-            logger.error("[seedvc-cmd] 获取嵌入式 Python 失败: %s", e)
-            return ""
-    logger.warning("[seedvc-cmd] 未找到 Seed-VC 脚本，本地推理不可用")
-    return ""
-
-
-def detect_whisper_script() -> str:
-    candidates = [
-        WRAPPERS_ROOT / "whisper" / "inference.py",
-    ]
-    for p in candidates:
-        exists = p.exists()
-        logger.debug("[detect-whisper] 检查 %s → %s", p, "✓" if exists else "✗")
-        if exists:
-            logger.debug("[detect-whisper] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-whisper] 未找到任何 Whisper 脚本，检查路径: %s", [str(c) for c in candidates])
-    return ""
-
-
-def get_whisper_command_template() -> str:
-    logger.debug("[whisper-cmd] engine.json=%s exists=%s", WHISPER_ENGINE_JSON, WHISPER_ENGINE_JSON.exists())
-    if WHISPER_ENGINE_JSON.exists():
-        try:
-            data = json.loads(WHISPER_ENGINE_JSON.read_text(encoding="utf-8"))
-            cmd = (data.get("command") or "").strip()
-            if cmd:
-                logger.debug("[whisper-cmd] engine.json command: %s", cmd)
-                return cmd
-            logger.debug("[whisper-cmd] engine.json command 为空，转入自动探测")
-        except Exception as e:
-            logger.warning("[whisper-cmd] engine.json 读取失败: %s", e)
-    script = detect_whisper_script()
-    if script:
-        try:
-            py = get_embedded_python()
-            tpl = f'"{py}" "{script}" --input {{input}} --output {{output}} --model {{model}}'
-            logger.debug("[whisper-cmd] 自动构建命令模板: %s", tpl)
-            return tpl
-        except RuntimeError as e:
-            logger.error("[whisper-cmd] 获取嵌入式 Python 失败: %s", e)
-            return ""
-    logger.warning("[whisper-cmd] 未找到 Whisper 脚本，本地推理不可用")
-    return ""
-
-
-def detect_faster_whisper_script() -> str:
-    candidates = [
-        WRAPPERS_ROOT / "faster_whisper" / "inference.py",
-    ]
-    for p in candidates:
-        exists = p.exists()
-        logger.debug("[detect-faster-whisper] 检查 %s → %s", p, "✓" if exists else "✗")
-        if exists:
-            logger.debug("[detect-faster-whisper] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-faster-whisper] 未找到任何 Faster-Whisper 脚本，检查路径: %s", [str(c) for c in candidates])
-    return ""
-
-
-def get_faster_whisper_command_template() -> str:
-    logger.debug("[faster-whisper-cmd] engine.json=%s exists=%s", FASTER_WHISPER_ENGINE_JSON, FASTER_WHISPER_ENGINE_JSON.exists())
-    if FASTER_WHISPER_ENGINE_JSON.exists():
-        try:
-            data = json.loads(FASTER_WHISPER_ENGINE_JSON.read_text(encoding="utf-8"))
-            cmd = (data.get("command") or "").strip()
-            if cmd:
-                logger.debug("[faster-whisper-cmd] engine.json command: %s", cmd)
-                return cmd
-            logger.debug("[faster-whisper-cmd] engine.json command 为空，转入自动探测")
-        except Exception as e:
-            logger.warning("[faster-whisper-cmd] engine.json 读取失败: %s", e)
-    script = detect_faster_whisper_script()
-    if script:
-        try:
-            py = get_embedded_python()
-            tpl = f'"{py}" "{script}" --input {{input}} --output {{output}} --model {{model}}'
-            logger.debug("[faster-whisper-cmd] 自动构建命令模板: %s", tpl)
-            return tpl
-        except RuntimeError as e:
-            logger.error("[faster-whisper-cmd] 获取嵌入式 Python 失败: %s", e)
-            return ""
-    logger.warning("[faster-whisper-cmd] 未找到 Faster-Whisper 脚本，本地推理不可用")
-    return ""
-
-
-def get_default_rvc_command_template() -> str:
-    """
-    Optional command template from wrappers/rvc/engine.json.
-    Uses the same ``cmd_template`` field as other engines.
-    """
-    logger.debug("[rvc-cmd] engine.json=%s exists=%s", RVC_ENGINE_JSON, RVC_ENGINE_JSON.exists())
-    if RVC_ENGINE_JSON.exists():
-        try:
-            data = json.loads(RVC_ENGINE_JSON.read_text(encoding="utf-8"))
-            cmd = (data.get("cmd_template") or "").strip()
-            if cmd:
-                logger.debug("[rvc-cmd] engine.json cmd_template: %s", cmd)
-                return cmd
-            logger.debug("[rvc-cmd] engine.json cmd_template 为空，转入自动探测")
-        except Exception as e:
-            logger.warning("[rvc-cmd] engine.json 读取失败: %s", e)
-
-    # 2) Auto-detect common local paths (no manual config needed).
-    auto_script = detect_rvc_infer_script()
-    if auto_script:
-        try:
-            py = get_embedded_python()
-            tpl = (
-                f'"{py}" "{auto_script}" '
-                "--input {input} --output {output} --model {model} --index {index}"
-            )
-            logger.debug("[rvc-cmd] 自动构建命令模板: %s", tpl)
-            return tpl
-        except RuntimeError as e:
-            logger.error("[rvc-cmd] 获取嵌入式 Python 失败: %s", e)
-            return ""
-    logger.warning("[rvc-cmd] 未找到 RVC 推理脚本，本地推理不可用")
     return ""
 
 
@@ -497,118 +469,6 @@ def detect_ffmpeg_hwaccel() -> dict:
     logger.info("[ffmpeg-hw] 无可用硬件加速，回退软件编码 libx264")
     _ffmpeg_hw_cache = {"hwaccel": None, "encoder": "libx264", "label": "软件编码 (libx264)"}
     return _ffmpeg_hw_cache
-
-
-# ---------------------------------------------------------------------------
-# 新引擎：GOT-OCR2.0 / LivePortrait / FaceFusion / Wan 2.1
-# ---------------------------------------------------------------------------
-
-def detect_got_ocr_script() -> str:
-    candidates = [WRAPPERS_ROOT / "got_ocr" / "inference.py"]
-    for p in candidates:
-        if p.exists():
-            logger.debug("[detect-got_ocr] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-got_ocr] 未找到 got_ocr inference.py")
-    return ""
-
-
-def get_got_ocr_command_template() -> str:
-    script = detect_got_ocr_script()
-    if not script:
-        return ""
-    try:
-        py = get_embedded_python()
-        return f'"{py}" "{script}" --input {{input}} --output {{output}} --model {{model}}'
-    except RuntimeError:
-        return ""
-
-
-def detect_liveportrait_script() -> str:
-    candidates = [WRAPPERS_ROOT / "liveportrait" / "inference.py"]
-    for p in candidates:
-        if p.exists():
-            logger.debug("[detect-liveportrait] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-liveportrait] 未找到 liveportrait inference.py")
-    return ""
-
-
-def get_liveportrait_command_template() -> str:
-    script = detect_liveportrait_script()
-    if not script:
-        return ""
-    try:
-        py = get_embedded_python()
-        return f'"{py}" "{script}" --source {{source}} --audio {{audio}} --output {{output}}'
-    except RuntimeError:
-        return ""
-
-
-def detect_facefusion_script() -> str:
-    candidates = [
-        WRAPPERS_ROOT / "facefusion" / "inference.py",
-        RUNTIME_ROOT / "engine" / "facefusion" / "facefusion.py",
-    ]
-    for p in candidates:
-        if p.exists():
-            logger.debug("[detect-facefusion] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-facefusion] 未找到 facefusion 脚本")
-    return ""
-
-
-def get_facefusion_command_template() -> str:
-    script = detect_facefusion_script()
-    if not script:
-        return ""
-    try:
-        py = get_embedded_python()
-        return f'"{py}" "{script}" --source {{source}} --target {{target}} --output {{output}}'
-    except RuntimeError:
-        return ""
-
-
-def detect_wan_script() -> str:
-    candidates = [WRAPPERS_ROOT / "wan" / "inference.py"]
-    for p in candidates:
-        if p.exists():
-            logger.debug("[detect-wan] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-wan] 未找到 wan inference.py")
-    return ""
-
-
-def get_wan_command_template() -> str:
-    script = detect_wan_script()
-    if not script:
-        return ""
-    try:
-        py = get_embedded_python()
-        return f'"{py}" "{script}" --prompt {{prompt}} --output {{output}} --model {{model}}'
-    except RuntimeError:
-        return ""
-
-
-def detect_flux_script() -> str:
-    candidates = [WRAPPERS_ROOT / "flux" / "inference.py"]
-    for p in candidates:
-        if p.exists():
-            logger.debug("[detect-flux] 找到脚本: %s", p)
-            return str(p.resolve())
-    logger.warning("[detect-flux] 未找到 flux inference.py")
-    return ""
-
-
-def get_flux_command_template() -> str:
-    script = detect_flux_script()
-    if not script:
-        return ""
-    try:
-        py = get_embedded_python()
-        return f'"{py}" "{script}" --prompt {{prompt}} --output {{output}}'
-    except RuntimeError:
-        return ""
 
 
 def build_ffmpeg_video_encode_flags(hw_accel: str = "auto") -> list:

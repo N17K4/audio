@@ -23,8 +23,8 @@ export async function packFilesToZip(files: File[]): Promise<Blob> {
   return new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' });
 }
 
-// ─── 前端日志（写入 logs/frontend.log，仅 production）───────────────────────
+// ─── 前端日志 ─────────────────────────────────────────────────────────────────
 export function rlog(level: 'INFO' | 'WARN' | 'ERROR', ...args: unknown[]): void {
-  const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-  try { (window as any).electronAPI?.logRenderer?.(level, msg); } catch {}
+  const fn = level === 'ERROR' ? console.error : level === 'WARN' ? console.warn : console.log;
+  fn(`[${level}]`, ...args);
 }

@@ -15,23 +15,20 @@ export function useBackend() {
   const [vchatVoiceId, setVchatVoiceId] = useState('');
 
   useEffect(() => {
-    const api = window.electronAPI;
-    if (api?.getBackendBaseUrl) {
-      api.getBackendBaseUrl()
-        .then(url => { if (url) { setBackendBaseUrl(url); rlog('INFO', '后端地址:', url); } })
-        .catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
-    } else {
-      // 非 Electron 环境：探测同源 /health（Docker nginx 代理），失败回退直连后端
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      if (origin) {
-        fetch(`${origin}/health`).then(r => {
-          if (r.ok) { setBackendBaseUrl(origin); rlog('INFO', '后端地址(同源):', origin); }
-          else setBackendBaseUrl('http://127.0.0.1:8000');
-        }).catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
-      } else {
-        setBackendBaseUrl('http://127.0.0.1:8000');
-      }
+    // 优先级：URL 参数（Electron 注入）→ 同源探测（Docker nginx）→ 直连 127.0.0.1:8000
+    if (typeof window === 'undefined') { setBackendBaseUrl('http://127.0.0.1:8000'); return; }
+    const params = new URLSearchParams(window.location.search);
+    const fromParam = params.get('backendUrl');
+    if (fromParam) {
+      setBackendBaseUrl(fromParam);
+      rlog('INFO', '后端地址(参数):', fromParam);
+      return;
     }
+    const origin = window.location.origin;
+    fetch(`${origin}/health`).then(r => {
+      if (r.ok) { setBackendBaseUrl(origin); rlog('INFO', '后端地址(同源):', origin); }
+      else setBackendBaseUrl('http://127.0.0.1:8000');
+    }).catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
   }, []);
 
   useEffect(() => {

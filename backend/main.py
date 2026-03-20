@@ -1,11 +1,59 @@
+import os
+import shutil
+import sys
+
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT
+from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT, RUNTIME_ROOT
 from logging_setup import logger
 from routers import health, voices, jobs, convert, train, tasks, rag, agent, finetune, system
+
+# ---------------------------------------------------------------------------
+# runtime/ml/ を sys.path に追加（torch 等の ML パッケージを import 可能にする）
+# ---------------------------------------------------------------------------
+_ml_dir = RUNTIME_ROOT / "ml"
+if _ml_dir.is_dir():
+    _ml_str = str(_ml_dir)
+    if _ml_str not in sys.path:
+        sys.path.append(_ml_str)
+        logger.info("sys.path に ML パッケージディレクトリを追加: %s", _ml_str)
+
+# ---------------------------------------------------------------------------
+# ML パッケージの衝突防止クリーンアップ
+# runtime/ml/ に torch 等をインストールした際、backend 本体の軽量依存と
+# バージョン競合するパッケージが紛れ込むことがある。起動時に除去する。
+# ---------------------------------------------------------------------------
+_ML_CONFLICT_PREFIXES = [
+    "pydantic_core", "pydantic-", "pydantic.",
+    "fastapi", "starlette", "uvicorn",
+    "httpx", "httpcore", "anyio", "sniffio",
+    "typing_extensions", "annotated_types",
+]
+
+def _cleanup_ml_conflicts() -> None:
+    if not _ml_dir.is_dir():
+        return
+    for entry in _ml_dir.iterdir():
+        lower = entry.name.lower().replace("-", "_")
+        for prefix in _ML_CONFLICT_PREFIXES:
+            pp = prefix.replace("-", "_")
+            if lower == pp or lower.startswith(pp + "-") or lower.startswith(pp + "."):
+                try:
+                    if entry.is_dir():
+                        shutil.rmtree(entry)
+                    else:
+                        entry.unlink()
+                    logger.info("ML 衝突パッケージを削除: %s", entry.name)
+                except Exception:
+                    pass
+                break
+
+_cleanup_ml_conflicts()
 
 app = FastAPI()
 

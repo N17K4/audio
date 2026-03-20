@@ -62,31 +62,17 @@ export function useTTS({
   async function startTtsRefRecording() {
     setError('');
     try {
-      const api = window.electronAPI;
-      if (!api?.getDesktopSources) throw new Error('Electron API 不可用');
-      const sources = await api.getDesktopSources();
-      if (!sources[0]) throw new Error('未找到音频源');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } } as any,
-        video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } } as any,
-      });
-      const audioStream = new MediaStream(stream.getAudioTracks());
-      stream.getVideoTracks().forEach(t => t.stop());
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
-      const recorder = new MediaRecorder(audioStream);
+      const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        audioStream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         if (ttsRefRecordedObjectUrl) URL.revokeObjectURL(ttsRefRecordedObjectUrl);
-        const url = URL.createObjectURL(blob);
-        setTtsRefRecordedObjectUrl(url);
+        setTtsRefRecordedObjectUrl(URL.createObjectURL(blob));
         setTtsRefAudios([new File([blob], 'recording.webm', { type: 'audio/webm' })]);
-        if (api.saveRecording) {
-          const fname = `tts_ref_recording_${Date.now()}.webm`;
-          const dir = await api.saveRecording(fname, await blob.arrayBuffer());
-          setTtsRecordingDir(dir);
-        }
+        setTtsRecordingDir('recording');
         setStatus('idle');
       };
       recorder.start();

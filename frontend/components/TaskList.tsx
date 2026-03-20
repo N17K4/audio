@@ -985,10 +985,8 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       </section>
       {/* 健康检查 */}
       <HealthCheck backendBaseUrl={backendBaseUrl} />
-      {/* 日志（仅 Electron） */}
-      {(typeof window !== 'undefined') && (window as any).electronAPI?.readLogFile && (
-        <LogViewer />
-      )}
+      {/* 运行日志 */}
+      <LogViewer backendBaseUrl={backendBaseUrl} />
     </div>
   );
 }
@@ -1057,19 +1055,31 @@ function HealthCheck({ backendBaseUrl }: { backendBaseUrl: string }) {
 }
 
 // ─── 日志查看组件 ────────────────────────────────────────────────────────────
-function LogViewer() {
+function LogViewer({ backendBaseUrl }: { backendBaseUrl: string }) {
   const [logContent, setLogContent] = useState<{ name: string; content: string } | null>(null);
+  const [logFiles, setLogFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const LOG_FILES = ['electron.log', 'backend.log', 'frontend.log'] as const;
+  useEffect(() => {
+    if (!backendBaseUrl) return;
+    fetch(`${backendBaseUrl}/system/logs`).then(r => r.json()).then(setLogFiles).catch(() => {});
+  }, [backendBaseUrl]);
 
   async function loadLog(name: string) {
     if (logContent?.name === name) { setLogContent(null); return; }
+    if (!backendBaseUrl) return;
     setLoading(true);
-    const res = await (window as any).electronAPI?.readLogFile(name) ?? { ok: false, content: '' };
-    setLogContent({ name, content: res.content });
+    try {
+      const r = await fetch(`${backendBaseUrl}/system/logs/${encodeURIComponent(name)}`);
+      const res = await r.json();
+      setLogContent({ name, content: res.content || '' });
+    } catch {
+      setLogContent({ name, content: '（读取失败）' });
+    }
     setLoading(false);
   }
+
+  if (logFiles.length === 0) return null;
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
@@ -1078,15 +1088,10 @@ function LogViewer() {
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">运行日志</span>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">查看各进程的运行日志，用于排查问题</p>
         </div>
-        <button
-          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
-          onClick={() => (window as any).electronAPI?.openLogsDir?.()}>
-          打开目录
-        </button>
       </div>
       <div className="px-5 py-3">
         <div className="flex items-center gap-2 flex-wrap">
-          {LOG_FILES.map(name => (
+          {logFiles.map(name => (
             <button key={name}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
                 logContent?.name === name

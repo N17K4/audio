@@ -137,31 +137,17 @@ export function useVC({
   async function startVcRecording() {
     setError(''); setSuccessMsg('');
     try {
-      const api = window.electronAPI;
-      if (!api?.getDesktopSources) throw new Error('Electron API 不可用');
-      const sources = await api.getDesktopSources();
-      if (!sources[0]) throw new Error('未找到音频源');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } } as any,
-        video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } } as any,
-      });
-      const audioStream = new MediaStream(stream.getAudioTracks());
-      stream.getVideoTracks().forEach(t => t.stop());
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
-      const recorder = new MediaRecorder(audioStream);
+      const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        audioStream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         if (vcRecordedObjectUrl) URL.revokeObjectURL(vcRecordedObjectUrl);
         setVcRecordedObjectUrl(URL.createObjectURL(blob));
         setVcRecordedFile(new File([blob], 'recording.webm', { type: 'audio/webm' }));
-        const api = window.electronAPI;
-        if (api?.saveRecording) {
-          const fname = `vc_recording_${Date.now()}.webm`;
-          const dir = await api.saveRecording(fname, await blob.arrayBuffer());
-          setVcRecordingDir(dir);
-        }
+        setVcRecordingDir('recording');
         setStatus('idle');
       };
       recorder.start();

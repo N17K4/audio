@@ -377,3 +377,32 @@ async def install_stage(stage: str):
         yield f"data: {json.dumps({'done': True})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# ─── GET /system/logs ──────────────────────────────────────────────────────
+
+@router.get("/logs")
+async def list_logs():
+    """ログファイル一覧を返す。"""
+    if not LOGS_DIR.exists():
+        return []
+    return sorted(
+        [f.name for f in LOGS_DIR.iterdir() if f.is_file() and f.suffix == ".log"],
+        reverse=True,
+    )
+
+
+@router.get("/logs/{filename}")
+async def read_log(filename: str):
+    """指定されたログファイルの内容を返す。"""
+    # パストラバーサル防止
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return {"ok": False, "content": "不正なファイル名"}
+    log_path = LOGS_DIR / filename
+    if not log_path.exists():
+        return {"ok": False, "content": f"（{filename} 暂不存在）"}
+    try:
+        content = log_path.read_text(encoding="utf-8", errors="replace")
+        return {"ok": True, "content": content}
+    except Exception as e:
+        return {"ok": False, "content": f"读取失败：{e}"}

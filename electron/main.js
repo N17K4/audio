@@ -1,25 +1,61 @@
-const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, shell, dialog, session, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
+const http = require('http');
 const { spawn } = require('child_process');
 
-const { PROJECT_ROOT, LOGS_DIR, CACHE_DIR, getCheckpointsDir, getUserPackagesDir, getResRoot } = require('./paths');
-const { electronLog, frontendLog } = require('./logger');
-const state = require('./state');
-const { getAvailablePort, waitBackendReady, waitFrontendReady } = require('./utils');
-const { registerAppIpc } = require('./ipc-app');
+// ─── パス定数 ─────────────────────────────────────────────────────────────────
+const PROJECT_ROOT = path.join(__dirname, '..');
+const resRoot = () => app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
-// 开発モード：main.js / preload.js 変動で自動再起動
+// ─── 状態 ─────────────────────────────────────────────────────────────────────
+let pyProcess = null;
+let backendBaseUrl = 'http://127.0.0.1:8000';
+let mainWindow = null;
+
+// ─── ユーティリティ ───────────────────────────────────────────────────────────
+function getAvailablePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : null;
+      server.close(() => { if (port) resolve(port); else reject(new Error('Failed to allocate backend port')); });
+    });
+  });
+}
+
+function waitFrontendReady(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    function poll() {
+      const req = http.get(url, { timeout: 3000 }, (res) => {
+        let body = '';
+        res.on('data', d => { body += d; });
+        res.on('end', () => {
+          const ct = res.headers['content-type'] || '';
+          if (res.statusCode === 200 && (ct.includes('text/html') || body.includes('<'))) return resolve();
+          if (Date.now() - start > timeoutMs) return reject(new Error('Frontend dev server 启动超时'));
+          setTimeout(poll, 800);
+        });
+      });
+      req.on('error', () => {
+        if (Date.now() - start > timeoutMs) return reject(new Error('Frontend dev server 启动超时'));
+        setTimeout(poll, 800);
+      });
+    }
+    poll();
+  });
+}
+
+// ─── 开発モード：自動再起動 ───────────────────────────────────────────────────
 if (!app.isPackaged) {
   require('electron-reload')(
-    [
-      path.join(__dirname, '*.js'),
-    ],
-    {
-      electron: process.execPath,
-      forceHardReset: true,
-      hardResetMethod: 'exit',
-    }
+    [path.join(__dirname, '*.js')],
+    { electron: process.execPath, forceHardReset: true, hardResetMethod: 'exit' }
   );
 }
 
@@ -61,24 +97,15 @@ app.commandLine.appendSwitch('lang', 'zh-CN');
   app.on('before-quit', () => { try { fs.unlinkSync(pidFile); } catch { /**/ } });
 }());
 
-// ─── IPC ハンドラ登録 ─────────────────────────────────────────────────────────
-registerAppIpc();
-
 // ─── メインウィンドウ作成 ─────────────────────────────────────────────────────
 async function createWindow() {
-  // macOS 麦克风権限
+  // macOS マイク権限
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
-    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
-      return true;
-    }
+    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') return true;
     return null;
   });
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
-      callback(true);
-    } else {
-      callback(false);
-    }
+    callback(permission === 'media' || permission === 'microphone' || permission === 'audioCapture');
   });
   if (process.platform === 'darwin') {
     systemPreferences.askForMediaAccess('microphone').catch(() => {});
@@ -91,43 +118,11 @@ async function createWindow() {
     app.dock.setIcon(path.join(PROJECT_ROOT, 'assets', 'icon.png'));
   }
   const win = new BrowserWindow({
-    width: 1100,
-    height: 800,
-    title: 'AI Workshop',
-    icon: iconPath,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
+    width: 1100, height: 800, title: 'AI Workshop', icon: iconPath,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
-  state.mainWindow = win;
+  mainWindow = win;
   win.on('page-title-updated', e => e.preventDefault());
-
-  function openLogFile(filename) {
-    const logPath = path.join(LOGS_DIR, filename);
-    let content = '';
-    if (!fs.existsSync(logPath)) {
-      content = `（${filename} 暂不存在，该文件会在首次写入日志后生成）\n\n路径：${logPath}`;
-    } else {
-      try {
-        content = fs.readFileSync(logPath, 'utf-8');
-      } catch (e) {
-        content = `读取失败：${e.message}`;
-      }
-    }
-    const logWin = new BrowserWindow({ width: 900, height: 650, title: filename, parent: win });
-    const escaped = content
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      body{margin:0;background:#1e1e1e;color:#d4d4d4;font:13px/1.6 "Menlo","Consolas",monospace}
-      pre{padding:16px;white-space:pre-wrap;word-break:break-all}
-    </style></head><body><pre>${escaped}</pre></body></html>`;
-    logWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    logWin.setMenuBarVisibility(false);
-  }
 
   const menu = Menu.buildFromTemplate([
     { role: 'appMenu' },
@@ -142,13 +137,12 @@ async function createWindow() {
   ]);
   Menu.setApplicationMenu(menu);
 
+  // ── バックエンド起動 ──
   const isDev = !app.isPackaged;
   const backendPort = process.env.BACKEND_PORT || String(await getAvailablePort());
-  state.backendBaseUrl = `http://127.0.0.1:${backendPort}`;
+  backendBaseUrl = `http://127.0.0.1:${backendPort}`;
 
-  let pyCmd;
-  let pyArgs;
-  let cwd;
+  let pyCmd, pyArgs, cwd;
 
   if (isDev) {
     pyCmd = 'mise';
@@ -166,110 +160,39 @@ async function createWindow() {
     cwd = PROJECT_ROOT;
   }
 
-  // ── 防御：清理 python-packages/ 中与嵌入式 Python 冲突的包 ──
-  const mlPkgDir = app.isPackaged
-    ? getUserPackagesDir()
-    : path.join(PROJECT_ROOT, 'runtime', 'ml');
-  if (fs.existsSync(mlPkgDir)) {
-    const protectedPrefixes = [
-      'pydantic_core', 'pydantic-', 'pydantic.',
-      'fastapi', 'starlette', 'uvicorn',
-      'httpx', 'httpcore', 'anyio', 'sniffio',
-      'typing_extensions', 'annotated_types',
-    ];
-    try {
-      for (const name of fs.readdirSync(mlPkgDir)) {
-        const lower = name.toLowerCase().replace(/-/g, '_');
-        const isConflict = protectedPrefixes.some(prefix => {
-          const p = prefix.replace(/-/g, '_');
-          return lower === p || lower.startsWith(p + '-') || lower.startsWith(p + '.');
-        });
-        if (isConflict) {
-          const fullPath = path.join(mlPkgDir, name);
-          try {
-            fs.rmSync(fullPath, { recursive: true, force: true });
-            console.log(`[cleanup] 删除冲突包: ${name}`);
-          } catch (e) {
-            console.warn(`[cleanup] 删除失败: ${name}`, e.message);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[cleanup] 扫描 python-packages 失败:', e.message);
-    }
-  }
-
-  // ── 統一環境変数 ──
-  const resRoot = getResRoot();
+  // BACKEND_PORT: Electron が動的に割り当てたポート
+  // RESOURCES_ROOT: 打包後 runtime/ は app.asar 外の Resources/ にあるため必要
   const backendEnv = {
     ...process.env,
-    BACKEND_HOST: '127.0.0.1',
     BACKEND_PORT: backendPort,
-    RESOURCES_ROOT: resRoot,
-    CHECKPOINTS_DIR: getCheckpointsDir(),
-    PYTHONPATH: [path.join(PROJECT_ROOT, 'backend'), mlPkgDir].join(path.delimiter),
-    PYTHONIOENCODING: 'utf-8',
-    ...(LOGS_DIR ? { LOGS_DIR } : {}),
-    CACHE_DIR,
+    RESOURCES_ROOT: resRoot(),
   };
 
   console.log(`Start backend: ${pyCmd} ${pyArgs.join(' ')}`);
-  console.log(`Backend URL: ${state.backendBaseUrl}`);
+  console.log(`Backend URL: ${backendBaseUrl}`);
 
-  state.pyProcess = spawn(pyCmd, pyArgs, {
-    cwd,
-    shell: isDev,
-    env: backendEnv,
-  });
+  pyProcess = spawn(pyCmd, pyArgs, { cwd, shell: isDev, env: backendEnv });
 
-  state.pyProcess.stdout.on('data', (data) => {
-    try { process.stdout.write(`[Backend] ${data}`); } catch { /**/ }
-    electronLog('INFO', '[Backend]', data.toString().trim());
-  });
-  state.pyProcess.stderr.on('data', (data) => {
-    try { process.stderr.write(`[Backend] ${data}`); } catch { /**/ }
-    electronLog('ERROR', '[Backend stderr]', data.toString().trim());
-  });
-  state.pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err));
-  state.pyProcess.on('exit', (code, signal) => {
-    if (code !== 0) console.error(`[Backend] exited code=${code} signal=${signal}`);
-  });
+  pyProcess.stdout.on('data', (data) => { try { process.stdout.write(`[Backend] ${data}`); } catch { /**/ } });
+  pyProcess.stderr.on('data', (data) => { try { process.stderr.write(`[Backend] ${data}`); } catch { /**/ } });
+  pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err));
+  pyProcess.on('exit', (code, signal) => { if (code !== 0) console.error(`[Backend] exited code=${code} signal=${signal}`); });
 
+  // ── フロントエンド読み込み ──
   if (isDev) {
-    const frontendPort = 3000;
-    const frontendUrl = `http://localhost:${frontendPort}`;
+    const frontendUrl = 'http://localhost:3000';
     console.log(`[UI] Waiting for frontend dev server at ${frontendUrl} ...`);
-    try {
-      await waitFrontendReady(frontendUrl, 60000);
-      console.log(`[UI] Frontend ready, loading ${frontendUrl}`);
-    } catch (err) {
-      console.error(`[UI] ${err.message}, loading anyway`);
-    }
-    await win.loadURL(frontendUrl);
+    try { await waitFrontendReady(frontendUrl, 60000); } catch (err) { console.error(`[UI] ${err.message}, loading anyway`); }
+    await win.loadURL(`${frontendUrl}?backendUrl=${encodeURIComponent(backendBaseUrl)}`);
     win.setTitle(`AI Workshop (Dev · backend:${backendPort})`);
   } else {
-    await win.loadFile(path.join(PROJECT_ROOT, 'frontend', 'out', 'index.html'));
+    await win.loadFile(path.join(PROJECT_ROOT, 'frontend', 'out', 'index.html'), {
+      query: { backendUrl: backendBaseUrl },
+    });
   }
-
 }
 
-// ─── 残りの IPC ハンドラ ─────────────────────────────────────────────────────
-ipcMain.handle('desktop-capturer:get-sources', async () => {
-  const sources = await desktopCapturer.getSources({ types: ['screen'] });
-  return sources.map((s) => ({ id: s.id, name: s.name }));
-});
-
-ipcMain.handle('backend:get-base-url', async () => state.backendBaseUrl);
-
-ipcMain.on('log:renderer', (_event, level, message) => {
-  if (frontendLog) frontendLog(level, message);
-});
-
-ipcMain.handle('dialog:selectDir', async () => {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  return result.canceled ? '' : (result.filePaths[0] || '');
-});
-
+// ─── ライフサイクル ───────────────────────────────────────────────────────────
 app.on('before-quit', () => {
   try {
     const { execSync } = require('child_process');
@@ -286,9 +209,7 @@ app.on('before-quit', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    if (state.pyProcess) {
-      spawn('taskkill', ['/pid', state.pyProcess.pid, '/f', '/t']);
-    }
+    if (pyProcess) spawn('taskkill', ['/pid', pyProcess.pid, '/f', '/t']);
     app.quit();
   }
 });
