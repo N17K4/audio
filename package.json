@@ -24,7 +24,7 @@
     "dist": "bash scripts/dist.sh --mac",
     "dist:win": "bash scripts/dist.sh --win",
     "dist:both": "bash scripts/dist.sh --mac && bash scripts/dist.sh --win",
-    "dist2": "pnpm run setup && pnpm run runtime && pnpm run ml && pnpm run checkpoints && bash scripts/dist.sh --win --full",
+    "dist2:win": "pnpm run setup && pnpm run runtime && pnpm run ml && pnpm run checkpoints && bash scripts/dist.sh --win --full",
     "docker": "docker compose up --build"
   },
   "devDependencies": {
