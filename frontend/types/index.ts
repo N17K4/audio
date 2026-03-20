@@ -17,13 +17,15 @@ export type DiskRow = {
   key: string;
   label: string;
   version?: string;          // 版本号（如 "v1.5"），由前端 badge 展示
-  sub?: string;
+  sub?: string;              // 安装目录路径
   size: number;
   engineKey?: string;        // 对应引擎下载 --engine 参数，有值才显示安装/卸载按钮
   ready?: boolean;           // 模型是否已就绪（size > 0 作为代理）
   clearable?: boolean;       // 可直接清空目录，显示「清空」按钮
+  stage?: string;            // 安装阶段分组（setup / ml_base 等），同阶段共享一个重新安装按钮
   estimatedSizeMb?: number;  // 预估体积，始终显示在标签旁
   default_install?: boolean; // true=pnpm run checkpoints 默认安装；false=需手动 --engine 指定
+  desc?: string;             // 详细说明（来源、内容、备注等）
 };
 export type Job = {
   id: string;
@@ -89,6 +91,9 @@ declare global {
       onEngineDownloadProgress: (cb: (msg: Record<string, unknown>) => void) => void;
       offEngineDownloadProgress: (cb: (msg: Record<string, unknown>) => void) => void;
       clearDiskRow: (key: string) => Promise<{ ok: boolean; error?: string }>;
+      reinstallStage: (stage: string) => Promise<{ ok: boolean; exitCode?: number; error?: string }>;
+      clearStage: (stage: string) => Promise<{ ok: boolean; error?: string }>;
+      clearStageAndOpenSetup: (stage: string) => Promise<{ ok: boolean; error?: string }>;
     };
   }
 }

@@ -274,6 +274,58 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       else { log(`✗ Fish Speech TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
     } catch (e: any) { log(`✗ Fish Speech TTS 异常: ${e.message}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
 
+    // 1b. GPT-SoVITS 创建音色（不依赖引擎，/voices/create 始终可用）
+    try {
+      const fd = new FormData();
+      fd.append('voice_name', 'smoke_test_gpt_sovits');
+      fd.append('engine', 'gpt_sovits');
+      fd.append('ref_text', '这是参考音频的文本');
+      // 创建虚拟 GPT / SoVITS 模型文件
+      const fakeModel = new Blob([new Uint8Array(1024)], { type: 'application/octet-stream' });
+      fd.append('gpt_model_file', fakeModel, 'test_gpt.ckpt');
+      fd.append('sovits_model_file', fakeModel, 'test_sovits.pth');
+      fd.append('reference_audio', testWav, 'ref.wav');
+
+      const res = await postForm(`${backendBaseUrl}/voices/create`, fd);
+      if (res.ok === false) {
+        log(`✗ GPT-SoVITS 创建音色失败: ${res.errMsg}`);
+        results.push({ name: 'GPT-SoVITS 创建音色', status: 'failed' });
+      } else {
+        const vid = res.data?.voice_id ?? '';
+        log(`✓ GPT-SoVITS 创建音色成功 [voice_id: ${vid}]`);
+        results.push({ name: 'GPT-SoVITS 创建音色', status: 'passed' });
+        // 清理
+        if (vid) {
+          try { await fetch(`${backendBaseUrl}/voices/${vid}`, { method: 'DELETE' }); log(`  🧹 已清理测试音色 ${vid}`); } catch { /**/ }
+        }
+      }
+    } catch (e: any) { log(`✗ GPT-SoVITS 创建音色异常: ${e.message}`); results.push({ name: 'GPT-SoVITS 创建音色', status: 'failed' }); }
+
+    // 1c. GPT-SoVITS TTS
+    try {
+      const fd = new FormData();
+      fd.append('text', '烟雾测试文本合成');
+      fd.append('provider', 'gpt_sovits');
+      fd.append('text_lang', 'zh');
+      fd.append('top_k', '15');
+      fd.append('temperature', '1.0');
+      fd.append('speed', '1.0');
+
+      const res = await postForm(`${backendBaseUrl}/tasks/tts`, fd);
+      if (res.ok === false) { log(`✗ GPT-SoVITS TTS 失败: ${res.errMsg}`); results.push({ name: 'GPT-SoVITS TTS', status: 'failed' }); }
+      else if (res.data?.job_id) {
+        const jobId = String(res.data.job_id);
+        log(`… GPT-SoVITS TTS 已排队 [${jobId.slice(0, 8)}]，等待结果`);
+        const job = await waitForJob(jobId, 'GPT-SoVITS TTS');
+        if (job?.status === 'completed') results.push({ name: 'GPT-SoVITS TTS', status: 'passed' });
+        else {
+          log(`✗ GPT-SoVITS TTS 失败:\n${formatJobError(job?.error)}`);
+          results.push({ name: 'GPT-SoVITS TTS', status: 'failed' });
+        }
+      }
+      else { log(`✗ GPT-SoVITS TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'GPT-SoVITS TTS', status: 'failed' }); }
+    } catch (e: any) { log(`✗ GPT-SoVITS TTS 异常: ${e.message}`); results.push({ name: 'GPT-SoVITS TTS', status: 'failed' }); }
+
     // 2. Faster Whisper STT
     try {
       const fd = new FormData();
@@ -334,6 +386,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
         const fd = new FormData();
         fd.append('file', testWav, 'test.wav');
         fd.append('voice_id', rvcVoiceId);
+        fd.append('provider', 'local_rvc');
         fd.append('mode', 'local');
         if (downloadDir) fd.append('output_dir', downloadDir);
 
@@ -941,6 +994,129 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           </div>
         )}
       </section>
+      {/* 健康检查 */}
+      <HealthCheck backendBaseUrl={backendBaseUrl} />
+      {/* 日志（仅 Electron） */}
+      {(typeof window !== 'undefined') && (window as any).electronAPI?.readLogFile && (
+        <LogViewer />
+      )}
     </div>
+  );
+}
+
+// ─── 健康检查组件 ────────────────────────────────────────────────────────────
+function HealthCheck({ backendBaseUrl }: { backendBaseUrl: string }) {
+  const [result, setResult] = useState<{ status: string; raw: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+
+  async function doCheck() {
+    if (!backendBaseUrl) return;
+    setLoading(true); setResult(null);
+    try {
+      const r = await fetch(`${backendBaseUrl}/health`);
+      const j = await r.json().catch(() => null);
+      setResult({ status: j?.status ?? (r.ok ? 'ok' : 'error'), raw: JSON.stringify(j, null, 2) });
+    } catch (e: any) {
+      setResult({ status: 'error', raw: `请求失败：${e.message}` });
+    }
+    setRefreshedAt(new Date());
+    setLoading(false);
+  }
+
+  // 不自动检查，用户手动点击"重新检查"按钮触发
+
+  const s = result?.status;
+  const isOk = s === 'ok';
+
+  return (
+    <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
+      <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">健康检查</span>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">检查后端服务的运行状态与组件健康度</p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {refreshedAt && !loading && (
+            <span className="text-[11px] text-slate-400">更新于 {refreshedAt.toLocaleTimeString('zh-CN')}</span>
+          )}
+          <button
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: SPRING_GREEN }}
+            disabled={loading || !backendBaseUrl}
+            onClick={doCheck}
+          >
+            {loading ? <><Spinner />检查中…</> : '重新检查'}
+          </button>
+        </div>
+      </div>
+      {result && (
+        <div className="px-5 py-3 space-y-3">
+          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+            isOk ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+            : s === 'degraded' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+            : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${isOk ? 'bg-green-500' : s === 'degraded' ? 'bg-amber-500' : 'bg-red-500'}`} />
+            {isOk ? '运行正常' : s === 'degraded' ? '部分降级' : '异常'}
+          </div>
+          <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">{result.raw}</pre>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── 日志查看组件 ────────────────────────────────────────────────────────────
+function LogViewer() {
+  const [logContent, setLogContent] = useState<{ name: string; content: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const LOG_FILES = ['electron.log', 'backend.log', 'frontend.log'] as const;
+
+  async function loadLog(name: string) {
+    if (logContent?.name === name) { setLogContent(null); return; }
+    setLoading(true);
+    const res = await (window as any).electronAPI?.readLogFile(name) ?? { ok: false, content: '' };
+    setLogContent({ name, content: res.content });
+    setLoading(false);
+  }
+
+  return (
+    <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
+      <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">运行日志</span>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">查看各进程的运行日志，用于排查问题</p>
+        </div>
+        <button
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
+          onClick={() => (window as any).electronAPI?.openLogsDir?.()}>
+          打开目录
+        </button>
+      </div>
+      <div className="px-5 py-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {LOG_FILES.map(name => (
+            <button key={name}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
+                logContent?.name === name
+                  ? 'text-white'
+                  : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+              style={logContent?.name === name ? { backgroundColor: SPRING_GREEN } : undefined}
+              disabled={loading}
+              onClick={() => loadLog(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+        {logContent && (
+          <pre className="mt-3 rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed" style={{ maxHeight: '24rem' }}>
+            {logContent.content || '（空）'}
+          </pre>
+        )}
+      </div>
+    </section>
   );
 }

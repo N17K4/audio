@@ -29,4 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   clearDiskRow: (key) => ipcRenderer.invoke('app:clearDiskRow', key),
+  reinstallStage: (stage) => ipcRenderer.invoke('app:reinstallStage', stage),
+  clearStage: (stage) => ipcRenderer.invoke('app:clearStage', stage),
+  clearStageAndOpenSetup: (stage) => ipcRenderer.invoke('app:clearStageAndOpenSetup', stage),
 });

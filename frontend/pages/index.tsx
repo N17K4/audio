@@ -41,7 +41,7 @@ export default function Home() {
   const [taskType, setTaskType] = useState<TaskType>('tts');
   const [showHome, setShowHome] = useState(true);
   const [showTasks, setShowTasks] = useState(false);
-  const [showSystem, setShowSystem] = useState(false);
+  const [tasksTab, setTasksTab] = useState<'tasks' | 'about' | 'models'>('tasks');
   const [showAudioTools, setShowAudioTools] = useState(false);
   const [showFormatConvert, setShowFormatConvert] = useState(false);
   const [showImageTools, setShowImageTools] = useState(false);
@@ -55,7 +55,7 @@ export default function Home() {
 
   const AUDIO_TASK_TYPES: TaskType[] = ['tts', 'vc', 'asr', 'voice_chat'];
 
-  const currentPage: Page = showHome ? 'home' : showTasks ? 'tasks' : showSystem ? 'system' :
+  const currentPage: Page = showHome ? 'home' : showTasks ? (tasksTab === 'tasks' ? 'tasks' : 'system') :
     showAudioTools ? 'audio_tools' : showFormatConvert ? 'format_convert' :
     showAdvancedTools ? (advancedSubPage === 'rag' ? 'rag' : advancedSubPage === 'agent' ? 'agent' : 'advanced_tools') :
     showImageTools ? 'image_tools' : showVideoTools ? 'video_tools' :
@@ -63,14 +63,14 @@ export default function Home() {
 
   function navigate(page: Page, subPage?: string) {
     const resetAll = () => {
-      setShowHome(false); setShowTasks(false); setShowSystem(false);
+      setShowHome(false); setShowTasks(false);
       setShowAudioTools(false); setShowFormatConvert(false);
       setShowImageTools(false); setShowVideoTools(false); setShowTextTools(false);
       setShowAdvancedTools(false);
     };
     if (page === 'home') { resetAll(); setShowHome(true); }
-    else if (page === 'tasks') { resetAll(); setShowTasks(true); fetchJobs(); }
-    else if (page === 'system') { resetAll(); setShowSystem(true); }
+    else if (page === 'tasks') { resetAll(); setShowTasks(true); setTasksTab('tasks'); fetchJobs(); }
+    else if (page === 'system') { resetAll(); setShowTasks(true); setTasksTab('models'); }
     else if (page === 'audio_tools') {
       resetAll(); setShowAudioTools(true);
       if (subPage && ['tts', 'vc', 'asr', 'voice_chat'].includes(subPage)) setTaskType(subPage as TaskType);
@@ -127,7 +127,7 @@ export default function Home() {
   }
 
   function navigateTasks() {
-    setShowHome(false); setShowTasks(true); setShowSystem(false);
+    setShowHome(false); setShowTasks(true); setTasksTab('tasks');
   }
 
   // ─── 通用状态 ─────────────────────────────────────────────────────────────
@@ -535,25 +535,68 @@ export default function Home() {
       />
 
       {/* ── 主内容区 ── */}
-      <div className={`flex-1 overflow-y-auto min-w-0 bg-slate-50 dark:bg-slate-950 ${showSystem ? 'hidden' : ''}`}>
+      <div className="flex-1 overflow-y-auto min-w-0 bg-slate-50 dark:bg-slate-950">
         <div className="p-6 md:p-8">
           <div className="mx-auto w-full space-y-5 max-w-5xl">
 
             {/* 首页 */}
             {showHome && <HomePanel onNavigate={(page, sub) => navigate(page as Page, sub)} jobs={jobs} backendBaseUrl={backend.backendBaseUrl} />}
 
-            {/* 任务列表 */}
-            {showTasks && (
-              <TaskList
-                jobs={jobs}
-                backendBaseUrl={backend.backendBaseUrl}
-                setJobs={setJobs}
-                onFetchJobs={fetchJobs}
-                outputDir={outputDir}
-                downloadDir={backend.downloadDir}
-                addInstantJobResult={addInstantJobResult}
-              />
-            )}
+            {/* 任务列表 + 设置 */}
+            {showTasks && (() => {
+              const TASKS_TABS = [
+                { id: 'tasks',  label: '任务列表' },
+                { id: 'about',  label: '功能说明' },
+                ...(isElectron ? [{ id: 'models', label: '模型管理' }] : []),
+              ] as const;
+              return (
+                <>
+                  <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 mb-5">
+                    {TASKS_TABS.map(t => (
+                      <button key={t.id}
+                        className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                          tasksTab === t.id
+                            ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                        onClick={() => {
+                          setTasksTab(t.id as typeof tasksTab);
+                          if (t.id === 'tasks') fetchJobs();
+                        }}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {tasksTab === 'tasks' && (
+                    <>
+                      <TaskList
+                        jobs={jobs}
+                        backendBaseUrl={backend.backendBaseUrl}
+                        setJobs={setJobs}
+                        onFetchJobs={fetchJobs}
+                        outputDir={outputDir}
+                        downloadDir={backend.downloadDir}
+                        addInstantJobResult={addInstantJobResult}
+                      />
+                      <div className="mt-6">
+                        <SystemPanel
+                          backendBaseUrl={backend.backendBaseUrl}
+                          isElectron={isElectron}
+                          externalSection="perf"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {tasksTab !== 'tasks' && (
+                    <SystemPanel
+                      backendBaseUrl={backend.backendBaseUrl}
+                      isElectron={isElectron}
+                      externalSection={tasksTab}
+                    />
+                  )}
+                </>
+              );
+            })()}
 
             {/* 音频工具标题栏 + 子 Tab */}
             {showAudioTools && (
@@ -605,7 +648,7 @@ export default function Home() {
             )}
 
             {/* 扩展功能标题栏 */}
-            {!showHome && !showTasks && !showSystem && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
+            {!showHome && !showTasks && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
               <header className="flex items-center gap-3.5 pb-1">
                 <TaskIcon task="misc" size={36} />
                 <div>
@@ -1014,7 +1057,7 @@ export default function Home() {
             )}
 
             {/* 扩展功能面板 */}
-            {!showHome && !showTasks && !showSystem && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
+            {!showHome && !showTasks && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
               <MiscPanel
                 miscSubPage={misc.miscSubPage}
                 setMiscSubPage={misc.setMiscSubPage}
@@ -1652,7 +1695,7 @@ export default function Home() {
             )}
 
             {/* ── 处理中进度条 ── */}
-            {!showHome && !showTasks && !showSystem && status === 'processing' && (
+            {!showHome && !showTasks && status === 'processing' && (
               <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 px-5 py-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5 text-indigo-500 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
@@ -1694,13 +1737,13 @@ export default function Home() {
             )}
 
             {/* ── 错误/成功提示 ── */}
-            {!showHome && !showTasks && !showSystem && error && (
+            {!showHome && !showTasks && error && (
               <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-5 py-4 text-sm text-rose-700 dark:text-rose-300 flex gap-3">
                 <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.072 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
                 <span className="font-semibold leading-relaxed break-all">{error}</span>
               </div>
             )}
-            {!showHome && !showTasks && !showSystem && successMsg && !error && (
+            {!showHome && !showTasks && successMsg && !error && (
               <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 px-5 py-3.5 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                 <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
                 <span className="font-medium">{successMsg}</span>
@@ -1711,15 +1754,6 @@ export default function Home() {
         </div>{/* p-4 */}
       </div>{/* flex-1 main scroll */}
 
-      {/* 设置 — 独立全高容器，不在滚动区内 */}
-      {showSystem && (
-        <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 dark:bg-slate-950">
-          <SystemPanel
-            backendBaseUrl={backend.backendBaseUrl}
-            isElectron={isElectron}
-          />
-        </div>
-      )}
 
     </div>
   );

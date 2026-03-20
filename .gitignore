@@ -44,6 +44,9 @@ checkpoints/
 # ─── 本地开发 ML 包（pnpm run ml / ml:extra 安装到此）──────────────────────
 local_data/
 
+# ─── 引擎独立 pip 包目录（如 facefusion 等）──────────────────────────────────
+facefusion-packages/
+
 # ─── 运行时数据 ──────────────────────────────────────────────────────────────
 backend/.jobs/
 

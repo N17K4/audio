@@ -73,7 +73,7 @@ export default function TopNav({ currentPage, jobs, isDark, setIsDark, onNavigat
           onClick={() => onNavigate('tasks')}
           title="任务列表"
           className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-            currentPage === 'tasks'
+            currentPage === 'tasks' || currentPage === 'system'
               ? 'bg-blue-50 dark:bg-blue-950/30 text-[#1A8FE3]'
               : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
           }`}
@@ -88,22 +88,6 @@ export default function TopNav({ currentPage, jobs, isDark, setIsDark, onNavigat
               {activeBadge > 9 ? '9+' : activeBadge}
             </span>
           )}
-        </button>
-
-        {/* System */}
-        <button
-          onClick={() => onNavigate('system')}
-          title="设置"
-          className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-            currentPage === 'system'
-              ? 'bg-blue-50 dark:bg-blue-950/30 text-[#1A8FE3]'
-              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
-          }`}
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
         </button>
 
         {/* Dark mode toggle */}

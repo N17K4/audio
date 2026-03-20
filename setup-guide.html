@@ -93,7 +93,7 @@
   .mirror-hint.warn { color: #f0c060; }
   .mirror-hint.ok { color: #4ec9b0; }
 
-  /* ── International 切换 ── */
+  /* ── 国内/国际 切换开关 ── */
   .intl-row {
     margin-top: 16px;
     background: #252526;
@@ -101,18 +101,49 @@
     padding: 10px 14px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    cursor: pointer;
+    gap: 12px;
     user-select: none;
   }
   .intl-row:hover { background: #2a2d2e; }
-  .intl-row input[type=checkbox] {
-    width: 16px; height: 16px;
-    accent-color: #569cd6;
-    cursor: pointer;
-    margin: 0;
+  .intl-switch-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
   }
-  .intl-label { font-size: 13px; color: #ccc; flex: 1; }
+  .intl-side-label {
+    font-size: 13px;
+    color: #888;
+    transition: color .2s;
+    min-width: 32px;
+    text-align: center;
+  }
+  .intl-side-label.active { color: #4ec9b0; font-weight: 600; }
+  /* 滑动开关轨道 */
+  .intl-toggle {
+    position: relative;
+    width: 44px;
+    height: 22px;
+    background: #3c3c3c;
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background .25s;
+    flex-shrink: 0;
+  }
+  .intl-toggle.intl { background: #569cd6; }
+  /* 滑块 */
+  .intl-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .25s;
+  }
+  .intl-toggle.intl::after { transform: translateX(22px); }
   .intl-hint { font-size: 12px; color: #888; }
 
   /* ── 日志 ── */
@@ -202,11 +233,14 @@
   </div>
   <div class="content">
     <ul class="engine-list" id="engine-list"></ul>
-    <label class="intl-row" for="intl-check">
-      <input type="checkbox" id="intl-check" onchange="toggleInternational(this.checked)">
-      <span class="intl-label">International — 使用官方源（海外用户）</span>
-      <span class="intl-hint" id="intl-hint"></span>
-    </label>
+    <div class="intl-row">
+      <div class="intl-switch-wrap">
+        <span class="intl-side-label active" id="intl-label-cn">国内</span>
+        <div class="intl-toggle" id="intl-toggle" onclick="toggleInternational()"></div>
+        <span class="intl-side-label" id="intl-label-intl">国际</span>
+      </div>
+      <span class="intl-hint" id="intl-hint">hf-mirror.com + 清华 PyPI</span>
+    </div>
     <div class="mirror-row">
       <label>PyPI 软件源（安装 torch 等 Python 包）</label>
       <input type="text" id="pypi-mirror" list="pypi-options"
@@ -277,6 +311,16 @@
 <script>
 let _engines = [];
 let _manifest = {};
+let _stage = null;  // 非 null 时为指定阶段重装模式
+
+// ─── 阶段元信息 ──────────────────────────────────────────────────────────────
+const STAGE_META = {
+  setup:             { label: '运行环境',     desc: '嵌入式 Python + 后端依赖 + 引擎 pip 包与源码 + FFmpeg + Pandoc', size: '~600 MB' },
+  ml_base:           { label: 'ML 基础依赖',  desc: 'torch · torchaudio · transformers 等基础 ML 运行库',            size: '~2–4 GB' },
+  ml_extra:          { label: 'ML 扩展依赖',  desc: 'RAG（llama-index · faiss）· Agent · LoRA（peft · trl）',         size: '~500 MB–1 GB' },
+  checkpoints_base:  { label: '基础模型权重', desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · Whisper · FaceFusion + 内置音色', size: '~8–10 GB' },
+  checkpoints_extra: { label: '扩展模型权重', desc: 'Flux · SD-Turbo · Wan · GOT-OCR · LivePortrait 模型',            size: '~20–40 GB' },
+};
 
 // ─── 默认源 ──────────────────────────────────────────────────────────────────
 const PYPI_CN      = 'https://pypi.tuna.tsinghua.edu.cn/simple';
@@ -287,21 +331,37 @@ const HF_INTL      = 'https://huggingface.co';
 let PYPI_DEFAULT   = PYPI_CN;
 let HF_DEFAULT     = HF_CN;
 
-function toggleInternational(checked) {
+// 当前是否为国际模式
+let _isInternational = false;
+
+function toggleInternational(forceIntl) {
+  // 无参数时切换；有参数时设为指定值
+  _isInternational = (forceIntl !== undefined) ? !!forceIntl : !_isInternational;
+
+  const toggle   = document.getElementById('intl-toggle');
+  const labelCn  = document.getElementById('intl-label-cn');
+  const labelIntl = document.getElementById('intl-label-intl');
   const pypiInput = document.getElementById('pypi-mirror');
   const hfInput   = document.getElementById('hf-endpoint');
-  if (checked) {
+
+  if (_isInternational) {
+    toggle.classList.add('intl');
+    labelCn.classList.remove('active');
+    labelIntl.classList.add('active');
     pypiInput.value = PYPI_INTL;
     hfInput.value   = HF_INTL;
     PYPI_DEFAULT    = PYPI_INTL;
     HF_DEFAULT      = HF_INTL;
     document.getElementById('intl-hint').textContent = 'pypi.org + huggingface.co';
   } else {
+    toggle.classList.remove('intl');
+    labelCn.classList.add('active');
+    labelIntl.classList.remove('active');
     pypiInput.value = PYPI_CN;
     hfInput.value   = HF_CN;
     PYPI_DEFAULT    = PYPI_CN;
     HF_DEFAULT      = HF_CN;
-    document.getElementById('intl-hint').textContent = '';
+    document.getElementById('intl-hint').textContent = 'hf-mirror.com + 清华 PyPI';
   }
 }
 
@@ -327,50 +387,71 @@ function appendLog(text, cls) {
 }
 
 // ─── 阶段1 初始化 ──────────────────────────────────────────────────────────
-window.setupAPI.onInfo(({ missingEngines, manifest }) => {
+window.setupAPI.onInfo(({ missingEngines, manifest, stage }) => {
   _engines = missingEngines;
   _manifest = manifest || {};
-
-  const engineIcons = {
-    fish_speech: '🐟',
-    seed_vc: '🌱',
-    faster_whisper: '⚡',
-    whisper: '🎙️',
-    rvc: '🎵',
-  };
+  _stage = stage || null;
 
   const list = document.getElementById('engine-list');
-  let totalMb = 0;
 
-  for (const { engine, files } of missingEngines) {
-    const engines = (_manifest.engines || {});
-    const engineCfg = engines[engine] || {};
-    const fileList = engineCfg.files || [];
-
-    let engineMb = 0;
-    const fileLabels = [];
-    for (const f of fileList) {
-      if (files.length === 0 || files.includes(f.filename)) {
-        const mb = f.size_mb || 0;
-        engineMb += mb;
-        fileLabels.push(`${f.filename}（${fmtSize(mb)}）`);
-      }
-    }
-    totalMb += engineMb;
+  // ── 指定阶段重装模式 ──────────────────────────────────────────────────
+  if (_stage && STAGE_META[_stage]) {
+    const meta = STAGE_META[_stage];
+    document.querySelector('#phase-info .header h1').textContent = `重新安装 — ${meta.label}`;
+    document.querySelector('#phase-info .header p').innerHTML =
+      `将重新安装 <strong>${meta.label}</strong>（${meta.desc}），预计下载 <strong>${meta.size}</strong>`;
 
     const li = document.createElement('li');
     li.innerHTML = `
-      <div class="engine-icon">${engineIcons[engine] || '📦'}</div>
+      <div class="engine-icon">🔄</div>
       <div class="engine-info">
-        <div class="engine-name">${engine}</div>
-        <div class="engine-files">${fileLabels.length ? fileLabels.join('、') : '模型文件'}</div>
+        <div class="engine-name">${meta.label}</div>
+        <div class="engine-files">${meta.desc}</div>
       </div>
-      <div class="engine-size">${engineMb > 0 ? fmtSize(engineMb) : '—'}</div>
+      <div class="engine-size">${meta.size}</div>
     `;
     list.appendChild(li);
-  }
+  } else {
+    // ── 首次启动模式 ──────────────────────────────────────────────────────
+    const engineIcons = {
+      fish_speech: '🐟',
+      seed_vc: '🌱',
+      faster_whisper: '⚡',
+      whisper: '🎙️',
+      rvc: '🎵',
+    };
 
-  document.getElementById('total-size').textContent = totalMb > 0 ? fmtSize(totalMb) : '若干 GB';
+    let totalMb = 0;
+    for (const { engine, files } of missingEngines) {
+      const engines = (_manifest.engines || {});
+      const engineCfg = engines[engine] || {};
+      const fileList = engineCfg.files || [];
+
+      let engineMb = 0;
+      const fileLabels = [];
+      for (const f of fileList) {
+        if (files.length === 0 || files.includes(f.filename)) {
+          const mb = f.size_mb || 0;
+          engineMb += mb;
+          fileLabels.push(`${f.filename}（${fmtSize(mb)}）`);
+        }
+      }
+      totalMb += engineMb;
+
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="engine-icon">${engineIcons[engine] || '📦'}</div>
+        <div class="engine-info">
+          <div class="engine-name">${engine}</div>
+          <div class="engine-files">${fileLabels.length ? fileLabels.join('、') : '模型文件'}</div>
+        </div>
+        <div class="engine-size">${engineMb > 0 ? fmtSize(engineMb) : '—'}</div>
+      `;
+      list.appendChild(li);
+    }
+
+    document.getElementById('total-size').textContent = totalMb > 0 ? fmtSize(totalMb) : '若干 GB';
+  }
 
   // 检测连通性
   window.setupAPI.testHfConnectivity().then(({ reachable }) => {
@@ -388,7 +469,6 @@ window.setupAPI.onInfo(({ missingEngines, manifest }) => {
   // 读取已保存配置
   window.setupAPI.loadConfig().then(cfg => {
     const isIntl = cfg.international === true;
-    document.getElementById('intl-check').checked = isIntl;
     toggleInternational(isIntl);
     // 如果用户之前手动改过源，优先使用保存的值
     if (cfg.hfEndpoint) document.getElementById('hf-endpoint').value = cfg.hfEndpoint;
@@ -400,11 +480,14 @@ window.setupAPI.onInfo(({ missingEngines, manifest }) => {
 async function startDownload() {
   const endpoint   = document.getElementById('hf-endpoint').value.trim()  || HF_DEFAULT;
   const pypiMirror = document.getElementById('pypi-mirror').value.trim()  || PYPI_DEFAULT;
-  const international = document.getElementById('intl-check').checked;
+  const international = _isInternational;
   await window.setupAPI.saveConfig({ hfEndpoint: endpoint, pypiMirror, international });
   resetFailureState();
+  if (_stage && STAGE_META[_stage]) {
+    document.querySelector('#phase-progress .header h1').textContent = `正在安装：${STAGE_META[_stage].label}…`;
+  }
   showPhase('phase-progress');
-  await window.setupAPI.startDownload({ hfEndpoint: endpoint, pypiMirror });
+  await window.setupAPI.startDownload({ hfEndpoint: endpoint, pypiMirror, stage: _stage });
 }
 
 function skipDownload() {
@@ -535,6 +618,7 @@ function retryDownload() {
     window.setupAPI.startDownload({
       hfEndpoint:  cfg.hfEndpoint  || HF_DEFAULT,
       pypiMirror:  cfg.pypiMirror  || PYPI_DEFAULT,
+      stage:       _stage,
     });
   });
 }
