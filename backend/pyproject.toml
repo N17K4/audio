@@ -19,9 +19,6 @@ Pillow = ">=10.0.0"
 qrcode = {version = ">=7.0", extras = ["pil"]}
 zxing-cpp = ">=2.0"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

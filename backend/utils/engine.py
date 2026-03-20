@@ -381,10 +381,15 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
+    # 确保 backend/ 在 PYTHONPATH 中，使子进程可 import wrappers._common 等模块
+    existing_pypath = merged.get("PYTHONPATH", "")
+    app_root_str = str(APP_ROOT)
+    if app_root_str not in existing_pypath.split(os.pathsep):
+        merged["PYTHONPATH"] = app_root_str + (os.pathsep + existing_pypath if existing_pypath else "")
     if engine == "facefusion":
         # FaceFusion 独立 site-packages（与引擎源码同级，避免 runtime 根目录污染）
         facefusion_pkgs = RUNTIME_ROOT / "engine" / "facefusion" / ".packages"
-        merged["PYTHONPATH"] = str(facefusion_pkgs)
+        merged["PYTHONPATH"] = str(facefusion_pkgs) + os.pathsep + merged.get("PYTHONPATH", "")
         merged["PYTHONNOUSERSITE"] = "1"
     return merged
 

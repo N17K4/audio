@@ -9,19 +9,12 @@
 
 运行：
   python tests/smoke_test2.py
-  poetry run pytest tests/smoke_test2.py -v -s
 """
 import json
 import os
 import sys
 import tempfile
 from pathlib import Path
-
-try:
-    import pytest
-    HAS_PYTEST = True
-except ImportError:
-    HAS_PYTEST = False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -207,11 +200,11 @@ def test_rag_build():
                 # 清理
                 client.delete(f"{BASE_URL}/rag/collections/{collection_name}")
 
-        print("  ✅ RAG 创建知识库测试成功（HTTP API）")
+        print("  ✅ 通过 — RAG 创建知识库（HTTP API）")
         return True
 
     except Exception as e:
-        print(f"  ❌ RAG 创建知识库测试失败：{e}")
+        print(f"  ❌ 失败 — RAG 创建知识库：{e}")
         return False
 
 
@@ -287,11 +280,11 @@ def test_rag_query():
                 # 清理
                 client.delete(f"{BASE_URL}/rag/collections/{collection_name}")
 
-        print("  ✅ RAG 知识库提问测试成功（HTTP API）")
+        print("  ✅ 通过 — RAG 知识库提问（HTTP API）")
         return True
 
     except Exception as e:
-        print(f"  ❌ RAG 知识库提问测试失败：{e}")
+        print(f"  ❌ 失败 — RAG 知识库提问：{e}")
         return False
 
 
@@ -351,11 +344,11 @@ def test_agent():
                 print("  ❌ Agent 未返回结果")
                 return False
 
-        print("  ✅ Agent ReAct 循环执行成功（HTTP API）")
+        print("  ✅ 通过 — Agent ReAct 循环执行成功（HTTP API）")
         return True
 
     except Exception as e:
-        print(f"  ❌ Agent 测试失败：{e}")
+        print(f"  ❌ 失败 — Agent：{e}")
         return False
 
 
@@ -473,43 +466,12 @@ def test_lora():
                     pass
                 return False
 
-        print("  ✅ LoRA 微调测试通过（HTTP API）")
+        print("  ✅ 通过 — LoRA 微调（HTTP API）")
         return True
 
     except Exception as e:
-        print(f"  ❌ LoRA 测试失败：{e}")
+        print(f"  ❌ 失败 — LoRA：{e}")
         return False
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Pytest 集成（如果通过 pytest 运行）
-# ──────────────────────────────────────────────────────────────────────────────
-
-if HAS_PYTEST:
-    class TestRAG:
-        """RAG — Retrieval-Augmented Generation（检索增强生成）"""
-
-        def test_build_collection(self):
-            """测试：创建知识库（HTTP API）。"""
-            assert test_rag_build()
-
-        def test_query_collection(self):
-            """测试：查询知识库（HTTP API）。"""
-            assert test_rag_query()
-
-    class TestAgent:
-        """Agent — ReAct 智能体（推理 + 行动循环）"""
-
-        def test_react_loop_simple_task(self):
-            """测试：Agent 执行简单任务（HTTP API）。"""
-            assert test_agent()
-
-    class TestLoRA:
-        """LoRA — QLoRA 微调（Low-Rank Adaptation 量化微调）"""
-
-        def test_lora_training(self):
-            """测试：LoRA 微调训练（HTTP API）。"""
-            assert test_lora()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

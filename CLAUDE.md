@@ -233,13 +233,40 @@ pnpm run dev          # 启动 Electron + Next.js
 
 ## 测试
 
+### 单元测试（mock，无需引擎环境）
+
 ```bash
-poetry run pytest tests/ -v              # 全部
-poetry run pytest tests/test_local_models.py -v    # 本地推理
-poetry run pytest tests/test_cloud_api_models.py -v  # 云端 API
+poetry -C backend run pytest tests/test_local_models.py -v    # 本地推理（subprocess mock）
+poetry -C backend run pytest tests/test_cloud_api_models.py -v  # 云端 API（httpx mock）
+poetry -C backend run pytest tests/test_ollama.py -v            # Ollama
 ```
 
-所有测试通过 `unittest.mock` 模拟外部依赖，不需要真实 API Key 或模型文件。
+通过 `unittest.mock` 模拟外部依赖，不需要真实 API Key 或模型文件。
+注意：pytest 从 `backend/` 目录运行，测试文件需用绝对路径或从项目根传入。
+
+### 烟雾测试（需后端运行 + 引擎环境）
+
+```bash
+# 1. 启动后端（开发模式）
+pnpm run dev
+
+# 2. 运行烟雾测试
+poetry -C backend run pytest tests/smoke_test.py -v -s     # 基础（TTS/STT/VC/FFmpeg）
+poetry -C backend run pytest tests/smoke_test2.py -v -s    # 进阶（RAG/Agent/LoRA）
+```
+
+烟雾测试向真实后端发 HTTP 请求，需要嵌入式 Python + 引擎 + checkpoint 已就绪。
+
+### wrapper 脚本验证（无需 pytest）
+
+验证 wrapper 子进程能否正常启动（import + 路径解析）：
+
+```bash
+PYTHONPATH=backend runtime/python/mac/bin/python3 backend/wrappers/fish_speech/inference.py --help
+PYTHONPATH=backend runtime/python/mac/bin/python3 backend/wrappers/faster_whisper/inference.py --help
+PYTHONPATH=backend runtime/python/mac/bin/python3 backend/wrappers/seed_vc/inference.py --help
+PYTHONPATH=backend runtime/python/mac/bin/python3 backend/wrappers/rvc/infer_cli.py --help
+```
 
 ---
 
