@@ -147,8 +147,8 @@
         "size_display": "~1 GB",
         "default_install": true
       },
-      "code_dir": "runtime/fish_speech/engine",
-      "checkpoint_dir": "checkpoints/fish_speech",
+      "code_dir": "runtime/engine/fish_speech",
+      "checkpoint_dir": "runtime/checkpoints/fish_speech",
       "pip_packages": [
         "huggingface_hub>=1.3.0,<2.0",
         "setuptools",
@@ -218,8 +218,8 @@
         "size_display": "~2.7 GB",
         "default_install": true
       },
-      "code_dir": "runtime/seed_vc/engine",
-      "checkpoint_dir": "checkpoints/seed_vc",
+      "code_dir": "runtime/engine/seed_vc",
+      "checkpoint_dir": "runtime/checkpoints/seed_vc",
       "pip_packages": [
         "huggingface_hub>=1.3.0,<2.0",
         "setuptools",
@@ -257,14 +257,14 @@
           "repo_id": "funasr/campplus",
           "filename": "campplus_cn_common.bin",
           "revision": "fb71fe990cbf6031ae6987a2d76fe64f94377b7e",
-          "cache_dir_rel": "checkpoints",
+          "cache_dir_rel": "runtime/checkpoints",
           "size_mb": 25,
           "note": "说话人特征提取（campplus）"
         },
         {
           "repo_id": "nvidia/bigvgan_v2_22khz_80band_256x",
           "revision": "633ff708ed5b74903e86ff1298cf4a98e921c513",
-          "cache_dir_rel": "checkpoints/hf_cache",
+          "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 1300,
           "note": "BigVGAN 声码器（仅 generator，跳过 discriminator/3msteps）",
           "ignore_patterns": [
@@ -276,7 +276,7 @@
         {
           "repo_id": "openai/whisper-small",
           "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
-          "cache_dir_rel": "checkpoints/hf_cache",
+          "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 950,
           "note": "Whisper-small 语义特征编码器（仅 safetensors，跳过 pytorch/flax/tf 格式）",
           "ignore_patterns": [
@@ -291,7 +291,7 @@
           "repo_id": "lj1995/VoiceConversionWebUI",
           "filename": "rmvpe.pt",
           "revision": "b2c8cae96e3b05de46d36c5ef9970ef6cbccafba",
-          "cache_dir_rel": "checkpoints",
+          "cache_dir_rel": "runtime/checkpoints",
           "size_mb": 200,
           "note": "RMVPE F0 提取器，seed-vc f0_condition=True 时需要"
         }
@@ -305,8 +305,8 @@
         "size_display": "~760 MB",
         "default_install": true
       },
-      "code_dir": "runtime/rvc/engine",
-      "checkpoint_dir": "checkpoints/rvc",
+      "code_dir": "runtime/engine/rvc",
+      "checkpoint_dir": "runtime/checkpoints/rvc",
       "checkpoint_files": [
         {
           "path": "hubert_base.pt",
@@ -348,8 +348,8 @@
         "size_display": "large-v3 · ~3.1 GB",
         "default_install": true
       },
-      "code_dir": "runtime/faster_whisper",
-      "checkpoint_dir": "checkpoints/faster_whisper",
+      "code_dir": "runtime/engine/faster_whisper",
+      "checkpoint_dir": "runtime/checkpoints/faster_whisper",
       "pip_packages": [
         "faster-whisper==1.2.1"
       ],
@@ -365,8 +365,8 @@
         "size_display": "~1.5 GB",
         "default_install": false
       },
-      "code_dir": "runtime/whisper/engine",
-      "checkpoint_dir": "checkpoints/whisper",
+      "code_dir": "runtime/engine/whisper",
+      "checkpoint_dir": "runtime/checkpoints/whisper",
       "_pip_packages_disabled": [
         "transformers",
         "_note: 已由 seed_vc runtime_pip_packages 覆盖，faster_whisper 为默认本地引擎，whisper 暂不主动安装"
@@ -389,8 +389,8 @@
         "size_display": "~1.5 GB",
         "default_install": false
       },
-      "code_dir": "runtime/got_ocr",
-      "checkpoint_dir": "checkpoints/got_ocr",
+      "code_dir": "runtime/engine/got_ocr",
+      "checkpoint_dir": "runtime/checkpoints/got_ocr",
       "pip_packages": [
         "huggingface_hub>=1.3.0,<2.0",
         "transformers>=4.48,<6",
@@ -407,7 +407,7 @@
         {
           "repo_id": "stepfun-ai/GOT-OCR-2.0-hf",
           "revision": "d3017ef2c2c1395888c8d635c5e0508bcb0ac78d",
-          "cache_dir_rel": "checkpoints/hf_cache",
+          "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 1500,
           "required": true,
           "note": "GOT-OCR2.0 580M 参数 OCR 模型，存入全局 HF cache"
@@ -422,8 +422,8 @@
         "size_display": "~1.8 GB",
         "default_install": false
       },
-      "code_dir": "runtime/liveportrait",
-      "checkpoint_dir": "checkpoints/liveportrait",
+      "code_dir": "runtime/engine/liveportrait",
+      "checkpoint_dir": "runtime/checkpoints/liveportrait",
       "pip_packages": [
         "imageio",
         "imageio-ffmpeg",
@@ -445,13 +445,13 @@
         {
           "repo_id": "KwaiVGI/LivePortrait",
           "revision": "main",
-          "cache_dir_rel": "checkpoints/hf_cache",
+          "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 1800,
           "required": true,
           "note": "LivePortrait FP16 模型（外观特征提取、运动提取、warping、生成器等，含 animals 版）"
         }
       ],
-      "_note": "引擎通过 pip install liveportrait 安装，或克隆到 runtime/liveportrait/engine/",
+      "_note": "引擎通过 pip install liveportrait 安装，或克隆到 runtime/engine/liveportrait/",
       "env_key": "LIVEPORTRAIT_CHECKPOINT_DIR"
     },
     "facefusion": {
@@ -461,11 +461,11 @@
         "size_display": "~540 MB",
         "default_install": true
       },
-      "code_dir": "runtime/facefusion/engine",
-      "checkpoint_dir": "runtime/facefusion/engine/.assets/models",
+      "code_dir": "runtime/engine/facefusion",
+      "checkpoint_dir": "runtime/engine/facefusion/.assets/models",
       "pip_packages": [],
       "runtime_pip_packages": [],
-      "_setup_note": "FaceFusion 3.x clone https://github.com/facefusion/facefusion.git tag 3.5.4 到 runtime/facefusion/engine/（由 setup_base.py 自动完成）。pip 依赖由首次启动引导下载时 setup_facefusion_engine() 从引擎自身 requirements.txt 安装，不在构建期装。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
+      "_setup_note": "FaceFusion 3.x clone https://github.com/facefusion/facefusion.git tag 3.5.4 到 runtime/engine/facefusion/（由 runtime.py 自动完成）。pip 依赖由首次启动引导下载时 setup_facefusion_engine() 从引擎自身 requirements.txt 安装，不在构建期装。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
       "env_key": "FACEFUSION_CHECKPOINT_DIR",
       "checkpoint_files": [
         {
@@ -573,8 +573,8 @@
         "size_display": "~15.6 GB",
         "default_install": false
       },
-      "code_dir": "runtime/wan",
-      "checkpoint_dir": "checkpoints/wan",
+      "code_dir": "runtime/engine/wan",
+      "checkpoint_dir": "runtime/checkpoints/wan",
       "pip_packages": [
         "huggingface_hub>=1.3.0,<2.0",
         "diffusers>=0.30",
@@ -592,7 +592,7 @@
         {
           "repo_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
           "revision": "0fad780a534b6463e45facd96134c9f345acfa5b",
-          "cache_dir_rel": "checkpoints/hf_cache",
+          "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 15600,
           "note": "Wan 2.1 T2V 1.3B 官方 diffusers 格式（含 model_index.json）。包含：transformer ~5.3GB + umt5-XXL 文本编码器 ~9.8GB + VAE ~484MB，合计约 15.6GB",
           "required": false
@@ -608,8 +608,8 @@
         "size_display": "~16.5 GB",
         "default_install": false
       },
-      "code_dir": "runtime/flux",
-      "checkpoint_dir": "checkpoints/flux",
+      "code_dir": "runtime/engine/flux",
+      "checkpoint_dir": "runtime/checkpoints/flux",
       "pip_packages": [
         "huggingface_hub>=1.3.0,<2.0",
         "gguf",
@@ -629,7 +629,7 @@
           "repo_id": "city96/FLUX.1-schnell-gguf",
           "filename": "flux1-schnell-Q4_K_S.gguf",
           "revision": "main",
-          "cache_dir_rel": "checkpoints/flux",
+          "cache_dir_rel": "runtime/checkpoints/flux",
           "size_mb": 6468,
           "required": false,
           "note": "Flux.1-Schnell GGUF Q4_K_S Transformer（无门控，~6.5GB）"
@@ -637,7 +637,7 @@
         {
           "repo_id": "black-forest-labs/FLUX.1-schnell",
           "revision": "main",
-          "cache_dir_rel": "checkpoints/hf_cache",
+          "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 10000,
           "required": false,
           "hf_token_required": true,
@@ -679,8 +679,8 @@
         "default_install": false
       },
       "description": "Stable Diffusion Turbo 本地图像生成（~2.3 GB，无需 HF 账号，1-4 步，512px）",
-      "code_dir": "runtime/sd",
-      "checkpoint_dir": "checkpoints/sd",
+      "code_dir": "runtime/engine/sd",
+      "checkpoint_dir": "runtime/checkpoints/sd",
       "pip_packages": [
         "diffusers>=0.21",
         "accelerate",
@@ -696,7 +696,7 @@
         {
           "repo_id": "stabilityai/sd-turbo",
           "revision": "main",
-          "cache_dir_rel": "checkpoints/sd",
+          "cache_dir_rel": "runtime/checkpoints/sd",
           "size_mb": 2300,
           "required": false,
           "note": "SD-Turbo 完整模型（~2.3 GB，非门控，无需 HF 账号）"
@@ -712,8 +712,8 @@
         "default_install": true
       },
       "description": "GPT-SoVITS v2 角色声音克隆 TTS（少量数据训练或加载社区模型）",
-      "code_dir": "runtime/gpt_sovits/engine",
-      "checkpoint_dir": "checkpoints/gpt_sovits",
+      "code_dir": "runtime/engine/gpt_sovits",
+      "checkpoint_dir": "runtime/checkpoints/gpt_sovits",
       "pip_packages": [
         "huggingface_hub>=1.3.0,<2.0",
         "setuptools",
@@ -797,8 +797,8 @@
         "default_install": false
       },
       "description": "CosyVoice 2 零样本语音克隆 TTS（阿里通义实验室，即将支持）",
-      "code_dir": "runtime/cosyvoice/engine",
-      "checkpoint_dir": "checkpoints/cosyvoice",
+      "code_dir": "runtime/engine/cosyvoice",
+      "checkpoint_dir": "runtime/checkpoints/cosyvoice",
       "pip_packages": [],
       "runtime_pip_packages": [
         "torch",

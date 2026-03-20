@@ -42,7 +42,7 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
             status_code=400,
             detail=(
                 "No inference command available. "
-                "Put RVC infer script at runtime/rvc/infer_cli.py "
+                "Put RVC infer script at runtime/engine/rvc/infer_cli.py "
                 "or configure models/rvc_runtime.json."
             ),
         )
@@ -187,8 +187,8 @@ def run_seed_vc_cmd(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Seed-VC not found. Place seed-vc repo at runtime/seed_vc/ "
-                "or configure runtime/seed_vc/engine.json with a 'command' template."
+                "Seed-VC not found. Place seed-vc repo at runtime/engine/seed_vc/ "
+                "or configure backend/wrappers/seed_vc/engine.json with a 'command' template."
             ),
         )
     cmd = (

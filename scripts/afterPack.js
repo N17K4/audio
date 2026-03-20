@@ -62,7 +62,7 @@ function patchFairseqPy312(sitePackagesDir) {
 function patchWindowsPythonPath(context) {
   if (context.electronPlatformName !== 'win32') return;
 
-  const pythonDir = path.join(context.appOutDir, 'resources', 'runtime', 'win', 'python');
+  const pythonDir = path.join(context.appOutDir, 'resources', 'runtime', 'python', 'win');
   if (!fs.existsSync(pythonDir)) {
     console.log('[afterPack] Windows Python 目录不存在，跳过 _pth 修补');
     return;
@@ -76,7 +76,7 @@ function patchWindowsPythonPath(context) {
   }
 
   // backend 相对于 python.exe 所在目录的路径
-  // python.exe: resources/runtime/win/python/
+  // python.exe: resources/runtime/python/win/
   // backend:    resources/app/backend/
   const backendRelPath = path.join('..', '..', '..', 'app', 'backend');
 
@@ -96,11 +96,11 @@ exports.default = async function afterPack(context) {
   patchWindowsPythonPath(context);
 
   if (context.electronPlatformName === 'win32') {
-    patchFairseqPy312(path.join(context.appOutDir, 'resources', 'runtime', 'win', 'python', 'Lib', 'site-packages'));
+    patchFairseqPy312(path.join(context.appOutDir, 'resources', 'runtime', 'python', 'win', 'Lib', 'site-packages'));
     return;
   }
 
   if (context.electronPlatformName === 'darwin') {
-    patchFairseqPy312(path.join(context.appOutDir, 'AI Workshop.app', 'Contents', 'Resources', 'runtime', 'mac', 'python', 'lib', 'python3.12', 'site-packages'));
+    patchFairseqPy312(path.join(context.appOutDir, 'AI Workshop.app', 'Contents', 'Resources', 'runtime', 'python', 'mac', 'lib', 'python3.12', 'site-packages'));
   }
 };

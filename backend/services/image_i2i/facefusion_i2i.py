@@ -14,8 +14,7 @@ from utils.audit import log_ai_call, log_ai_error
 
 def _get_facefusion_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "facefusion" / "engine" / "facefusion.py",
-        RUNTIME_ROOT / "facefusion" / "facefusion.py",
+        RUNTIME_ROOT / "engine" / "facefusion" / "facefusion.py",
     ]
     for p in candidates:
         if p.exists():
@@ -43,7 +42,7 @@ async def run_facefusion_i2i(
 
     # FaceFusion 用相对路径 resolve_file_paths('facefusion/processors/modules') 查找处理器模块，
     # 必须在引擎根目录下运行，否则 face_swapper_model 状态无法初始化。
-    engine_dir = str((RUNTIME_ROOT / "facefusion" / "engine").resolve())
+    engine_dir = str((RUNTIME_ROOT / "engine" / "facefusion").resolve())
 
     cmd = [
         py, script,

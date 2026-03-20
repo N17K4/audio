@@ -13,7 +13,7 @@ from utils.engine import get_embedded_python, build_engine_env
 
 def _get_wan_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "wan" / "inference.py",
+        RUNTIME_ROOT / "engine" / "wan" / "inference.py",
     ]
     for p in candidates:
         if p.exists():

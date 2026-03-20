@@ -1,8 +1,0 @@
-{
-  "command": "",
-  "note": "留空则自动探测 engine/ 子目录。将 seed-vc 仓库克隆到 engine/ 后无需修改此文件。",
-  "examples": [
-    "\"{python}\" \"runtime/seed_vc/engine/inference.py\" --source {input} --target {voice_ref} --output {output} --diffusion-steps 10",
-    "\"runtime/seed_vc/engine/infer.bat\" --source {input} --target {voice_ref} --output {output}"
-  ]
-}

@@ -19,9 +19,9 @@ from pathlib import Path
 
 
 def _find_facefusion_script() -> str:
-    runtime_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "facefusion"
+    runtime_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "facefusion"
     candidates = [
-        runtime_dir / "engine" / "facefusion.py",
+        runtime_dir / "facefusion.py",
     ]
     for c in candidates:
         if c.exists():
@@ -46,7 +46,7 @@ def main():
     if not ff_script:
         print(
             "[facefusion] 错误：未找到 facefusion.py。"
-            "请确保 runtime/facefusion/engine/ 目录存在（通过 pnpm run setup-engines 安装）。",
+            "请确保 runtime/engine/facefusion/ 目录存在（通过 pnpm run setup-engines 安装）。",
             file=sys.stderr,
         )
         sys.exit(1)

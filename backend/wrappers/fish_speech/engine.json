@@ -1,0 +1,8 @@
+{
+  "command": "",
+  "note": "留空则自动探测 engine/ 子目录。将 fish-speech 仓库克隆到 engine/ 后无需修改此文件。",
+  "examples": [
+    "\"{python}\" \"runtime/engine/fish_speech/tools/inference_engine.py\" --text {text} --output {output} --prompt_audio {voice_ref}",
+    "\"runtime/engine/fish_speech/infer.bat\" --text {text} --output {output} --prompt_audio {voice_ref}"
+  ]
+}

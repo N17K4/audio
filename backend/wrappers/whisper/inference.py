@@ -6,8 +6,8 @@ Whisper STT 适配器 CLI。
 
 配置优先级：
 1) 环境变量 WHISPER_CMD_TEMPLATE
-2) runtime/whisper/engine.json -> { "command": "..." }
-3) 自动探测 runtime/whisper/engine/ 子目录中的推理脚本
+2) wrappers/whisper/engine.json -> { "command": "..." }
+3) 自动探测 runtime/engine/whisper/ 子目录中的推理脚本
 4) fallback：使用 transformers pipeline（当前 Python 环境需安装 transformers + torch）
 
 命令模板占位符：
@@ -42,8 +42,8 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = (os.getenv("WHISPER_CHECKPOINT_DIR") or "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "wrappers" / "manifest.json"
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    manifest_path = base / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -52,27 +52,27 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
                 return str((base / rel).resolve())
         except Exception:
             pass
-    return str((base / "checkpoints" / "whisper").resolve())
+    return str((base / "runtime" / "checkpoints" / "whisper").resolve())
 
 
 def get_embedded_python() -> str:
-    """返回平台对应的嵌入式 Python 路径（runtime/mac 或 runtime/win）。找不到则报错退出。"""
-    # __file__ = runtime/whisper/inference.py，上三级为项目根目录
-    base = Path(__file__).resolve().parent.parent.parent
+    """返回平台对応の嵌入式 Python 路径（runtime/python/mac 或 runtime/python/win）。找不到则报错退出。"""
+    # __file__ = wrappers/whisper/inference.py，上三级为项目根目录
+    base = Path(__file__).resolve().parent.parent.parent.parent
     if sys.platform == "win32":
-        candidates = [base / "runtime" / "win" / "python" / "python.exe"]
+        candidates = [base / "runtime" / "python" / "win" / "python.exe"]
         platform_name = "win"
     else:
         candidates = [
-            base / "runtime" / "mac" / "python" / "bin" / "python3",
-            base / "runtime" / "mac" / "python" / "bin" / "python",
+            base / "runtime" / "python" / "mac" / "bin" / "python3",
+            base / "runtime" / "python" / "mac" / "bin" / "python",
         ]
         platform_name = "mac"
     for p in candidates:
         if p.exists():
             return str(p)
     print(
-        f"[whisper] 嵌入式 Python 未找到，请将 Python 放置于 runtime/{platform_name}/python/",
+        f"[whisper] 嵌入式 Python 未找到，请将 Python 放置于 runtime/python/{platform_name}/",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -98,7 +98,7 @@ def load_cmd_template() -> str:
 
 def detect_engine_cmd() -> str:
     """自动探测 engine/ 子目录中的推理脚本。"""
-    engine_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "whisper" / "engine"
+    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "whisper"
     if not engine_dir.exists():
         return ""
 

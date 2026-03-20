@@ -55,8 +55,8 @@ def main() -> int:
     print(f"[fish_speech_cli] {_ts()} checkpoint_dir={checkpoint_dir}", file=sys.stderr)
     print(f"[fish_speech_cli] {_ts()} output={output_path}", file=sys.stderr)
 
-    # engine 目录：本脚本位于 wrappers/fish_speech/，engine 在 runtime/fish_speech/engine/
-    engine_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "fish_speech" / "engine"
+    # engine 目录：本脚本位于 backend/wrappers/fish_speech/，engine 在 runtime/engine/fish_speech/
+    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "fish_speech"
     print(f"[fish_speech_cli] {_ts()} engine_dir={engine_dir}  exists={engine_dir.exists()}", file=sys.stderr)
     if not engine_dir.exists():
         print(f"[fish_speech_cli] {_ts()} ERROR: engine 目录不存在", file=sys.stderr)

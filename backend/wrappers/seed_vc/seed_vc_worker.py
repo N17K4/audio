@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
 
 def setup_engine(project_root: Path) -> None:
     """把 engine 目录加入 sys.path，切换 CWD 让 engine 内部的相对路径正确。"""
-    engine_dir = project_root / "runtime" / "seed_vc" / "engine"
+    engine_dir = project_root / "runtime" / "engine" / "seed_vc"
     if not engine_dir.exists():
         print(f"[seed_vc_worker] engine 目录不存在: {engine_dir}", file=sys.stderr)
         sys.exit(1)
@@ -259,7 +259,7 @@ def main() -> int:
     args = parse_args()
 
     # project_root = runtime/seed_vc 上两级
-    project_root = Path(__file__).resolve().parent.parent.parent
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
     setup_engine(project_root)
 
     try:

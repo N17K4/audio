@@ -55,9 +55,9 @@ BASE_ENGINES = {
 def get_embedded_python(root: Path) -> str:
     """返回嵌入式 Python 可执行路径，找不到返回空串。"""
     if platform.system() == "Windows":
-        p = root / "runtime" / "win" / "python" / "python.exe"
+        p = root / "runtime" / "python" / "win" / "python.exe"
     else:
-        p = root / "runtime" / "mac" / "python" / "bin" / "python3"
+        p = root / "runtime" / "python" / "mac" / "bin" / "python3"
     return str(p) if p.exists() else ""
 
 
@@ -471,22 +471,22 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
 def main():
     """安装基础 ML 包。"""
     parser = argparse.ArgumentParser(description="安装基础 ML 运行库")
-    parser.add_argument("--target", default="", help="pip install --target 目录；省略则装到 local_data/python-packages/（开发模式）")
+    parser.add_argument("--target", default="", help="pip install --target 目录；省略则装到 runtime/ml/（开发模式）")
     parser.add_argument("--pypi-mirror", default="", dest="pypi_mirror", help="PyPI 镜像地址")
     parser.add_argument("--json-progress", action="store_true", dest="json_progress", help="输出 JSON Lines 进度")
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parent.parent
 
-    # 开发模式（无 --target）：默认装到 local_data/python-packages/，不污染嵌入式 Python
+    # 开发模式（无 --target）：默认装到 runtime/ml/，不污染嵌入式 Python
     if not args.target:
-        args.target = str(project_root / "local_data" / "python-packages")
+        args.target = str(project_root / "runtime" / "ml")
     resources_root_env = os.getenv("RESOURCES_ROOT", "")
     resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
 
-    manifest_path = resources_root / "wrappers" / "manifest.json"
+    manifest_path = resources_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
-        manifest_path = project_root / "wrappers" / "manifest.json"
+        manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         _emit({"type": "log", "message": f"✗ 找不到 manifest.json"}, args.json_progress)
         return 1

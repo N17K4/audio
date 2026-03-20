@@ -17,8 +17,8 @@ async def run_faster_whisper_stt(content: bytes, filename: str, model: str = "la
         raise HTTPException(
             status_code=400,
             detail=(
-                "Faster-Whisper 引擎未找到。请将 runtime/faster_whisper/inference.py 放置于正确路径，"
-                "或在 runtime/faster_whisper/engine.json 中配置 'command' 字段。"
+                "Faster-Whisper 引擎未找到。请将 backend/wrappers/faster_whisper/inference.py 放置于正确路径，"
+                "或在 backend/wrappers/faster_whisper/engine.json 中配置 'command' 字段。"
             ),
         )
 

@@ -10,7 +10,7 @@
 #   2. mise install — 安装 Node.js、Python、Poetry 等（通过 .mise.toml）
 #   3. pnpm install — 安装根目录和前端依赖
 #   4. poetry install — 安装后端依赖
-#   5. setup_base.py — 下载嵌入式 Python + backend pip 依赖 + 引擎 pip_packages + FFmpeg + pandoc
+#   5. runtime.py — 由 pnpm run runtime 单独执行（不再由 setup.sh 调用）
 
 set -e
 
@@ -44,7 +44,7 @@ detect_os() {
 OS=$(detect_os)
 
 # ─── 1. 安装 mise（如果未安装）──────────────────────────────────────────────
-log_step "1/5 检查并安装 mise"
+log_step "1/4 检查并安装 mise"
 
 if command -v mise &> /dev/null; then
     MISE_CMD="mise"
@@ -79,13 +79,13 @@ else
 fi
 
 # ─── 2. mise install — 安装 Node.js、Python、Poetry 等 ─────────────────────
-log_step "2/5 安装 Node.js、Python、Poetry 等（通过 .mise.toml）"
+log_step "2/4 安装 Node.js、Python、Poetry 等（通过 .mise.toml）"
 $MISE_CMD install
 eval "$($MISE_CMD activate bash)"
 log_done "工具安装完成"
 
 # ─── 3. pnpm install — 安装前端和根目录依赖 ────────────────────────────────
-log_step "3/5 安装 pnpm 依赖（根目录 + 前端）"
+log_step "3/4 安装 pnpm 依赖（根目录 + 前端）"
 pnpm install
 cd "$PROJECT_ROOT/frontend"
 pnpm install
@@ -93,7 +93,7 @@ cd "$PROJECT_ROOT"
 log_done "pnpm 依赖安装完成"
 
 # ─── 4. poetry install — 安装后端依赖 ───────────────────────────────────────
-log_step "4/5 安装 Poetry 依赖（后端）"
+log_step "4/4 安装 Poetry 依赖（后端）"
 cd "$PROJECT_ROOT/backend"
 if ! $MISE_CMD exec -- poetry install; then
     echo "⚠ poetry install 首次失败，尝试 poetry lock..."
@@ -103,19 +103,20 @@ fi
 cd "$PROJECT_ROOT"
 log_done "Poetry 依赖安装完成"
 
-# ─── 5. setup_base.py — 下载嵌入式 Python + 后端依赖 + 引擎包 + FFmpeg ─────
-log_step "5/5 安装嵌入式 Python 和引擎依赖"
-python3 "$SCRIPT_DIR/setup_base.py" "$@"
-log_done "所有依赖安装完成"
+echo ""
+echo -e "${GREEN}✅ setup 完成！${NC}"
+echo "下一步：pnpm run runtime     (下载嵌入式 Python + 引擎依赖 + FFmpeg)"
+echo "       pnpm run ml          (安装 torch、torchaudio 等 ML 包)"
+echo "       pnpm run checkpoints  (下载模型权重)"
 
-# ─── 5.5. macOS 上也下载 Windows 运行时（仅 CI 环境）───────────────────────
+# ─── macOS 上也下载 Windows 运行时（仅 CI 环境）───────────────────────
 # CI 环境（build-mac.yml）需要打包两个平台，本地开发不需要
 if [[ "$OS" == "mac" ]] && [ -n "$GITHUB_ACTIONS" ]; then
     log_step "5.5/5 下载 Windows 运行时（用于跨平台打包）"
 
     # 下载 Windows Python
     WINDOWS_PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9+20250317-x86_64-pc-windows-msvc-install_only.tar.gz"
-    WIN_PYTHON_DIR="$PROJECT_ROOT/runtime/win/python"
+    WIN_PYTHON_DIR="$PROJECT_ROOT/runtime/python/win"
     WIN_PYTHON_ZIP="/tmp/windows-python.tar.gz"
 
     mkdir -p "$WIN_PYTHON_DIR"
@@ -166,7 +167,7 @@ for name, spec in data["tool"]["poetry"]["dependencies"].items():
         emit(f"{pkg}{version}" if version else pkg)
 
 # 2) manifest.json 基础引擎 pip_packages
-m = json.load(open("wrappers/manifest.json"))
+m = json.load(open("backend/wrappers/manifest.json"))
 base_engines = ["rvc", "fish_speech", "seed_vc", "whisper", "faster_whisper", "facefusion"]
 for eng in base_engines:
     for pkg in m.get("engines", {}).get(eng, {}).get("pip_packages", []):
@@ -200,7 +201,7 @@ PYEOF
 
     # 下载 Windows FFmpeg
     WINDOWS_FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-    WIN_BIN_DIR="$PROJECT_ROOT/runtime/win/bin"
+    WIN_BIN_DIR="$PROJECT_ROOT/runtime/bin/win"
     WIN_FFMPEG_ZIP="/tmp/windows-ffmpeg.zip"
 
     mkdir -p "$WIN_BIN_DIR"
@@ -216,8 +217,3 @@ PYEOF
         log_info "Windows FFmpeg 已存在"
     fi
 fi
-
-echo ""
-echo -e "${GREEN}✅ setup 完成！${NC}"
-echo "下一步：pnpm run ml          (安装 torch、torchaudio 等 ML 包)"
-echo "       pnpm run checkpoints  (下载模型权重)"

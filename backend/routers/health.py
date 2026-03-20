@@ -97,9 +97,9 @@ async def run_smoketest():
     # 使用嵌入式 Python（保持环境一致）
     project_root = Path(__file__).parent.parent.parent
     if platform.system() == "Windows":
-        py_exe = project_root / "runtime" / "win" / "python" / "python.exe"
+        py_exe = project_root / "runtime" / "python" / "win" / "python.exe"
     else:
-        py_exe = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
+        py_exe = project_root / "runtime" / "python" / "mac" / "bin" / "python3"
 
     if py_exe.exists():
         py_cmd = str(py_exe)
@@ -110,9 +110,9 @@ async def run_smoketest():
         """流式输出测试结果。"""
         try:
             # 继承后端进程的 PYTHONPATH（main.js 已设置好 python-packages 路径），
-            # 并确保 local_data/python-packages/ 也在搜索路径中（开发模式 ML 包）。
+            # 并确保 runtime/ml/ 也在搜索路径中（开发模式 ML 包）。
             env = os.environ.copy()
-            ml_pkg_dir = str(project_root / "local_data" / "python-packages")
+            ml_pkg_dir = str(project_root / "runtime" / "ml")
             existing = env.get("PYTHONPATH", "")
             if ml_pkg_dir not in existing:
                 env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
@@ -168,9 +168,9 @@ async def run_smoketest2():
     # 使用嵌入式 Python（以便 ml:extra 安装的包可被找到）
     project_root = Path(__file__).parent.parent.parent
     if platform.system() == "Windows":
-        py_exe = project_root / "runtime" / "win" / "python" / "python.exe"
+        py_exe = project_root / "runtime" / "python" / "win" / "python.exe"
     else:
-        py_exe = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
+        py_exe = project_root / "runtime" / "python" / "mac" / "bin" / "python3"
 
     if py_exe.exists():
         py_cmd = str(py_exe)
@@ -181,7 +181,7 @@ async def run_smoketest2():
         """流式输出测试结果。"""
         try:
             env = os.environ.copy()
-            ml_pkg_dir = str(project_root / "local_data" / "python-packages")
+            ml_pkg_dir = str(project_root / "runtime" / "ml")
             existing = env.get("PYTHONPATH", "")
             if ml_pkg_dir not in existing:
                 env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir

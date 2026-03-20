@@ -6,17 +6,17 @@
     "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
     "setup": "bash scripts/setup.sh",
-    "setup:extra": "runtime/mac/python/bin/python3 scripts/setup_extra.py",
-    "ml": "runtime/mac/python/bin/python3 scripts/ml_base.py",
-    "ml:extra": "runtime/mac/python/bin/python3 scripts/ml_extra.py",
-    "ml:rag": "runtime/mac/python/bin/python3 scripts/ml_extra.py --group rag",
-    "ml:agent": "runtime/mac/python/bin/python3 scripts/ml_extra.py --group agent",
-    "ml:lora": "runtime/mac/python/bin/python3 scripts/ml_extra.py --group lora",
-    "checkpoints": "runtime/mac/python/bin/python3 scripts/checkpoints_base.py",
-    "checkpoints:check": "runtime/mac/python/bin/python3 scripts/checkpoints_base.py --check-only",
-    "checkpoints:force": "runtime/mac/python/bin/python3 scripts/checkpoints_base.py --force",
-    "checkpoints:extra": "runtime/mac/python/bin/python3 scripts/checkpoints_extra.py",
-    "clean": "rm -rf local_data/python-packages checkpoints runtime/fish_speech/engine runtime/seed_vc/engine runtime/gpt_sovits/engine && echo '✓ 已清除 ML 依赖、checkpoints、引擎源码'",
+    "runtime": "mise exec -- python3 scripts/runtime.py",
+    "ml": "runtime/python/mac/bin/python3 scripts/ml_base.py",
+    "ml:extra": "runtime/python/mac/bin/python3 scripts/ml_extra.py",
+    "ml:rag": "runtime/python/mac/bin/python3 scripts/ml_extra.py --group rag",
+    "ml:agent": "runtime/python/mac/bin/python3 scripts/ml_extra.py --group agent",
+    "ml:lora": "runtime/python/mac/bin/python3 scripts/ml_extra.py --group lora",
+    "checkpoints": "runtime/python/mac/bin/python3 scripts/checkpoints_base.py",
+    "checkpoints:check": "runtime/python/mac/bin/python3 scripts/checkpoints_base.py --check-only",
+    "checkpoints:force": "runtime/python/mac/bin/python3 scripts/checkpoints_base.py --force",
+    "checkpoints:extra": "runtime/python/mac/bin/python3 scripts/checkpoints_extra.py",
+    "clean": "rm -rf runtime/ml runtime/checkpoints runtime/engine && echo '✓ 已清除 ML 依赖、checkpoints、引擎源码'",
     "reinstall": "pnpm run clean && pnpm run setup && pnpm run ml && pnpm run checkpoints",
     "build:frontend": "cd frontend && pnpm build",
     "predist": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'Electron.*test001' 2>/dev/null; true",
@@ -48,8 +48,7 @@
       "scripts/_checkpoint_download.py",
       "scripts/checkpoints_base.py",
       "scripts/checkpoints_extra.py",
-      "scripts/setup_base.py",
-      "scripts/setup_extra.py",
+      "scripts/runtime.py",
       "scripts/ml_base.py",
       "scripts/ml_extra.py",
       "frontend/out/**/*",
@@ -59,67 +58,31 @@
     ],
     "extraResources": [
       {
-        "from": "wrappers/",
-        "to": "wrappers/"
-      },
-      {
-        "from": "runtime/rvc/",
-        "to": "runtime/rvc/",
+        "from": "runtime/engine/",
+        "to": "runtime/engine/",
         "filter": [
           "**/*",
-          "!engine/.git/**",
-          "!engine/tests/**",
-          "!engine/docs/**"
-        ]
-      },
-      {
-        "from": "runtime/fish_speech/",
-        "to": "runtime/fish_speech/",
-        "filter": [
-          "**/*",
-          "!engine/.git/**",
-          "!engine/docs/**",
-          "!engine/docker/**",
-          "!engine/compose*.yml",
-          "!engine/dockerfile*",
-          "!engine/mkdocs.yml",
-          "!engine/*.pdf",
-          "!engine/*.ipynb",
-          "!engine/tests/**",
-          "!engine/tools/webui/**"
-        ]
-      },
-      {
-        "from": "runtime/seed_vc/",
-        "to": "runtime/seed_vc/",
-        "filter": [
-          "**/*",
-          "!engine/.git/**",
-          "!engine/train.py",
-          "!engine/train_v2.py",
-          "!engine/data/**",
-          "!engine/eval.py",
-          "!engine/EVAL.md",
-          "!engine/baselines/**",
-          "!engine/examples/**",
-          "!engine/assets/**",
-          "!engine/real-time-gui.py",
-          "!engine/app*.py",
-          "!engine/conda-*.yaml"
-        ]
-      },
-      {
-        "from": "runtime/faster_whisper/",
-        "to": "runtime/faster_whisper/"
-      },
-      {
-        "from": "runtime/facefusion/",
-        "to": "runtime/facefusion/",
-        "filter": [
-          "**/*",
-          "!engine/.git/**",
-          "!engine/tests/**",
-          "!engine/docs/**"
+          "!*/.git/**",
+          "!*/tests/**",
+          "!*/docs/**",
+          "!fish_speech/docker/**",
+          "!fish_speech/compose*.yml",
+          "!fish_speech/dockerfile*",
+          "!fish_speech/mkdocs.yml",
+          "!fish_speech/*.pdf",
+          "!fish_speech/*.ipynb",
+          "!fish_speech/tools/webui/**",
+          "!seed_vc/train.py",
+          "!seed_vc/train_v2.py",
+          "!seed_vc/data/**",
+          "!seed_vc/eval.py",
+          "!seed_vc/EVAL.md",
+          "!seed_vc/baselines/**",
+          "!seed_vc/examples/**",
+          "!seed_vc/assets/**",
+          "!seed_vc/real-time-gui.py",
+          "!seed_vc/app*.py",
+          "!seed_vc/conda-*.yaml"
         ]
       }
     ],
@@ -130,12 +93,12 @@
       "target": "dir",
       "extraResources": [
         {
-          "from": "runtime/mac/python/",
-          "to": "runtime/mac/python/"
+          "from": "runtime/python/mac/",
+          "to": "runtime/python/mac/"
         },
         {
-          "from": "runtime/mac/bin/",
-          "to": "runtime/mac/bin/"
+          "from": "runtime/bin/mac/",
+          "to": "runtime/bin/mac/"
         }
       ]
     },
@@ -143,12 +106,12 @@
       "target": "dir",
       "extraResources": [
         {
-          "from": "runtime/win/python/",
-          "to": "runtime/win/python/"
+          "from": "runtime/python/win/",
+          "to": "runtime/python/win/"
         },
         {
-          "from": "runtime/win/bin/",
-          "to": "runtime/win/bin/"
+          "from": "runtime/bin/win/",
+          "to": "runtime/bin/win/"
         }
       ]
     }

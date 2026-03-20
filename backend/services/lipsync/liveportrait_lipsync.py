@@ -14,7 +14,7 @@ from utils.audit import log_ai_call, log_ai_error
 
 def _get_liveportrait_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "liveportrait" / "inference.py",
+        RUNTIME_ROOT / "engine" / "liveportrait" / "inference.py",
     ]
     for p in candidates:
         if p.exists():

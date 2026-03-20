@@ -84,9 +84,9 @@ function _resolveLogsDir() {
 const LOGS_DIR = _resolveLogsDir();
 fs.mkdirSync(LOGS_DIR, { recursive: true });
 
-// ─── 音频缓存（与 logs 同级）─────────────────────────────────────────────────
-const AUDIO_CACHE_DIR = path.join(path.dirname(LOGS_DIR), 'audio_cache');
-fs.mkdirSync(AUDIO_CACHE_DIR, { recursive: true });
+// ─── 通用缓存（与 logs 同级）─────────────────────────────────────────────────
+const CACHE_DIR = path.join(path.dirname(LOGS_DIR), 'cache');
+fs.mkdirSync(CACHE_DIR, { recursive: true });
 
 function createFileLogger(filename) {
   const logPath = path.join(LOGS_DIR, filename);
@@ -138,19 +138,19 @@ function getLogDir() {
 }
 
 // ─── Checkpoint 目录 ───────────────────────────────────────────────────────
-// dev:  <项目根>/checkpoints/（不变）
-// prod: app.getPath('userData')/checkpoints/（跨版本持久，%AppData% 合规）
+// dev:  <项目根>/runtime/checkpoints/
+// prod: process.resourcesPath/runtime/checkpoints/
 function getCheckpointsDir() {
-  if (!app.isPackaged) {
-    return path.join(__dirname, 'checkpoints');
-  }
-  return path.join(app.getPath('userData'), 'checkpoints');
+  const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
+  return path.join(resRoot, 'runtime', 'checkpoints');
 }
 
-// ─── 运行时 Python 包目录（torch 等 ML 包首次启动后安装于此）────────────────
-// prod: app.getPath('userData')/python-packages/
+// ─── 运行时 ML 包目录（torch 等 ML 包首次启动后安装于此）────────────────
+// dev:  <项目根>/runtime/ml/
+// prod: process.resourcesPath/runtime/ml/
 function getUserPackagesDir() {
-  return path.join(app.getPath('userData'), 'python-packages');
+  const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
+  return path.join(resRoot, 'runtime', 'ml');
 }
 
 // ─── 磁盘大小计算 ─────────────────────────────────────────────────────────────
@@ -363,8 +363,8 @@ function openSetupGuideWindow(missingEngines, stage) {
       let manifest = {};
       try {
         const mp = app.isPackaged
-          ? path.join(process.resourcesPath, 'wrappers', 'manifest.json')
-          : path.join(__dirname, 'wrappers', 'manifest.json');
+          ? path.join(process.resourcesPath, 'app', 'backend', 'wrappers', 'manifest.json')
+          : path.join(__dirname, 'backend', 'wrappers', 'manifest.json');
         manifest = JSON.parse(fs.readFileSync(mp, 'utf-8'));
       } catch {}
       setupGuideWin.webContents.send('setup:info', { missingEngines, manifest, stage: stage || null });
@@ -391,8 +391,8 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
 
   // 嵌入式 Python 路径
   const embeddedPyPath = isMac
-    ? path.join(resRoot, 'runtime', 'mac', 'python', 'bin', 'python3')
-    : path.join(resRoot, 'runtime', 'win', 'python', 'python.exe');
+    ? path.join(resRoot, 'runtime', 'python', 'mac', 'bin', 'python3')
+    : path.join(resRoot, 'runtime', 'python', 'win', 'python.exe');
   // 系统 Python 路径（setup 阶段使用，因为嵌入式 Python 可能尚未安装）
   const systemPyPath = isMac ? 'python3' : 'python';
 
@@ -467,18 +467,16 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
         const scriptPath = path.join(resRoot, info.script);
         const pyPath = info.useSystemPython ? systemPyPath : embeddedPyPath;
 
-        // 构建脚本参数（setup 脚本不支持 --json-progress / --pypi-mirror / --hf-endpoint，
-        // 它们通过 env.HF_ENDPOINT 读取镜像地址，输出为普通文本）
-        const isSetupScript = info.script.includes('setup_base') || info.script.includes('setup_extra');
+        // 构建脚本参数
+        const isSetupScript = info.script.includes('runtime.py');
         const args = [];
         if (!isSetupScript) args.push('--json-progress');
         // ml 脚本需要 --target 参数
         if (info.script.includes('ml_base') || info.script.includes('ml_extra')) {
           args.unshift('--target', userPkgDir);
         }
-        // ml / checkpoint 脚本支持 --pypi-mirror；checkpoint 脚本额外支持 --hf-endpoint
-        // setup 脚本不支持这些参数（通过 env.HF_ENDPOINT 读取镜像地址）
-        if (!isSetupScript && pypiMirror) args.push('--pypi-mirror', pypiMirror);
+        // 全部脚本支持 --pypi-mirror；checkpoint 脚本额外支持 --hf-endpoint
+        if (pypiMirror) args.push('--pypi-mirror', pypiMirror);
         if (info.script.includes('checkpoint') && hfEndpoint) args.push('--hf-endpoint', hfEndpoint);
 
         sendProgress({ type: 'log', message: `▶ 运行脚本: ${info.script}` });
@@ -724,8 +722,8 @@ async function createWindow() {
   } else {
     const isMac = process.platform === 'darwin';
     pyCmd = isMac
-      ? path.join(process.resourcesPath, 'runtime', 'mac', 'python', 'bin', 'python3')
-      : path.join(process.resourcesPath, 'runtime', 'win', 'python', 'python.exe');
+      ? path.join(process.resourcesPath, 'runtime', 'python', 'mac', 'bin', 'python3')
+      : path.join(process.resourcesPath, 'runtime', 'python', 'win', 'python.exe');
     pyArgs = [path.join(__dirname, 'backend', 'main.py')];
     cwd = __dirname;
   }
@@ -736,7 +734,7 @@ async function createWindow() {
   // 开发/生产统一处理，确保行为一致。
   const mlPkgDir = app.isPackaged
     ? getUserPackagesDir()
-    : path.join(__dirname, 'local_data', 'python-packages');
+    : path.join(__dirname, 'runtime', 'ml');
   if (fs.existsSync(mlPkgDir)) {
     const protectedPrefixes = [
       'pydantic_core', 'pydantic-', 'pydantic.',
@@ -777,7 +775,7 @@ async function createWindow() {
     PYTHONPATH: [path.join(__dirname, 'backend'), mlPkgDir].join(path.delimiter),
     PYTHONIOENCODING: 'utf-8',
     ...(LOGS_DIR ? { LOGS_DIR } : {}),
-    AUDIO_CACHE_DIR,
+    CACHE_DIR,
   };
 
   console.log(`Start backend: ${pyCmd} ${pyArgs.join(' ')}`);
@@ -851,7 +849,9 @@ ipcMain.handle('app:getDiskUsage', () => {
   // 读取 manifest.json — 单一数据源，存储版本号、大小、默认安装标志
   let _manifest = {};
   try {
-    const mp = path.join(resRoot, 'wrappers', 'manifest.json');
+    const mp = app.isPackaged
+      ? path.join(resRoot, 'app', 'backend', 'wrappers', 'manifest.json')
+      : path.join(resRoot, 'backend', 'wrappers', 'manifest.json');
     _manifest = JSON.parse(fs.readFileSync(mp, 'utf-8'));
   } catch { /**/ }
   const _eng  = (k) => (_manifest.engines?.[k] || {});
@@ -892,8 +892,8 @@ ipcMain.handle('app:getDiskUsage', () => {
 
   // 测量嵌入式 Python site-packages 中的指定包目录
   const sitePackagesBase = isMac
-    ? path.join(resRoot, `runtime/${runtimePlatform}/python/lib`)
-    : path.join(resRoot, `runtime/${runtimePlatform}/python/Lib/site-packages`);
+    ? path.join(resRoot, `runtime/python/${runtimePlatform}/lib`)
+    : path.join(resRoot, `runtime/python/${runtimePlatform}/Lib/site-packages`);
   const measureSitePackages = (...pkgNames) => {
     let total = 0;
     // macOS: lib/python3.12/site-packages/   — 需要先找到 python 版本目录
@@ -920,21 +920,21 @@ ipcMain.handle('app:getDiskUsage', () => {
 
   const rows = [
     // ════════════════════════════════════════════════════════════════════════
-    // setup（pnpm run setup）— 基础 + 扩展环境统一
+    // setup（pnpm run runtime）— 基础 + 扩展环境统一
     // ════════════════════════════════════════════════════════════════════════
-    { key: 'python',             label: `Python 运行时（${runtimePlatform}）`,       sub: path.join(resRoot, `runtime/${runtimePlatform}`),     size: measureRes(`runtime/${runtimePlatform}`),                                                           estimatedSizeMb: 200,  stage: 'setup',
+    { key: 'python',             label: `Python 运行时（${runtimePlatform}）`,       sub: path.join(resRoot, `runtime/python/${runtimePlatform}`),     size: measureRes(`runtime/python/${runtimePlatform}`) + measureRes(`runtime/bin/${runtimePlatform}`),       estimatedSizeMb: 200,  stage: 'setup',
       desc: `来源: GitHub Releases (python-build-standalone)｜包含嵌入式 Python 3.12 解释器 + fastapi/uvicorn/httpx 等后端依赖 + FFmpeg (~70 MB) + Pandoc (~25 MB)` },
-    { key: 'fish_speech_engine', label: _engLabel('fish_speech', '引擎源码'),        sub: path.join(resRoot, 'runtime/fish_speech/engine'),     size: measureRes('runtime/fish_speech/engine'),                                                           estimatedSizeMb: 5,    stage: 'setup',
+    { key: 'fish_speech_engine', label: _engLabel('fish_speech', '引擎源码'),        sub: path.join(resRoot, 'runtime/engine/fish_speech'),     size: measureRes('runtime/engine/fish_speech'),                                                           estimatedSizeMb: 5,    stage: 'setup',
       desc: `来源: HuggingFace｜回退: git clone fishaudio/fish-speech tag v1.5.0｜pip: huggingface_hub, loguru, soundfile, tiktoken 等` },
-    { key: 'gpt_sovits_engine',  label: _engLabel('gpt_sovits', '引擎源码'),        sub: path.join(resRoot, 'runtime/gpt_sovits/engine'),      size: measureRes('runtime/gpt_sovits/engine'),                                                            estimatedSizeMb: 10,   stage: 'setup',
+    { key: 'gpt_sovits_engine',  label: _engLabel('gpt_sovits', '引擎源码'),        sub: path.join(resRoot, 'runtime/engine/gpt_sovits'),      size: measureRes('runtime/engine/gpt_sovits'),                                                            estimatedSizeMb: 10,   stage: 'setup',
       desc: `来源: HuggingFace｜回退: git clone｜pip: cn2an, pypinyin, jieba, wordsegment, g2p_en, LangSegment` },
-    { key: 'seed_vc_engine',     label: _engLabel('seed_vc', '引擎源码'),           sub: path.join(resRoot, 'runtime/seed_vc/engine'),         size: measureRes('runtime/seed_vc/engine'),                                                               estimatedSizeMb: 5,    stage: 'setup',
+    { key: 'seed_vc_engine',     label: _engLabel('seed_vc', '引擎源码'),           sub: path.join(resRoot, 'runtime/engine/seed_vc'),         size: measureRes('runtime/engine/seed_vc'),                                                               estimatedSizeMb: 5,    stage: 'setup',
       desc: `来源: HuggingFace｜回退: git clone commit 51383efd｜pip: huggingface_hub, setuptools, wheel` },
     { key: 'flux_pip',           label: _engLabel('flux', 'pip 依赖'),              sub: '嵌入式 Python site-packages',                        size: measureSitePackages('gguf'),                                                                        estimatedSizeMb: 20,   stage: 'setup',
       desc: `来源: PyPI｜安装包: gguf, diffusers>=0.32, accelerate, sentencepiece, protobuf` },
     { key: 'got_ocr_pip',        label: _engLabel('got_ocr', 'pip 依赖'),           sub: '嵌入式 Python site-packages',                        size: measureSitePackages('verovio', 'pymupdf', 'fitz'),                                                  estimatedSizeMb: 15,   stage: 'setup',
       desc: `来源: PyPI｜安装包: transformers>=4.48, tiktoken, verovio, pymupdf` },
-    { key: 'liveportrait_engine', label: _engLabel('liveportrait', '引擎 + pip'),   sub: path.join(resRoot, 'runtime/liveportrait/engine'),     size: measureRes('runtime/liveportrait/engine') + measureSitePackages('onnxruntime', 'pykalman'),          estimatedSizeMb: 50,   stage: 'setup',
+    { key: 'liveportrait_engine', label: _engLabel('liveportrait', '引擎 + pip'),   sub: path.join(resRoot, 'runtime/engine/liveportrait'),     size: measureRes('runtime/engine/liveportrait') + measureSitePackages('onnxruntime', 'pykalman'),          estimatedSizeMb: 50,   stage: 'setup',
       desc: `来源: HuggingFace｜回退: git clone｜pip: imageio, av, omegaconf, onnxruntime, scikit-image, pykalman` },
     { key: 'sd_pip',             label: _engLabel('sd', 'pip 依赖'),                sub: '嵌入式 Python site-packages',                        size: measureSitePackages('diffusers', 'accelerate', 'safetensors'),                                       estimatedSizeMb: 10,   stage: 'setup',
       desc: `来源: PyPI｜安装包: diffusers>=0.21, accelerate, safetensors` },
@@ -963,7 +963,7 @@ ipcMain.handle('app:getDiskUsage', () => {
     { key: 'seed_vc_ckpt',     label: _ckptLabel('seed_vc', '模型权重'),    sub: path.join(ckptRoot, 'seed_vc'),     size: measureCkpt('seed_vc'),     estimatedSizeMb: 200,  stage: 'checkpoints_base',
       desc: `来源: HuggingFace (Plachta/Seed-VC)｜文件: DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth (~200 MB) + config yml` },
     ...(() => {
-      const baseDir = path.join(resRoot, 'runtime', runtimePlatform, 'python');
+      const baseDir = path.join(resRoot, 'runtime', 'python', runtimePlatform);
       const found = [];
       const walkRvc = (d, depth) => {
         if (depth > 6) return;
@@ -981,7 +981,7 @@ ipcMain.handle('app:getDiskUsage', () => {
     })(),
     { key: 'faster_whisper_ckpt', label: _ckptLabel('faster_whisper', '模型'), sub: path.join(ckptRoot, 'faster_whisper'), size: measureCkpt('faster_whisper'), estimatedSizeMb: 1500, stage: 'checkpoints_base',
       desc: `来源: HuggingFace (Systran/faster-whisper-*)｜预下载 large-v3 + base 模型｜CTranslate2 格式，推理速度快于原版 Whisper` },
-    { key: 'facefusion_ckpt', label: _ckptLabel('facefusion', 'ONNX 模型'), sub: path.join(resRoot, 'runtime', 'facefusion', 'engine'), size: measureRes(path.join('runtime', 'facefusion', 'engine')), estimatedSizeMb: 540, stage: 'checkpoints_base',
+    { key: 'facefusion_ckpt', label: _ckptLabel('facefusion', 'ONNX 模型'), sub: path.join(resRoot, 'runtime', 'engine', 'facefusion'), size: measureRes(path.join('runtime', 'engine', 'facefusion')), estimatedSizeMb: 540, stage: 'checkpoints_base',
       desc: `来源: HuggingFace｜文件: retinaface_10g.onnx (~16 MB), arcface_w600k_r50.onnx (~166 MB), 2dfan4.onnx (~93 MB), inswapper_128_fp16.onnx (~265 MB)` },
     { key: 'seed_vc_hf_root', label: 'Seed-VC 附属模型（bigvgan · whisper · rmvpe · campplus）', sub: ckptRoot, size: (() => { let t = 0; for (const n of ['models--lj1995--VoiceConversionWebUI', 'models--funasr--campplus']) { const d = path.join(ckptRoot, n); if (dirExists(d)) t += getDirSize(d); } t += measureHfCache('nvidia/bigvgan_v2_22khz_80band_256x', 'openai/whisper-small'); return t; })(), estimatedSizeMb: 2500, stage: 'checkpoints_base',
       desc: `来源: HuggingFace｜nvidia/bigvgan_v2_22khz_80band_256x 声码器 (~1.3 GB), openai/whisper-small 语义编码器 (~950 MB), funasr/campplus 说话人特征 (~25 MB), lj1995/VoiceConversionWebUI rmvpe F0 提取 (~200 MB)｜全部为 Seed-VC 离线推理必须，不可单独删除` },
@@ -1013,10 +1013,10 @@ ipcMain.handle('app:getDiskUsage', () => {
     // 由 checkpoints_base / checkpoints_extra 阶段管理（重装时会一并清除和重新下载）。
     // ── 临时文件 ────────────────────────────────────────────────────────────
     {
-      key: 'audio_cache',
-      label: '音频缓存',
-      sub: AUDIO_CACHE_DIR,
-      size: (() => dirExists(AUDIO_CACHE_DIR) ? getDirSize(AUDIO_CACHE_DIR) : 0)(),
+      key: 'cache',
+      label: '缓存',
+      sub: CACHE_DIR,
+      size: (() => dirExists(CACHE_DIR) ? getDirSize(CACHE_DIR) : 0)(),
       clearable: true,
     },
     {
@@ -1094,7 +1094,7 @@ ipcMain.handle('app:clearAndOpenSetup', async () => {
 function findRvcBaseModelDirs() {
   const isMac = process.platform === 'darwin';
   const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
-  const baseDir = path.join(resRoot, 'runtime', isMac ? 'mac' : 'win', 'python');
+  const baseDir = path.join(resRoot, 'runtime', 'python', isMac ? 'mac' : 'win');
   const found = [];
   const walk = (d, depth) => {
     if (depth > 6) return;
@@ -1139,9 +1139,9 @@ ipcMain.handle('app:deleteModels', (_event, engine) => {
   const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
   const errors = [];
 
-  // FaceFusion 特殊处理：删 runtime/facefusion/engine/ 而非 checkpoints/facefusion/
+  // FaceFusion 特殊处理：删 runtime/engine/facefusion/ 而非 checkpoints/facefusion/
   if (engine === 'facefusion') {
-    const engineDir = path.join(resRoot, 'runtime', 'facefusion', 'engine');
+    const engineDir = path.join(resRoot, 'runtime', 'engine', 'facefusion');
     if (dirExists(engineDir)) {
       try {
         fs.rmSync(engineDir, { recursive: true, force: true });
@@ -1199,13 +1199,13 @@ const CLEARABLE_DIRS = () => {
   const runtimePlatform = isMac ? 'mac' : 'win';
   return {
     // 运行时环境
-    python:           path.join(resRoot, `runtime/${runtimePlatform}`),
+    python:           path.join(resRoot, `runtime/python/${runtimePlatform}`),
     python_packages:  getUserPackagesDir(),
     // 引擎源码
-    fish_speech_engine:  path.join(resRoot, 'runtime/fish_speech/engine'),
-    seed_vc_engine:      path.join(resRoot, 'runtime/seed_vc/engine'),
-    gpt_sovits_engine:   path.join(resRoot, 'runtime/gpt_sovits/engine'),
-    liveportrait_engine: path.join(resRoot, 'runtime/liveportrait/engine'),
+    fish_speech_engine:  path.join(resRoot, 'runtime/engine/fish_speech'),
+    seed_vc_engine:      path.join(resRoot, 'runtime/engine/seed_vc'),
+    gpt_sovits_engine:   path.join(resRoot, 'runtime/engine/gpt_sovits'),
+    liveportrait_engine: path.join(resRoot, 'runtime/engine/liveportrait'),
     // 缓存
     seed_vc_hf_root: null,  // 特殊处理：多个子目录
     // checkpoint 目录（checkpoints_base + checkpoints_extra）
@@ -1214,7 +1214,7 @@ const CLEARABLE_DIRS = () => {
     seed_vc_ckpt:      path.join(ckptRoot, 'seed_vc'),
     rvc_ckpt:          path.join(ckptRoot, 'rvc'),
     faster_whisper_ckpt: path.join(ckptRoot, 'faster_whisper'),
-    facefusion_ckpt:   path.join(resRoot, 'runtime', 'facefusion', 'engine'),
+    facefusion_ckpt:   path.join(resRoot, 'runtime', 'engine', 'facefusion'),
     cosyvoice_ckpt:    path.join(ckptRoot, 'cosyvoice'),
     sd_ckpt:           path.join(ckptRoot, 'sd'),
     flux_ckpt:         path.join(ckptRoot, 'flux'),
@@ -1224,7 +1224,7 @@ const CLEARABLE_DIRS = () => {
     whisper_ckpt:      path.join(ckptRoot, 'whisper'),
     // 用户数据
     voices:           path.join(__dirname, 'models', 'voices', 'user'),
-    audio_cache:      AUDIO_CACHE_DIR,
+    cache:            CACHE_DIR,
     // 日志
     logs:             LOGS_DIR,
   };
@@ -1283,8 +1283,7 @@ const STAGE_CLEAR_KEYS = {
 // stage → 脚本列表（按顺序执行），支持单脚本或多脚本
 const STAGE_SCRIPTS = {
   setup:             [
-    { script: 'scripts/setup_base.py',  useSystemPython: true },
-    { script: 'scripts/setup_extra.py', useSystemPython: false },
+    { script: 'scripts/runtime.py', useSystemPython: true },
   ],
   ml_base:           [{ script: 'scripts/ml_base.py',           useSystemPython: false }],
   ml_extra:          [{ script: 'scripts/ml_extra.py',          useSystemPython: false }],
@@ -1341,8 +1340,8 @@ ipcMain.handle('app:reinstallStage', (_event, stage) => {
         pyPath = isMac ? 'python3' : 'python';
       } else {
         pyPath = isMac
-          ? path.join(resRoot, 'runtime', 'mac', 'python', 'bin', 'python3')
-          : path.join(resRoot, 'runtime', 'win', 'python', 'python.exe');
+          ? path.join(resRoot, 'runtime', 'python', 'mac', 'bin', 'python3')
+          : path.join(resRoot, 'runtime', 'python', 'win', 'python.exe');
       }
 
       sendProgress({ type: 'log', message: `▶ 运行脚本: ${info.script}` });
@@ -1419,9 +1418,11 @@ ipcMain.handle('app:clearStageAndOpenSetup', async (_event, stage) => {
 });
 
 // ─── IPC：下载单个引擎 checkpoint ────────────────────────────────────────────
-// 基础引擎（setup_base.py 处理）vs 额外引擎（setup_extra.py 处理）
-const BASE_ENGINES = new Set(['fish_speech', 'gpt_sovits', 'seed_vc', 'rvc', 'faster_whisper', 'facefusion', 'voices']);
-const EXTRA_ENGINES = new Set(['agent_engine', 'finetune_engine', 'flux', 'got_ocr', 'liveportrait', 'rag_engine', 'sd', 'wan', 'whisper']);
+// 全引擎集合（统一由 runtime.py 处理）
+const ALL_ENGINES = new Set([
+  'fish_speech', 'gpt_sovits', 'seed_vc', 'rvc', 'faster_whisper', 'facefusion', 'voices',
+  'agent_engine', 'finetune_engine', 'flux', 'got_ocr', 'liveportrait', 'rag_engine', 'sd', 'wan', 'whisper',
+]);
 
 // 需要 ML 依赖的引擎及其对应的 group（ml_extra.py --group）
 const ML_INSTALL_GROUPS = {
@@ -1434,8 +1435,8 @@ ipcMain.handle('app:downloadEngine', (_event, engine) => {
   const isMac = process.platform === 'darwin';
   const resRoot = app.isPackaged ? process.resourcesPath : __dirname;
   const pyPath = isMac
-    ? path.join(resRoot, 'runtime', 'mac', 'python', 'bin', 'python3')
-    : path.join(resRoot, 'runtime', 'win', 'python', 'python.exe');
+    ? path.join(resRoot, 'runtime', 'python', 'mac', 'bin', 'python3')
+    : path.join(resRoot, 'runtime', 'python', 'win', 'python.exe');
   const ckptDir = getCheckpointsDir();
   const userPkgDir = getUserPackagesDir();
   fs.mkdirSync(ckptDir, { recursive: true });
@@ -1530,9 +1531,8 @@ ipcMain.handle('app:downloadEngine', (_event, engine) => {
       }
     }
 
-    // 第二步：pip_packages + 引擎源码（setup_base.py 或 setup_extra.py --engine）
-    const isExtraEngine = EXTRA_ENGINES.has(engine);
-    const setupScript = path.join(__dirname, 'scripts', isExtraEngine ? 'setup_extra.py' : 'setup_base.py');
+    // 第二步：pip_packages + 引擎源码（runtime.py --engine）
+    const setupScript = path.join(__dirname, 'scripts', 'runtime.py');
     sendProgress({ type: 'log', message: `▶ [${engine}] 安装引擎依赖 + 源码...` });
     const setupResult = await spawnScript(`engine-setup-${engine}`, setupScript, ['--engine', engine]);
     if (!setupResult.ok) {

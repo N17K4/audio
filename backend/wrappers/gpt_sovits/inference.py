@@ -52,8 +52,8 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = os.getenv("GPT_SOVITS_CHECKPOINT_DIR", "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "wrappers" / "manifest.json"
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    manifest_path = base / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -62,15 +62,15 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
                 return str((base / rel).resolve())
         except Exception:
             pass
-    return str((base / "checkpoints" / "gpt_sovits").resolve())
+    return str((base / "runtime" / "checkpoints" / "gpt_sovits").resolve())
 
 
 def _detect_engine_dir() -> Path | None:
     """检测 GPT-SoVITS 引擎目录。"""
-    base = Path(__file__).resolve().parent.parent.parent
+    base = Path(__file__).resolve().parent.parent.parent.parent
     candidates = [
-        base / "runtime" / "gpt_sovits" / "engine",
-        base / "runtime" / "gpt_sovits",
+        base / "runtime" / "engine" / "gpt_sovits",
+        base / "runtime" / "engine" / "gpt_sovits",
     ]
     for d in candidates:
         if d.exists() and (d / "GPT_SoVITS").exists():
@@ -87,8 +87,8 @@ def main() -> int:
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
 
     # HF 缓存统一指向 checkpoints/hf_cache
-    base = Path(__file__).resolve().parent.parent.parent
-    hf_cache = str((base / "checkpoints" / "hf_cache").resolve())
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    hf_cache = str((base / "runtime" / "checkpoints" / "hf_cache").resolve())
     os.environ.setdefault("HF_HUB_CACHE", hf_cache)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_cache)
 

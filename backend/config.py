@@ -8,7 +8,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 # dev 模式下默认为项目根目录（runtime/、checkpoints/ 均在此处）
 RESOURCES_ROOT = Path(os.getenv("RESOURCES_ROOT", str(APP_ROOT))).resolve()
 RUNTIME_ROOT = RESOURCES_ROOT / "runtime"
-WRAPPERS_ROOT = RESOURCES_ROOT / "wrappers"
+WRAPPERS_ROOT = Path(__file__).resolve().parent / "wrappers"
 
 # 模型 checkpoints 目录：生产模式由 Electron 传入 CHECKPOINTS_DIR（userData/checkpoints/）
 # 开发模式回退到项目根下的 checkpoints/
@@ -16,7 +16,7 @@ _CHECKPOINTS_DIR_ENV = os.getenv("CHECKPOINTS_DIR", "").strip()
 CHECKPOINTS_ROOT = (
     Path(_CHECKPOINTS_DIR_ENV).resolve()
     if _CHECKPOINTS_DIR_ENV
-    else RESOURCES_ROOT / "checkpoints"
+    else RUNTIME_ROOT / "checkpoints"
 )
 
 MODEL_ROOT = Path(os.getenv("MODEL_ROOT", str(APP_ROOT / "models"))).resolve()
@@ -35,11 +35,11 @@ FASTER_WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "faster_whisper" / "engine.json"
 _LOGS_DIR_ENV = os.getenv("LOGS_DIR", "").strip()
 LOGS_DIR: Path = Path(_LOGS_DIR_ENV).resolve() if _LOGS_DIR_ENV else (APP_ROOT / "logs")
 
-# 音频缓存与 logs 同级；Electron 传入环境变量，未传则回退到 APP_ROOT 下
-_AUDIO_CACHE_ENV = os.getenv("AUDIO_CACHE_DIR", "").strip()
-AUDIO_CACHE_DIR: Path = Path(_AUDIO_CACHE_ENV).resolve() if _AUDIO_CACHE_ENV else (APP_ROOT / "audio_cache")
-DOWNLOAD_DIR = AUDIO_CACHE_DIR
-TRAIN_DATA_DIR = AUDIO_CACHE_DIR / "train-data"
+# 通用缓存目录（音频、训练数据等）；Electron 传入环境变量，未传则回退到 APP_ROOT 下
+_CACHE_DIR_ENV = os.getenv("CACHE_DIR", "").strip()
+CACHE_DIR: Path = Path(_CACHE_DIR_ENV).resolve() if _CACHE_DIR_ENV else (APP_ROOT / "cache")
+DOWNLOAD_DIR = CACHE_DIR
+TRAIN_DATA_DIR = CACHE_DIR / "train-data"
 
 # HF 缓存在 checkpoints/hf_cache/ 下，与其他模型权重统一管理
 HF_CACHE_DIR: Path = CHECKPOINTS_ROOT / "hf_cache"

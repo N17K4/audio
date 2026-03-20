@@ -27,13 +27,13 @@ def get_embedded_python() -> str:
     import sys as _sys
     if _sys.platform == "win32":
         candidates = [
-            RUNTIME_ROOT / "win" / "python" / "python.exe",
+            RUNTIME_ROOT / "python" / "win" / "python.exe",
         ]
         platform_name = "win"
     else:
         candidates = [
-            RUNTIME_ROOT / "mac" / "python" / "bin" / "python3",
-            RUNTIME_ROOT / "mac" / "python" / "bin" / "python",
+            RUNTIME_ROOT / "python" / "mac" / "bin" / "python3",
+            RUNTIME_ROOT / "python" / "mac" / "bin" / "python",
         ]
         platform_name = "mac"
     for p in candidates:
@@ -43,7 +43,7 @@ def get_embedded_python() -> str:
             resolved = str(p.resolve())
             logger.debug("[embedded-python] 使用 %s", resolved)
             return resolved
-    msg = f"嵌入式 Python 未找到。请将对应平台的 Python 放置于 runtime/{platform_name}/python/ 目录。"
+    msg = f"嵌入式 Python 未找到。请将对应平台的 Python 放置于 runtime/python/{platform_name}/ 目录。"
     logger.error("[embedded-python] %s", msg)
     raise RuntimeError(msg)
 
@@ -53,11 +53,11 @@ def get_ffmpeg_binary() -> str:
     import sys as _sys
     import shutil as _shutil
     if _sys.platform == "win32":
-        bundled = RUNTIME_ROOT / "win" / "bin" / "ffmpeg.exe"
+        bundled = RUNTIME_ROOT / "bin" / "win" / "ffmpeg.exe"
     elif _sys.platform == "linux":
-        bundled = RUNTIME_ROOT / "linux" / "bin" / "ffmpeg"
+        bundled = RUNTIME_ROOT / "bin" / "linux" / "ffmpeg"
     else:
-        bundled = RUNTIME_ROOT / "mac" / "bin" / "ffmpeg"
+        bundled = RUNTIME_ROOT / "bin" / "mac" / "ffmpeg"
     if bundled.exists():
         logger.debug("[ffmpeg] 使用打包二进制: %s", bundled)
         return str(bundled.resolve())
@@ -74,11 +74,11 @@ def get_pandoc_binary() -> str:
     import sys as _sys
     import shutil as _shutil
     if _sys.platform == "win32":
-        bundled = RUNTIME_ROOT / "win" / "bin" / "pandoc.exe"
+        bundled = RUNTIME_ROOT / "bin" / "win" / "pandoc.exe"
     elif _sys.platform == "linux":
-        bundled = RUNTIME_ROOT / "linux" / "bin" / "pandoc"
+        bundled = RUNTIME_ROOT / "bin" / "linux" / "pandoc"
     else:
-        bundled = RUNTIME_ROOT / "mac" / "bin" / "pandoc"
+        bundled = RUNTIME_ROOT / "bin" / "mac" / "pandoc"
     if bundled.exists():
         logger.debug("[pandoc] 使用打包二进制: %s", bundled)
         return str(bundled.resolve())
@@ -92,7 +92,7 @@ def get_pandoc_binary() -> str:
 
 def detect_rvc_infer_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "rvc" / "engine" / "infer.py",   # setup_base.py 自动生成
+        RUNTIME_ROOT / "engine" / "rvc" / "infer.py",   # runtime.py 自动生成
         WRAPPERS_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "rvc" / "infer_cli.py",
         APP_ROOT / "tools" / "rvc" / "infer_cli.py",
@@ -110,8 +110,8 @@ def detect_rvc_infer_script() -> str:
 def detect_fish_speech_script() -> str:
     candidates = [
         WRAPPERS_ROOT / "fish_speech" / "inference.py",
-        RUNTIME_ROOT / "fish_speech" / "tools" / "inference_engine.py",
-        RUNTIME_ROOT / "fish_speech" / "fish_speech" / "inference.py",
+        RUNTIME_ROOT / "engine" / "fish_speech" / "tools" / "inference_engine.py",
+        RUNTIME_ROOT / "engine" / "fish_speech" / "fish_speech" / "inference.py",
     ]
     for p in candidates:
         exists = p.exists()
@@ -152,7 +152,7 @@ def get_fish_speech_command_template() -> str:
 def detect_gpt_sovits_script() -> str:
     candidates = [
         WRAPPERS_ROOT / "gpt_sovits" / "inference.py",
-        RUNTIME_ROOT / "gpt_sovits" / "engine" / "inference.py",
+        RUNTIME_ROOT / "engine" / "gpt_sovits" / "inference.py",
     ]
     for p in candidates:
         exists = p.exists()
@@ -193,9 +193,9 @@ def get_gpt_sovits_command_template() -> str:
 def detect_seed_vc_script() -> str:
     candidates = [
         WRAPPERS_ROOT / "seed_vc" / "inference.py",
-        RUNTIME_ROOT / "seed_vc" / "engine" / "inference.py",
-        RUNTIME_ROOT / "seed_vc" / "run_inference.py",
-        RUNTIME_ROOT / "seed_vc" / "seed_vc" / "inference.py",
+        RUNTIME_ROOT / "engine" / "seed_vc" / "inference.py",
+        RUNTIME_ROOT / "engine" / "seed_vc" / "run_inference.py",
+        RUNTIME_ROOT / "engine" / "seed_vc" / "seed_vc" / "inference.py",
     ]
     for p in candidates:
         exists = p.exists()
@@ -398,7 +398,7 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
     if engine == "facefusion":
-        facefusion_pkgs = CHECKPOINTS_ROOT.parent / "facefusion-packages"
+        facefusion_pkgs = RUNTIME_ROOT / "facefusion-packages"
         merged["PYTHONPATH"] = str(facefusion_pkgs)
         merged["PYTHONNOUSERSITE"] = "1"
     return merged
@@ -418,11 +418,11 @@ def get_checkpoint_dir(engine: str) -> str:
     env_val = os.getenv(env_key, "").strip()
     if env_val:
         return env_val
-    rel = cfg.get("checkpoint_dir", f"checkpoints/{engine}")
-    sub = rel[len("checkpoints/"):] if rel.startswith("checkpoints/") else None
+    rel = cfg.get("checkpoint_dir", f"runtime/checkpoints/{engine}")
+    sub = rel[len("runtime/checkpoints/"):] if rel.startswith("runtime/checkpoints/") else None
     # 优先使用 resources/ 里打包的 checkpoint（打包前由 pnpm run checkpoints 写入）
     if sub is not None:
-        bundled = RESOURCES_ROOT / "checkpoints" / sub
+        bundled = RUNTIME_ROOT / "checkpoints" / sub
         if bundled.exists():
             return str(bundled.resolve())
         return str((CHECKPOINTS_ROOT / sub).resolve())
@@ -548,7 +548,7 @@ def get_liveportrait_command_template() -> str:
 def detect_facefusion_script() -> str:
     candidates = [
         WRAPPERS_ROOT / "facefusion" / "inference.py",
-        RUNTIME_ROOT / "facefusion" / "engine" / "facefusion.py",
+        RUNTIME_ROOT / "engine" / "facefusion" / "facefusion.py",
     ]
     for p in candidates:
         if p.exists():

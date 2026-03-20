@@ -43,8 +43,8 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = os.getenv("FISH_SPEECH_CHECKPOINT_DIR", "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "wrappers" / "manifest.json"
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    manifest_path = base / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -53,25 +53,25 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
                 return str((base / rel).resolve())
         except Exception:
             pass
-    return str((base / "checkpoints" / "fish_speech").resolve())
+    return str((base / "runtime" / "checkpoints" / "fish_speech").resolve())
 
 
 def get_embedded_python() -> str:
-    base = Path(__file__).resolve().parent.parent.parent
+    base = Path(__file__).resolve().parent.parent.parent.parent
     if sys.platform == "win32":
-        candidates = [base / "runtime" / "win" / "python" / "python.exe"]
+        candidates = [base / "runtime" / "python" / "win" / "python.exe"]
         platform_name = "win"
     else:
         candidates = [
-            base / "runtime" / "mac" / "python" / "bin" / "python3",
-            base / "runtime" / "mac" / "python" / "bin" / "python",
+            base / "runtime" / "python" / "mac" / "bin" / "python3",
+            base / "runtime" / "python" / "mac" / "bin" / "python",
         ]
         platform_name = "mac"
     for p in candidates:
         if p.exists():
             return str(p)
     print(
-        f"[fish_speech] 嵌入式 Python 未找到，请将 Python 放置于 runtime/{platform_name}/python/",
+        f"[fish_speech] 嵌入式 Python 未找到，请将 Python 放置于 runtime/python/{platform_name}/",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -245,8 +245,8 @@ def main() -> int:
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
 
     # HF 缓存统一指向 checkpoints/hf_cache（与其他模型权重同级管理）
-    base = Path(__file__).resolve().parent.parent.parent
-    hf_cache = str((base / "checkpoints" / "hf_cache").resolve())
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    hf_cache = str((base / "runtime" / "checkpoints" / "hf_cache").resolve())
     os.environ.setdefault("HF_HUB_CACHE", hf_cache)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_cache)
 
@@ -280,7 +280,7 @@ def main() -> int:
     # ── 持久化 Worker 模式 ────────────────────────────────────────────────────
 
     # 检查依赖
-    engine_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "fish_speech" / "engine"
+    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "fish_speech"
     if not engine_dir.exists():
         print("[fish_speech] engine 目录不存在，请先运行 pnpm run checkpoints", file=sys.stderr)
         return 3

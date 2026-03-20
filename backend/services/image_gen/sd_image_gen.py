@@ -13,7 +13,7 @@ from utils.audit import log_ai_call, log_ai_error
 
 
 def _get_sd_script() -> str:
-    p = RUNTIME_ROOT / "sd" / "inference.py"
+    p = RUNTIME_ROOT / "engine" / "sd" / "inference.py"
     if p.exists():
         logger.debug("[sd] 找到脚本: %s", p)
         return str(p.resolve())
@@ -30,7 +30,7 @@ async def run_sd_image_gen(
     if not script:
         raise HTTPException(
             status_code=400,
-            detail="SD-Turbo 引擎未找到。请确保 runtime/sd/inference.py 存在，并运行 pnpm run checkpoints --engine sd 下载模型。",
+            detail="SD-Turbo 引擎未找到。请确保 runtime/engine/sd/inference.py 存在，并运行 pnpm run checkpoints --engine sd 下载模型。",
         )
 
     try:

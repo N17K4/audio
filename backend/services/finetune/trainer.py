@@ -37,7 +37,7 @@ def start_finetune_job(
     job_output_dir = str(FINETUNE_ROOT / job_id)
     os.makedirs(job_output_dir, exist_ok=True)
 
-    script = APP_ROOT / "wrappers" / "finetune" / "train.py"
+    script = APP_ROOT / "backend" / "wrappers" / "finetune" / "train.py"
     python = get_embedded_python()
 
     cmd = [

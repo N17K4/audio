@@ -20,9 +20,9 @@ from pathlib import Path
 
 
 def _find_engine_dir() -> str:
-    runtime_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "liveportrait"
+    runtime_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "liveportrait"
     candidates = [
-        runtime_dir / "engine",
+        runtime_dir,
     ]
     for c in candidates:
         if (c / "liveportrait").is_dir() or (c / "inference.py").exists():
@@ -96,8 +96,8 @@ def _resolve_pretrained_weights(checkpoint_dir: str, engine_dir: str) -> None:
         return
 
     # 回退：从 HF cache 中查找 KwaiVGI/LivePortrait 快照
-    script_dir = Path(__file__).parent.parent.parent  # 项目根目录
-    hf_cache = script_dir / "checkpoints" / "hf_cache" / "models--KwaiVGI--LivePortrait" / "snapshots"
+    script_dir = Path(__file__).parent.parent.parent.parent  # 项目根目录
+    hf_cache = script_dir / "runtime" / "checkpoints" / "hf_cache" / "models--KwaiVGI--LivePortrait" / "snapshots"
     if hf_cache.is_dir():
         snapshots = sorted(hf_cache.iterdir())
         if snapshots:
@@ -116,7 +116,7 @@ def _run_via_engine(args, checkpoint_dir: str, engine_dir: str, device: str):
     if not engine_dir:
         raise RuntimeError(
             "LivePortrait engine 目录未找到。"
-            "请确保 runtime/liveportrait/engine/ 目录存在（通过 pnpm run setup 安装）。"
+            "请确保 runtime/engine/liveportrait/ 目录存在（通过 pnpm run setup 安装）。"
         )
 
     engine_inference = Path(engine_dir) / "inference.py"

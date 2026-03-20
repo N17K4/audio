@@ -33,8 +33,8 @@ def run_local_gpt_sovits_tts_cmd(
             status_code=500,
             detail=(
                 "[gpt_sovits] 未找到 GPT-SoVITS 引擎。"
-                "请将 GPT-SoVITS 仓库放置于 runtime/gpt_sovits/engine/ 目录，"
-                "或在 wrappers/gpt_sovits/engine.json 中配置 'command' 字段。"
+                "请将 GPT-SoVITS 仓库放置于 runtime/engine/gpt_sovits/ 目录，"
+                "或在 backend/wrappers/gpt_sovits/engine.json 中配置 'command' 字段。"
             ),
         )
     import shlex
@@ -150,8 +150,8 @@ async def run_gpt_sovits_tts(
             status_code=400,
             detail=(
                 "GPT-SoVITS 引擎未找到。"
-                "请将 GPT-SoVITS 仓库放置于 runtime/gpt_sovits/engine/ 目录，"
-                "或在 wrappers/gpt_sovits/engine.json 中配置 'command' 字段；"
+                "请将 GPT-SoVITS 仓库放置于 runtime/engine/gpt_sovits/ 目录，"
+                "或在 backend/wrappers/gpt_sovits/engine.json 中配置 'command' 字段；"
                 "如需调用 GPT-SoVITS HTTP 服务，请在设置中填写服务地址（endpoint）。"
             ),
         )

@@ -17,8 +17,8 @@ async def run_whisper_stt(content: bytes, filename: str, model: str = "base") ->
         raise HTTPException(
             status_code=400,
             detail=(
-                "Whisper 引擎未找到。请将 runtime/whisper/inference.py 放置于正确路径，"
-                "或在 runtime/whisper/engine.json 中配置 'command' 字段。"
+                "Whisper 引擎未找到。请将 backend/wrappers/whisper/inference.py 放置于正确路径，"
+                "或在 backend/wrappers/whisper/engine.json 中配置 'command' 字段。"
             ),
         )
 

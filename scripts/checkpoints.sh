@@ -7,11 +7,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # 检测嵌入式 Python
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    PYTHON="$PROJECT_ROOT/runtime/mac/python/bin/python3"
+    PYTHON="$PROJECT_ROOT/runtime/python/mac/bin/python3"
 elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
-    PYTHON="$PROJECT_ROOT/runtime/win/python/python.exe"
+    PYTHON="$PROJECT_ROOT/runtime/python/win/python.exe"
 else
-    PYTHON="$PROJECT_ROOT/runtime/linux/python/bin/python3"
+    PYTHON="$PROJECT_ROOT/runtime/python/linux/bin/python3"
 fi
 
 if [[ ! -x "$PYTHON" ]]; then

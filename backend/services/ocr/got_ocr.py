@@ -16,7 +16,7 @@ from utils.audit import log_ai_call, log_ai_error
 
 def _get_got_ocr_script() -> str:
     candidates = [
-        RUNTIME_ROOT / "got_ocr" / "inference.py",
+        RUNTIME_ROOT / "engine" / "got_ocr" / "inference.py",
     ]
     for p in candidates:
         if p.exists():

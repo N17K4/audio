@@ -1,21 +1,22 @@
 # 安装阶段全览
 
-本文档描述开发环境从零到完整运行所需的 6 个安装阶段，按依赖顺序排列。
+本文档描述开发环境从零到完整运行所需的 5 个安装阶段，按依赖顺序排列。
 
 ---
 
-## Stage 1: `pnpm run setup`
+## Stage 1: `pnpm run setup` + `pnpm run runtime`
 
-> 脚本：`scripts/setup_base.py`　｜　运行环境：**系统 Python**
+> setup: `scripts/setup.sh`（mise + pnpm + poetry）
+> runtime: `scripts/runtime.py`　｜　运行环境：**系统 Python**
 
-基础环境初始化。下载嵌入式 Python、安装后端依赖、配置 6 个基础引擎的轻量 pip 包与源码、下载工具二进制。
+環境初始化。setup.sh で開発ツール、runtime.py で嵌入式 Python + backend 依赖 + 全引擎 pip 包 + 源码 + FFmpeg/Pandoc。
 
 ### 1/4 嵌入式 Python
 
 | 平台 | 版本 | 保存路径 |
 |------|------|----------|
-| macOS | python-build-standalone 3.12.9 | `runtime/mac/python/` |
-| Windows | python.org embed 3.10.11 | `runtime/win/python/` |
+| macOS | python-build-standalone 3.12.9 | `runtime/python/mac/` |
+| Windows | python.org embed 3.10.11 | `runtime/python/win/` |
 
 ### 2/4 Backend 依赖
 
@@ -25,45 +26,27 @@
 
 | 引擎 | pip_packages（装入嵌入式 Python） | 源码 | 源码保存路径 |
 |------|----------------------------------|------|-------------|
-| fish_speech | huggingface_hub, setuptools, wheel, loguru, natsort, soundfile, loralib, pyrootutils, pydantic, rich, click, tqdm, tiktoken | HF zip `fish_speech_v1.5.0.zip` / 回退 git clone tag `v1.5.0` | `runtime/fish_speech/engine/` |
-| gpt_sovits | huggingface_hub, setuptools, wheel, cn2an, pypinyin, jieba, wordsegment, g2p_en, LangSegment | HF zip `gpt_sovits_v2.zip` / 回退 git clone | `runtime/gpt_sovits/engine/` |
-| seed_vc | huggingface_hub, setuptools, wheel | HF zip `seed_vc_51383efd.zip` / 回退 git clone commit `51383efd` | `runtime/seed_vc/engine/` |
-| rvc | rvc-python==0.1.5, setuptools | 自动生成 `infer.py` | `runtime/rvc/engine/` |
+| fish_speech | huggingface_hub, setuptools, wheel, loguru, natsort, soundfile, loralib, pyrootutils, pydantic, rich, click, tqdm, tiktoken | HF zip `fish_speech_v1.5.0.zip` / 回退 git clone tag `v1.5.0` | `runtime/engine/fish_speech/` |
+| gpt_sovits | huggingface_hub, setuptools, wheel, cn2an, pypinyin, jieba, wordsegment, g2p_en, LangSegment | HF zip `gpt_sovits_v2.zip` / 回退 git clone | `runtime/engine/gpt_sovits/` |
+| seed_vc | huggingface_hub, setuptools, wheel | HF zip `seed_vc_51383efd.zip` / 回退 git clone commit `51383efd` | `runtime/engine/seed_vc/` |
+| rvc | rvc-python==0.1.5, setuptools | 自动生成 `infer.py` | `runtime/engine/rvc/` |
 | faster_whisper | faster-whisper==1.2.1 | —（无源码） | — |
-| facefusion | —（无 pip_packages） | git clone tag `3.5.4` | `runtime/facefusion/engine/` |
+| facefusion | —（无 pip_packages） | git clone tag `3.5.4` | `runtime/engine/facefusion/` |
 
 ### 4/4 工具二进制
 
 | 工具 | 来源 | 大小 | 保存路径 |
 |------|------|------|----------|
-| FFmpeg | evermeet.cx (macOS) / BtbN GitHub (Windows) | ~70–90 MB | `runtime/{mac\|win}/bin/ffmpeg` |
-| Pandoc | GitHub Releases v3.6.4 | ~25 MB | `runtime/{mac\|win}/bin/pandoc` |
+| FFmpeg | evermeet.cx (macOS) / BtbN GitHub (Windows) | ~70–90 MB | `runtime/bin/{mac\|win}/ffmpeg` |
+| Pandoc | GitHub Releases v3.6.4 | ~25 MB | `runtime/bin/{mac\|win}/pandoc` |
 
-### 再安装方式
-
-```bash
-# 全量重装
-rm -rf runtime/
-python3 scripts/setup_base.py
-
-# 单引擎重装（例：seed_vc）
-rm -rf runtime/seed_vc/engine/
-python3 scripts/setup_base.py --engine seed_vc
-```
-
----
-
-## Stage 2: `pnpm run setup:extra`
-
-> 脚本：`scripts/setup_extra.py`　｜　运行环境：**嵌入式 Python**
-
-可选引擎的轻量 pip_packages + 源码。不安装 ML 包（torch 等），仅安装推理框架依赖。
+### 4/5 额外引擎（pip_packages + 源码）
 
 | 引擎 | pip_packages（装入嵌入式 Python） | 源码 |
 |------|----------------------------------|------|
 | flux | gguf, diffusers>=0.32, accelerate, sentencepiece, protobuf | — |
 | got_ocr | transformers>=4.48, tiktoken, verovio, pymupdf | — |
-| liveportrait | imageio, imageio-ffmpeg, av, omegaconf, einops, safetensors, onnx, onnxruntime, scikit-image, pykalman | HF zip `liveportrait_49784e87.zip` / 回退 git clone → `runtime/liveportrait/engine/` |
+| liveportrait | imageio, imageio-ffmpeg, av, omegaconf, einops, safetensors, onnx, onnxruntime, scikit-image, pykalman | HF zip `liveportrait_49784e87.zip` / 回退 git clone → `runtime/engine/liveportrait/` |
 | sd | diffusers>=0.21, accelerate, safetensors | — |
 | wan | diffusers>=0.30, accelerate, imageio, imageio-ffmpeg | — |
 | whisper | *(pip_packages 为空，跳过)* | — |
@@ -72,15 +55,54 @@ python3 scripts/setup_base.py --engine seed_vc
 
 ```bash
 # 全量重装
-python3 scripts/setup_extra.py
+rm -rf runtime/
+python3 scripts/runtime.py
 
-# 单引擎重装
-python3 scripts/setup_extra.py --engine liveportrait
+# 单引擎重装（例：seed_vc）
+rm -rf runtime/engine/seed_vc/
+python3 scripts/runtime.py --engine seed_vc
 ```
 
 ---
 
-## Stage 3: `pnpm run ml`
+## Stage 2: `pnpm run ml`
+ ┌──────────────────┬─────────────────────────────────┬──────────────────────────────────────────────────────┐    
+  │                  │        pip_packages（①）        │              runtime_pip_packages（②）               │ 
+  ├──────────────────┼─────────────────────────────────┼──────────────────────────────────────────────────────┤    
+  │ サイズ           │ 軽量（数 MB）                   │ 重型（数 GB）                                        │ 
+  ├──────────────────┼─────────────────────────────────┼──────────────────────────────────────────────────────┤ 
+  │ 保存先           │ 嵌入式 Python の site-packages  │ runtime/ml/（開発）/                                 │    
+  │                  │                                 │ userData/python-packages/（本番）                    │    
+  ├──────────────────┼─────────────────────────────────┼──────────────────────────────────────────────────────┤    
+  │ インストール時期 │ pnpm run runtime (CI/setup      │ pnpm run ml (開発) / ユーザー初回起動                │    
+  │                  │ 段階)                           │                                                      │ 
+  ├──────────────────┼─────────────────────────────────┼──────────────────────────────────────────────────────┤    
+  │ 打包に含む？     │ はい                            │ いいえ                                               │ 
+  ├──────────────────┼─────────────────────────────────┼──────────────────────────────────────────────────────┤    
+  │ PYTHONPATH       │ 不要（Python 自体に内蔵）       │ 必要（main.js が設定）                               │
+  │ で参照           │                                 │                                                      │    
+  └──────────────────┴─────────────────────────────────┴──────────────────────────────────────────────────────┘
+                                                                                                                   
+  各エンジン別のパッケージ一覧                                                                                     
+   
+  ┌────────────────┬─────────────────────────────────────────┬─────────────────────────────────────────────┐       
+  │    エンジン    │     ① pip_packages（嵌入式 Python）     │    ② runtime_pip_packages（runtime/ml/）    │
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤       
+  │ Fish Speech    │ loguru, soundfile, loralib, tiktoken 等 │ torch, torchaudio, transformers, einops 等  │
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤
+  │ GPT-SoVITS     │ cn2an, pypinyin, jieba, g2p_en 等       │ torch, torchaudio, transformers, librosa 等 │       
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤       
+  │ RVC            │ rvc-python, fairseq（特殊処理）         │ torch, torchaudio, faiss-cpu, pyworld 等    │       
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤       
+  │ Seed-VC        │ huggingface_hub                         │ torch, torchaudio, librosa, einops 等       │
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤       
+  │ Faster Whisper │ faster-whisper==1.2.1                   │ なし                                        │
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤       
+  │ FaceFusion     │ なし（エンジン内 requirements）         │ なし                                        │
+  ├────────────────┼─────────────────────────────────────────┼─────────────────────────────────────────────┤       
+  │ Flux/SD/Wan    │ diffusers, accelerate 等                │ torch, torchvision, Pillow 等               │
+  └────────────────┴─────────────────────────────────────────┴─────────────────────────────────────────────┘       
+                                                            
 
 > 脚本：`scripts/ml_base.py`　｜　运行环境：**嵌入式 Python**
 
@@ -90,7 +112,7 @@ python3 scripts/setup_extra.py --engine liveportrait
 
 | 环境 | 目标路径 |
 |------|----------|
-| 开发模式 | `local_data/python-packages/` |
+| 开发模式 | `runtime/ml/` |
 | 生产模式（用户首次启动） | `userData/python-packages/` |
 
 ### 安装内容
@@ -118,16 +140,16 @@ python3 scripts/setup_extra.py --engine liveportrait
 
 ```bash
 # 全量重装
-rm -rf local_data/python-packages/
-runtime/mac/python/bin/python3 scripts/ml_base.py
+rm -rf runtime/ml/
+runtime/python/mac/bin/python3 scripts/ml_base.py
 
 # 指定 PyPI 镜像
-runtime/mac/python/bin/python3 scripts/ml_base.py --pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple
+runtime/python/mac/bin/python3 scripts/ml_base.py --pypi-mirror https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 ---
 
-## Stage 4: `pnpm run ml:extra`
+## Stage 3: `pnpm run ml:extra`
 
 > 脚本：`scripts/ml_extra.py`　｜　运行环境：**嵌入式 Python**
 
@@ -135,7 +157,7 @@ runtime/mac/python/bin/python3 scripts/ml_base.py --pypi-mirror https://pypi.tun
 
 ### 安装目标
 
-同 Stage 3：`local_data/python-packages/`（开发）/ `userData/python-packages/`（生产）
+同 Stage 3：`runtime/ml/`（开发）/ `userData/python-packages/`（生产）
 
 ### 分组内容
 
@@ -150,15 +172,15 @@ runtime/mac/python/bin/python3 scripts/ml_base.py --pypi-mirror https://pypi.tun
 
 ```bash
 # 全量重装
-runtime/mac/python/bin/python3 scripts/ml_extra.py
+runtime/python/mac/bin/python3 scripts/ml_extra.py
 
 # 只装 RAG
-runtime/mac/python/bin/python3 scripts/ml_extra.py --group rag
+runtime/python/mac/bin/python3 scripts/ml_extra.py --group rag
 ```
 
 ---
 
-## Stage 5: `pnpm run checkpoints`
+## Stage 4: `pnpm run checkpoints`
 
 > 脚本：`scripts/checkpoints_base.py` → `scripts/_checkpoint_download.py`　｜　运行环境：**嵌入式 Python**
 
@@ -168,18 +190,18 @@ runtime/mac/python/bin/python3 scripts/ml_extra.py --group rag
 
 | 引擎 | 文件 | 大小 | 保存路径 |
 |------|------|------|----------|
-| fish_speech | model.pth | ~500 MB | `checkpoints/fish_speech/` |
+| fish_speech | model.pth | ~500 MB | `runtime/checkpoints/fish_speech/` |
 | | config.json, special_tokens.json, tokenizer.tiktoken | <1 MB | |
 | | firefly-gan-vq-fsq-8x1024-21hz-generator.pth | ~500 MB | |
-| gpt_sovits | chinese-hubert-base/ (preprocessor_config.json, config.json, pytorch_model.bin) | ~380 MB | `checkpoints/gpt_sovits/` |
+| gpt_sovits | chinese-hubert-base/ (preprocessor_config.json, config.json, pytorch_model.bin) | ~380 MB | `runtime/checkpoints/gpt_sovits/` |
 | | chinese-roberta-wwm-ext-large/ (config.json, tokenizer.json, pytorch_model.bin) | ~1.3 GB | |
 | | gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt | ~600 MB | |
 | | gsv-v2final-pretrained/s2G2333k.pth | ~800 MB | |
-| seed_vc | DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth | ~200 MB | `checkpoints/seed_vc/` |
+| seed_vc | DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth | ~200 MB | `runtime/checkpoints/seed_vc/` |
 | | config_dit_mel_seed_uvit_whisper_small_wavenet.yml | <1 MB | |
-| rvc | hubert_base.pt | ~360 MB | `checkpoints/rvc/` |
+| rvc | hubert_base.pt | ~360 MB | `runtime/checkpoints/rvc/` |
 | | pretrained_v2/f0G40k.pth | ~400 MB | |
-| facefusion | retinaface_10g.onnx | ~16 MB | `runtime/facefusion/engine/.assets/models/` |
+| facefusion | retinaface_10g.onnx | ~16 MB | `runtime/engine/facefusion/.assets/models/` |
 | | arcface_w600k_r50.onnx | ~166 MB | |
 | | 2dfan4.onnx | ~93 MB | |
 | | inswapper_128_fp16.onnx | ~265 MB | |
@@ -188,12 +210,12 @@ runtime/mac/python/bin/python3 scripts/ml_extra.py --group rag
 
 | 引擎 | repo_id | 内容 | 大小 | 保存路径 |
 |------|---------|------|------|----------|
-| seed_vc | nvidia/bigvgan_v2_22khz_80band_256x | BigVGAN 声码器 | ~1.3 GB | `checkpoints/hf_cache/` |
-| seed_vc | openai/whisper-small | Whisper-small 语义编码器 | ~950 MB | `checkpoints/hf_cache/` |
-| seed_vc | funasr/campplus (campplus_cn_common.bin) | 说话人特征提取 | ~25 MB | `checkpoints/`（根目录） |
-| seed_vc | lj1995/VoiceConversionWebUI (rmvpe.pt) | RMVPE F0 提取器 | ~200 MB | `checkpoints/`（根目录） |
+| seed_vc | nvidia/bigvgan_v2_22khz_80band_256x | BigVGAN 声码器 | ~1.3 GB | `runtime/checkpoints/hf_cache/` |
+| seed_vc | openai/whisper-small | Whisper-small 语义编码器 | ~950 MB | `runtime/checkpoints/hf_cache/` |
+| seed_vc | funasr/campplus (campplus_cn_common.bin) | 说话人特征提取 | ~25 MB | `runtime/checkpoints/`（根目录） |
+| seed_vc | lj1995/VoiceConversionWebUI (rmvpe.pt) | RMVPE F0 提取器 | ~200 MB | `runtime/checkpoints/`（根目录） |
 
-> **注意**：campplus 和 rmvpe 的 `cache_dir_rel` 为 `"checkpoints"`（不是 `"checkpoints/hf_cache"`），所以保存在 `checkpoints/models--funasr--campplus/` 和 `checkpoints/models--lj1995--VoiceConversionWebUI/`。UI 中显示为 `seed_vc_hf_root`。
+> **注意**：campplus 和 rmvpe 的 `cache_dir_rel` 为 `"runtime/checkpoints"`（不是 `"runtime/checkpoints/hf_cache"`），所以保存在 `runtime/checkpoints/models--funasr--campplus/` 和 `runtime/checkpoints/models--lj1995--VoiceConversionWebUI/`。UI 中显示为 `seed_vc_hf_root`。
 
 ### 内置音色（voices）
 
@@ -223,19 +245,19 @@ pnpm run checkpoints:check
 pnpm run checkpoints:force
 
 # 单引擎重装
-runtime/mac/python/bin/python3 scripts/checkpoints_base.py --engine seed_vc
+runtime/python/mac/bin/python3 scripts/checkpoints_base.py --engine seed_vc
 
 # 只重装 HF 缓存部分（删除后重跑）
-rm -rf checkpoints/hf_cache/models--nvidia--bigvgan_v2_22khz_80band_256x/
-rm -rf checkpoints/hf_cache/models--openai--whisper-small/
-rm -rf checkpoints/models--funasr--campplus/
-rm -rf checkpoints/models--lj1995--VoiceConversionWebUI/
+rm -rf runtime/checkpoints/hf_cache/models--nvidia--bigvgan_v2_22khz_80band_256x/
+rm -rf runtime/checkpoints/hf_cache/models--openai--whisper-small/
+rm -rf runtime/checkpoints/models--funasr--campplus/
+rm -rf runtime/checkpoints/models--lj1995--VoiceConversionWebUI/
 pnpm run checkpoints --engine seed_vc
 ```
 
 ---
 
-## Stage 6: `pnpm run checkpoints:extra`
+## Stage 5: `pnpm run checkpoints:extra`
 
 > 脚本：`scripts/checkpoints_extra.py` → `scripts/_checkpoint_download.py`　｜　运行环境：**嵌入式 Python**
 
@@ -245,12 +267,12 @@ pnpm run checkpoints --engine seed_vc
 
 | 引擎 | 内容 | 大小 | 保存路径 | 备注 |
 |------|------|------|----------|------|
-| flux | GGUF Q4_K_S transformer | ~6.5 GB | `checkpoints/flux/` | 无需 HF token |
-| flux | FLUX.1-schnell base (T5-XXL + CLIP-L + VAE) | ~10 GB | `checkpoints/hf_cache/` | **需 HF token** |
-| sd | SD-Turbo 完整模型 | ~2.3 GB | `checkpoints/sd/` | 无需 HF token |
-| wan | Wan2.1-T2V-1.3B-Diffusers | ~15.6 GB | `checkpoints/hf_cache/` | |
-| got_ocr | GOT-OCR-2.0-hf | ~1.5 GB | `checkpoints/hf_cache/` | |
-| liveportrait | KwaiVGI/LivePortrait | ~1.8 GB | `checkpoints/hf_cache/` | |
+| flux | GGUF Q4_K_S transformer | ~6.5 GB | `runtime/checkpoints/flux/` | 无需 HF token |
+| flux | FLUX.1-schnell base (T5-XXL + CLIP-L + VAE) | ~10 GB | `runtime/checkpoints/hf_cache/` | **需 HF token** |
+| sd | SD-Turbo 完整模型 | ~2.3 GB | `runtime/checkpoints/sd/` | 无需 HF token |
+| wan | Wan2.1-T2V-1.3B-Diffusers | ~15.6 GB | `runtime/checkpoints/hf_cache/` | |
+| got_ocr | GOT-OCR-2.0-hf | ~1.5 GB | `runtime/checkpoints/hf_cache/` | |
+| liveportrait | KwaiVGI/LivePortrait | ~1.8 GB | `runtime/checkpoints/hf_cache/` | |
 | whisper | *(无 URL，暂不预下载)* | ~1.5 GB | — | 当前 faster_whisper 为默认引擎 |
 
 ### 再安装方式
@@ -260,10 +282,10 @@ pnpm run checkpoints --engine seed_vc
 pnpm run checkpoints:extra
 
 # 单引擎下载
-runtime/mac/python/bin/python3 scripts/checkpoints_extra.py --engine flux
+runtime/python/mac/bin/python3 scripts/checkpoints_extra.py --engine flux
 
 # 强制重新下载
-runtime/mac/python/bin/python3 scripts/checkpoints_extra.py --engine wan --force
+runtime/python/mac/bin/python3 scripts/checkpoints_extra.py --engine wan --force
 ```
 
 ---
@@ -279,10 +301,10 @@ Stage 2: pnpm run setup:extra ───────────── 嵌入式 
    │  可选引擎 pip_packages + LivePortrait 源码
    │
 Stage 3: pnpm run ml ────────────────────── 嵌入式 Python 运行
-   │  torch/torchaudio 等 → local_data/python-packages/
+   │  torch/torchaudio 等 → runtime/ml/
    │
 Stage 4: pnpm run ml:extra ──────────────── 嵌入式 Python 运行（可选）
-   │  RAG/Agent/LoRA 包 → local_data/python-packages/
+   │  RAG/Agent/LoRA 包 → runtime/ml/
    │
 Stage 5: pnpm run checkpoints ───────────── 嵌入式 Python 运行
    │  基础引擎 checkpoint + 内置音色 + HF 缓存

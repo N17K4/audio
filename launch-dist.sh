@@ -10,7 +10,7 @@ if [ ! -f "$APP_BIN" ]; then
   exit 1
 fi
 
-PYTHON_BIN="$SCRIPT_DIR/dist/mac-arm64/AI Workshop.app/Contents/Resources/runtime/mac/python/bin/python3"
+PYTHON_BIN="$SCRIPT_DIR/dist/mac-arm64/AI Workshop.app/Contents/Resources/runtime/python/mac/bin/python3"
 if [ ! -f "$PYTHON_BIN" ]; then
   echo "WARN: 内置 Python 未找到，backend 将无法启动（请先 pnpm run setup）"
 fi

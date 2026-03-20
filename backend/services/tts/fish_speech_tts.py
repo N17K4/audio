@@ -25,8 +25,8 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_refs: list
             status_code=500,
             detail=(
                 "[fish_speech] 未找到 Fish Speech 引擎。"
-                "请将 fish-speech 仓库放置于 runtime/fish_speech/engine/ 目录，"
-                "或在 runtime/fish_speech/engine.json 中配置 'command' 字段。"
+                "请将 fish-speech 仓库放置于 runtime/engine/fish_speech/ 目录，"
+                "或在 backend/wrappers/fish_speech/engine.json 中配置 'command' 字段。"
                 "（注意：fish-speech v2 需通过 API 服务器调用，请查看日志获取详细说明。）"
             ),
         )
@@ -86,8 +86,8 @@ async def run_fish_speech_tts(text: str, voice: str = "", voice_refs: list = [],
             status_code=400,
             detail=(
                 "Fish Speech 引擎未找到。"
-                "请将 fish-speech 仓库放置于 runtime/fish_speech/engine/ 目录，"
-                "或在 runtime/fish_speech/engine.json 中配置 'command' 字段；"
+                "请将 fish-speech 仓库放置于 runtime/engine/fish_speech/ 目录，"
+                "或在 backend/wrappers/fish_speech/engine.json 中配置 'command' 字段；"
                 "如需调用 Fish Speech HTTP 服务，请在设置中填写服务地址（endpoint）。"
             ),
         )

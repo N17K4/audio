@@ -216,7 +216,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
 
   function SectionModels() {
     const STAGE_META: Record<string, { label: string; cmd: string; desc: string; estimatedSize: string }> = {
-      setup:             { label: '运行环境',         cmd: 'pnpm run setup',             desc: '嵌入式 Python + 后端依赖 + 全部引擎 pip 包与源码 + FFmpeg + Pandoc',                estimatedSize: '~600 MB' },
+      setup:             { label: '运行环境',         cmd: 'pnpm run runtime',           desc: '嵌入式 Python + 后端依赖 + 全部引擎 pip 包与源码 + FFmpeg + Pandoc',                estimatedSize: '~600 MB' },
       ml_base:           { label: 'ML 基础依赖',      cmd: 'pnpm run ml',                desc: 'torch · torchaudio · transformers 等基础引擎 ML 运行库',                           estimatedSize: '~2–4 GB' },
       ml_extra:          { label: 'ML 扩展依赖',      cmd: 'pnpm run ml:extra',          desc: 'RAG（llama-index · faiss）· Agent（langgraph）· LoRA（peft · trl）',                estimatedSize: '~500 MB–1 GB' },
       checkpoints_base:  { label: '基础模型权重',     cmd: 'pnpm run checkpoints',       desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · Whisper · FaceFusion 模型 + 内置音色',   estimatedSize: '~8–10 GB' },
@@ -563,6 +563,11 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 </h3>
               </div>
               <div className="px-6 py-4 space-y-3">
+                {reinstallConfirmStage === 'setup' && (
+                  <div className="rounded border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-700 dark:text-amber-300 leading-relaxed">
+                    运行环境中的 Python、FFmpeg、Pandoc 从 GitHub 下载，国内网络可能较慢。PyPI 依赖支持在引导页中选择镜像源。
+                  </div>
+                )}
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   将清除该阶段的已有数据，并打开下载引导窗口。你可以在引导页中选择 PyPI / HuggingFace 镜像源后再开始下载。
                 </p>

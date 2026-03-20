@@ -1,8 +1,0 @@
-{
-  "cmd_template": "",
-  "examples": [
-    "\"{python}\" \"runtime/rvc/engine/infer.py\" --input {input} --output {output} --model {model} --index {index}",
-    "\"runtime/rvc/engine/infer.bat\" --input {input} --output {output} --model {model} --index {index}"
-  ],
-  "note": "Optional advanced override. Prefer placing your real RVC engine script in runtime/rvc/engine/. No external C: path required."
-}

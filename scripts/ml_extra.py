@@ -43,9 +43,9 @@ EXTRA_ENGINES = {
 def get_embedded_python(root: Path) -> str:
     """返回嵌入式 Python 可执行路径，找不到返回空串。"""
     if platform.system() == "Windows":
-        p = root / "runtime" / "win" / "python" / "python.exe"
+        p = root / "runtime" / "python" / "win" / "python.exe"
     else:
-        p = root / "runtime" / "mac" / "python" / "bin" / "python3"
+        p = root / "runtime" / "python" / "mac" / "bin" / "python3"
     return str(p) if p.exists() else ""
 
 
@@ -304,16 +304,16 @@ def main():
 
     project_root = Path(__file__).resolve().parent.parent
 
-    # 开发模式（无 --target）：默认装到 local_data/python-packages/，不污染嵌入式 Python
+    # 开发模式（无 --target）：默认装到 runtime/ml/，不污染嵌入式 Python
     if not args.target:
-        args.target = str(project_root / "local_data" / "python-packages")
+        args.target = str(project_root / "runtime" / "ml")
 
     resources_root_env = os.getenv("RESOURCES_ROOT", "")
     resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
 
-    manifest_path = resources_root / "wrappers" / "manifest.json"
+    manifest_path = resources_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
-        manifest_path = project_root / "wrappers" / "manifest.json"
+        manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         _emit({"type": "log", "message": f"✗ 找不到 manifest.json"}, args.json_progress)
         return 1

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-开发环境一站式初始化 — 下载嵌入式 Python + 安装 backend 依赖 + 基础引擎。
+嵌入式 Python 运行环境构建 — 下载嵌入式 Python + 安装 backend 依赖 + 全部引擎。
 
-Base 引擎：Fish Speech、GPT-SoVITS、RVC、Seed-VC、Faster Whisper、FaceFusion
+基础引擎：Fish Speech、GPT-SoVITS、RVC、Seed-VC、Faster Whisper、FaceFusion
+额外引擎：LivePortrait、Flux、SD、WAN、GOT-OCR、Whisper
 
 用法（开发全量）：
-    python3 scripts/setup_base.py
+    python3 scripts/runtime.py
 
 用法（只安装指定引擎，供 main.js app:downloadEngine 调用）：
-    python3 scripts/setup_base.py --engine fish_speech
+    python3 scripts/runtime.py --engine fish_speech
 """
 
 from __future__ import annotations
@@ -38,18 +39,26 @@ if hasattr(sys.stderr, "reconfigure"):
 # 配置常量
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# macOS: python-build-standalone 版本
-MAC_PBS_RELEASE = "20250317"
-MAC_PY_VERSION = "3.12.9"
+# python-build-standalone 版本（macOS / Windows 共用）
+PBS_RELEASE = "20250317"
+PBS_PY_VERSION = "3.12.9"
 
-# Windows: python.org 嵌入式包版本
-WIN_PY_VERSION = "3.10.11"
-
-# 基础引擎集合
+# 基础引擎集合（step 3 安装，含嵌入式 Python + backend 依赖）
 BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper", "facefusion"}
+
+# 额外引擎集合（step 4 安装，需嵌入式 Python 已就绪）
+EXTRA_ENGINES = {"whisper", "got_ocr", "liveportrait", "wan", "flux", "sd"}
 
 # HuggingFace 资产仓库
 HF_ASSETS_REPO = "N17K4/ai-workshop-assets"
+
+# PyPI 镜像源（通过 --pypi-mirror 设置）
+PYPI_MIRROR = ""
+
+
+def _pip_mirror_args() -> list[str]:
+    """返回 pip install 的镜像参数。"""
+    return ["-i", PYPI_MIRROR] if PYPI_MIRROR else []
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -75,9 +84,9 @@ def _reporthook(count: int, block_size: int, total_size: int) -> None:
 def get_embedded_python(root: Path) -> str:
     """返回嵌入式 Python 可执行路径，找不到返回空串。"""
     if platform.system() == "Windows":
-        p = root / "runtime" / "win" / "python" / "python.exe"
+        p = root / "runtime" / "python" / "win" / "python.exe"
     else:
-        p = root / "runtime" / "mac" / "python" / "bin" / "python3"
+        p = root / "runtime" / "python" / "mac" / "bin" / "python3"
     return str(p) if p.exists() else ""
 
 
@@ -117,13 +126,21 @@ def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
 # 第一步：下载嵌入式 Python
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _download_mac_python(dest_dir: Path) -> None:
-    """下载 python-build-standalone 到 dest_dir。"""
-    import struct
-    arch = "aarch64" if struct.calcsize("P") * 8 == 64 and platform.machine() == "arm64" else "x86_64"
-    filename = f"cpython-{MAC_PY_VERSION}+{MAC_PBS_RELEASE}-{arch}-apple-darwin-install_only.tar.gz"
-    url = f"https://github.com/astral-sh/python-build-standalone/releases/download/{MAC_PBS_RELEASE}/{filename}"
-    runtime_dir = dest_dir.parent.parent  # runtime/mac/python -> runtime/
+def _download_pbs_python(dest_dir: Path) -> None:
+    """下载 python-build-standalone 到 dest_dir（macOS / Windows 共用）。"""
+    system = platform.system()
+    if system == "Darwin":
+        import struct
+        arch = "aarch64" if struct.calcsize("P") * 8 == 64 and platform.machine() == "arm64" else "x86_64"
+        triple = f"{arch}-apple-darwin"
+    elif system == "Windows":
+        triple = "x86_64-pc-windows-msvc"
+    else:
+        raise RuntimeError(f"不支持的平台: {system}")
+
+    filename = f"cpython-{PBS_PY_VERSION}+{PBS_RELEASE}-{triple}-install_only.tar.gz"
+    url = f"https://github.com/astral-sh/python-build-standalone/releases/download/{PBS_RELEASE}/{filename}"
+    runtime_dir = dest_dir.parent.parent  # runtime/python/{mac|win} -> runtime/
     runtime_dir.mkdir(parents=True, exist_ok=True)
     tmp_tar = runtime_dir / "_python_tmp.tar.gz"
 
@@ -148,55 +165,18 @@ def _download_mac_python(dest_dir: Path) -> None:
         shutil.rmtree(dest_dir)
     shutil.move(str(extracted_python), str(dest_dir))
     shutil.rmtree(tmp_extract, ignore_errors=True)
-    print(f"  ✓ macOS standalone Python {MAC_PY_VERSION} 已就绪: {dest_dir}")
 
-    # 装 huggingface_hub 等依赖到嵌入式 Python 中
-    py_exe = dest_dir / "bin" / "python3"
-    print(f"  装 huggingface_hub 到嵌入式 Python...")
+    # pip 在 python-build-standalone 中已内置，直接装 huggingface_hub
+    if system == "Windows":
+        py_exe = dest_dir / "python.exe"
+    else:
+        py_exe = dest_dir / "bin" / "python3"
+    print(f"  ✓ standalone Python {PBS_PY_VERSION} 已就绪: {dest_dir}")
+    print("  装 huggingface_hub 到嵌入式 Python...")
     subprocess.run(
-        [str(py_exe), "-m", "pip", "install", "-q", "huggingface-hub", "requests", "tqdm"],
+        [str(py_exe), "-m", "pip", "install", "-q", *_pip_mirror_args(), "huggingface-hub", "requests", "tqdm"],
         check=False,
     )
-
-
-def _download_win_python(dest_dir: Path) -> None:
-    """下载 Windows 嵌入式 Python 并启用 site-packages + pip。"""
-    url = f"https://www.python.org/ftp/python/{WIN_PY_VERSION}/python-{WIN_PY_VERSION}-embed-amd64.zip"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    tmp_zip = dest_dir.parent / "_python_tmp.zip"
-
-    print(f"  下载: {url}")
-    urllib.request.urlretrieve(url, str(tmp_zip), _reporthook)
-    if _IS_TTY:
-        print()
-
-    print("  解压 Windows 嵌入式 Python...")
-    with zipfile.ZipFile(tmp_zip, "r") as zf:
-        zf.extractall(dest_dir)
-    tmp_zip.unlink()
-
-    # 启用 site-packages
-    ver_short = WIN_PY_VERSION.replace(".", "")[:3]
-    pth_file = dest_dir / f"python{ver_short}._pth"
-    if pth_file.exists():
-        content = pth_file.read_text(encoding="utf-8")
-        content = content.replace("#import site", "import site")
-        content += "\n../../../app/backend\n"
-        pth_file.write_text(content, encoding="utf-8")
-
-    # 安装 pip
-    get_pip_path = dest_dir / "get-pip.py"
-    urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", str(get_pip_path))
-    py_exe = str(dest_dir / "python.exe")
-    subprocess.run([py_exe, str(get_pip_path), "--quiet"], check=True)
-    get_pip_path.unlink()
-    subprocess.run([py_exe, "-m", "pip", "install", "setuptools", "wheel", "tomli", "--quiet"], check=True)
-
-    # 装 huggingface_hub 等依赖
-    print(f"  装 huggingface_hub 到嵌入式 Python...")
-    subprocess.run([py_exe, "-m", "pip", "install", "huggingface-hub", "requests", "tqdm", "--quiet"], check=False)
-
-    print(f"  ✓ Windows 嵌入式 Python {WIN_PY_VERSION} 已就绪: {dest_dir}")
 
 
 def ensure_embedded_python(project_root: Path) -> str:
@@ -207,23 +187,21 @@ def ensure_embedded_python(project_root: Path) -> str:
 
     system = platform.system()
     if system == "Darwin":
-        dest = project_root / "runtime" / "mac" / "python"
-        print(f"\n[setup] macOS standalone Python 不存在，开始下载 {MAC_PY_VERSION}...")
-        _download_mac_python(dest)
+        dest = project_root / "runtime" / "python" / "mac"
     elif system == "Windows":
-        dest = project_root / "runtime" / "win" / "python"
-        print(f"\n[setup] Windows 嵌入式 Python 不存在，开始下载 {WIN_PY_VERSION}...")
-        _download_win_python(dest)
+        dest = project_root / "runtime" / "python" / "win"
     else:
         print(f"✗ 不支持的平台: {system}")
         sys.exit(1)
+
+    print(f"\n[setup] standalone Python 不存在，开始下载 {PBS_PY_VERSION}...")
+    _download_pbs_python(dest)
 
     py = get_embedded_python(project_root)
     if not py:
         print("✗ Python 下载后仍找不到可执行文件")
         sys.exit(1)
     return py
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 第二步：安装 backend 依赖
@@ -278,7 +256,7 @@ def install_backend_deps(project_root: Path, py: str) -> bool:
     req_file.write_text("\n".join(reqs), encoding="utf-8")
     try:
         r = subprocess.run(
-            [py, "-m", "pip", "install", "-r", str(req_file), "--quiet"],
+            [py, "-m", "pip", "install", "-r", str(req_file), *_pip_mirror_args(), "--quiet"],
             text=True, timeout=600,
         )
         if r.returncode != 0:
@@ -291,7 +269,7 @@ def install_backend_deps(project_root: Path, py: str) -> bool:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 第三步：安装引擎 pip_packages
+# 安装引擎 pip_packages（通用）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
@@ -307,7 +285,7 @@ def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
             continue
         print(f"  [pip] 安装 {pkg} ...")
         result = subprocess.run(
-            [py, "-m", "pip", "install", pkg, "--quiet"],
+            [py, "-m", "pip", "install", pkg, *_pip_mirror_args(), "--quiet"],
             capture_output=True, text=True, timeout=600,
         )
         if result.returncode == 0:
@@ -445,7 +423,7 @@ except ImportError:
 def _install_rvc_python(py: str) -> bool:
     def pip(*args: str) -> bool:
         r = subprocess.run(
-            [py, "-m", "pip", "install", *args, "--quiet"],
+            [py, "-m", "pip", "install", *args, *_pip_mirror_args(), "--quiet"],
             capture_output=True, text=True, timeout=600,
         )
         if r.returncode != 0:
@@ -468,8 +446,8 @@ def _install_rvc_python(py: str) -> bool:
 
 
 def setup_rvc_engine(project_root: Path) -> bool:
-    """安装 rvc-python 并生成推理脚本 runtime/rvc/engine/infer.py。"""
-    engine_dir = project_root / "runtime" / "rvc" / "engine"
+    """安装 rvc-python 并生成推理脚本 runtime/engine/rvc/infer.py。"""
+    engine_dir = project_root / "runtime" / "engine" / "rvc"
     infer_script = engine_dir / "infer.py"
 
     py = get_embedded_python(project_root)
@@ -493,14 +471,14 @@ def setup_rvc_engine(project_root: Path) -> bool:
             print("    ✗ rvc-python 安装失败，RVC 功能不可用")
 
     if infer_script.exists():
-        print(f"  ✓ runtime/rvc/engine/infer.py  (已存在)")
+        print(f"  ✓ runtime/engine/rvc/infer.py  (已存在)")
     else:
-        print(f"  ✗ runtime/rvc/engine/infer.py  (缺失，生成中…)")
+        print(f"  ✗ runtime/engine/rvc/infer.py  (缺失，生成中…)")
         engine_dir.mkdir(parents=True, exist_ok=True)
         infer_script.write_text(
             '''#!/usr/bin/env python3
 """RVC 推理脚本（使用 rvc-python 库）
-由 setup_base.py 自动生成，请勿手动修改。
+由 runtime.py 自动生成，请勿手動修改。
 """
 import argparse
 import os
@@ -579,7 +557,7 @@ if __name__ == "__main__":
 ''',
             encoding="utf-8",
         )
-        print(f"    ✓ 已创建 runtime/rvc/engine/infer.py")
+        print(f"    ✓ 已创建 runtime/engine/rvc/infer.py")
 
     return rvc_ok
 
@@ -715,7 +693,7 @@ def _patch_fish_speech_generate(engine_dir: Path) -> None:
 
 def setup_fish_speech_engine(project_root: Path) -> bool:
     """克隆 fish-speech v1.5.0 并精简到推理所需文件。"""
-    engine_dir = project_root / "runtime" / "fish_speech" / "engine"
+    engine_dir = project_root / "runtime" / "engine" / "fish_speech"
     sentinel = engine_dir / "tools" / "inference_engine" / "__init__.py"
 
     if sentinel.exists():
@@ -730,7 +708,7 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
         return True
 
     print(f"  [fish_speech] 克隆 {_FISH_SPEECH_REPO} @ {_FISH_SPEECH_TAG} ...")
-    tmp_dir = project_root / "runtime" / "fish_speech" / "_engine_tmp"
+    tmp_dir = project_root / "runtime" / "engine" / "fish_speech_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
 
@@ -855,7 +833,7 @@ def _patch_seed_vc_inference(engine_dir: Path) -> None:
 
 def setup_seed_vc_engine(project_root: Path) -> bool:
     """克隆 seed-vc 并精简到推理所需文件。"""
-    engine_dir = project_root / "runtime" / "seed_vc" / "engine"
+    engine_dir = project_root / "runtime" / "engine" / "seed_vc"
     sentinel = engine_dir / "inference.py"
 
     if sentinel.exists():
@@ -869,7 +847,7 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
         return True
 
     print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
-    tmp_dir = project_root / "runtime" / "seed_vc" / "_engine_tmp"
+    tmp_dir = project_root / "runtime" / "engine" / "seed_vc_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
@@ -944,7 +922,7 @@ _GPT_SOVITS_RM = [
 
 def setup_gpt_sovits_engine(project_root: Path) -> bool:
     """克隆 GPT-SoVITS 并精简到推理所需文件。"""
-    engine_dir = project_root / "runtime" / "gpt_sovits" / "engine"
+    engine_dir = project_root / "runtime" / "engine" / "gpt_sovits"
     sentinel = engine_dir / "GPT_SoVITS"
 
     if sentinel.exists():
@@ -957,7 +935,7 @@ def setup_gpt_sovits_engine(project_root: Path) -> bool:
         return True
 
     print(f"  [gpt_sovits] 克隆 {_GPT_SOVITS_REPO} @ {_GPT_SOVITS_TAG} ...")
-    tmp_dir = project_root / "runtime" / "gpt_sovits" / "_engine_tmp"
+    tmp_dir = project_root / "runtime" / "engine" / "gpt_sovits_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
 
@@ -1009,7 +987,7 @@ _FACEFUSION_RM = [".github", "tests", "docs", "assets"]
 
 def setup_facefusion_engine(project_root: Path) -> bool:
     """克隆 FaceFusion 并精简到推理所需文件。"""
-    engine_dir = project_root / "runtime" / "facefusion" / "engine"
+    engine_dir = project_root / "runtime" / "engine" / "facefusion"
     sentinel = engine_dir / "facefusion.py"
 
     if sentinel.exists():
@@ -1022,7 +1000,7 @@ def setup_facefusion_engine(project_root: Path) -> bool:
         return True
 
     print(f"  [facefusion] 克隆 {_FACEFUSION_REPO} @ {_FACEFUSION_TAG} ...")
-    tmp_dir = project_root / "runtime" / "facefusion" / "_engine_tmp"
+    tmp_dir = project_root / "runtime" / "engine" / "facefusion_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
 
@@ -1062,19 +1040,133 @@ def setup_facefusion_engine(project_root: Path) -> bool:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# LivePortrait 引擎源码
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_LIVEPORTRAIT_REPO = "https://github.com/KlingAIResearch/LivePortrait"
+_LIVEPORTRAIT_COMMIT = "49784e879821538ecda5c8e4ca0472f4cb6236cf"
+_LIVEPORTRAIT_KEEP = ["liveportrait", "inference.py", "src", "configs"]
+_LIVEPORTRAIT_RM = ["assets", "docs", "scripts", ".github"]
+
+
+def setup_liveportrait_engine(project_root: Path) -> bool:
+    """克隆 LivePortrait 并精简到推理所需文件。"""
+    engine_dir = project_root / "runtime" / "engine" / "liveportrait"
+    sentinel = engine_dir / "liveportrait" / "__init__.py"
+
+    if sentinel.exists():
+        print(f"  ✓ liveportrait engine 已存在（{sentinel}）")
+        return True
+
+    if _download_engine_zip_from_hf("liveportrait_49784e87.zip", engine_dir):
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ liveportrait engine 就绪（{n} 个文件，HF 下载）")
+        return True
+
+    print(f"  [liveportrait] 克隆 {_LIVEPORTRAIT_REPO} @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
+    sys.stdout.flush()
+    tmp_dir = project_root / "runtime" / "engine" / "liveportrait_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    cmds = [
+        ["git", "-C", str(tmp_dir), "init"],
+        ["git", "-C", str(tmp_dir), "remote", "add", "origin", _LIVEPORTRAIT_REPO],
+        ["git", "-C", str(tmp_dir), "fetch", "--depth", "1", "origin", _LIVEPORTRAIT_COMMIT],
+        ["git", "-C", str(tmp_dir), "checkout", "FETCH_HEAD"],
+    ]
+    for cmd in cmds:
+        print(f"  $ {' '.join(cmd)}")
+        sys.stdout.flush()
+        r = subprocess.run(cmd, capture_output=False, text=True)
+        if r.returncode != 0:
+            print(f"  ✗ 命令失败（exit {r.returncode}）")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in _LIVEPORTRAIT_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _LIVEPORTRAIT_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ liveportrait engine 就绪（{n} 个文件）")
+    return True
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Flux 引擎依赖
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def setup_flux_engine(project_root: Path, packages: list[str], py: str) -> bool:
+    """安装 Flux GGUF 推理依赖。"""
+    print("  [flux] 安装 Flux GGUF 推理依赖")
+    all_ok = True
+    for pkg in packages:
+        module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+        check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True)
+        if check.returncode == 0:
+            print(f"  ✓ {pkg}  (已安装)")
+            continue
+        print(f"  [pip] 安装 {pkg} ...")
+        result = subprocess.run(
+            [py, "-m", "pip", "install", pkg, *_pip_mirror_args(), "--quiet"],
+            capture_output=True, text=True, timeout=600,
+        )
+        if result.returncode == 0:
+            print(f"    ✓ 安装成功: {pkg}")
+        else:
+            print(f"    ✗ 安装失败: {result.stderr.strip()[:200]}")
+            all_ok = False
+
+    test_script = (
+        "from diffusers import FluxTransformer2DModel\n"
+        "try:\n"
+        "    from diffusers.quantizers.gguf import GGUFQuantizationConfig\n"
+        "    print('gguf_quant: ok')\n"
+        "except ImportError:\n"
+        "    print('gguf_quant: not available (diffusers may need upgrade)')\n"
+    )
+    check = subprocess.run([py, "-c", test_script], capture_output=True, text=True)
+    if check.returncode == 0:
+        print(f"  ✓ Flux diffusers GGUF 支持验证通过")
+        print(f"    {check.stdout.strip()}")
+    else:
+        print(f"  ⚠ Flux 验证警告: {check.stderr.strip()[:200]}")
+    return all_ok
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # FFmpeg / Pandoc 下载
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def download_ffmpeg(project_root: Path) -> bool:
-    """下载 FFmpeg 静态二进制到 runtime/{mac|win}/bin/。"""
+    """下载 FFmpeg 静态二进制到 runtime/bin/{mac|win}/。"""
     system = platform.system()
 
     if system == "Darwin":
-        bin_dir = project_root / "runtime" / "mac" / "bin"
+        bin_dir = project_root / "runtime" / "bin" / "mac"
         dest = bin_dir / "ffmpeg"
         url = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
     elif system == "Windows":
-        bin_dir = project_root / "runtime" / "win" / "bin"
+        bin_dir = project_root / "runtime" / "bin" / "win"
         dest = bin_dir / "ffmpeg.exe"
         url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     else:
@@ -1162,19 +1254,19 @@ def download_ffmpeg(project_root: Path) -> bool:
 
 
 def download_pandoc(project_root: Path) -> bool:
-    """下载 pandoc 静态二进制到 runtime/{mac|win}/bin/。"""
+    """下载 pandoc 静态二进制到 runtime/bin/{mac|win}/。"""
     system = platform.system()
     machine = platform.machine().lower()
     version = "3.6.4"
 
     if system == "Darwin":
-        bin_dir = project_root / "runtime" / "mac" / "bin"
+        bin_dir = project_root / "runtime" / "bin" / "mac"
         dest = bin_dir / "pandoc"
         arch = "arm64" if "arm" in machine or "aarch" in machine else "x86_64"
         url = f"https://github.com/jgm/pandoc/releases/download/{version}/pandoc-{version}-{arch}-macOS.zip"
         binary_in_zip = f"pandoc-{version}/bin/pandoc"
     elif system == "Windows":
-        bin_dir = project_root / "runtime" / "win" / "bin"
+        bin_dir = project_root / "runtime" / "bin" / "win"
         dest = bin_dir / "pandoc.exe"
         url = f"https://github.com/jgm/pandoc/releases/download/{version}/pandoc-{version}-windows-x86_64.zip"
         binary_in_zip = f"pandoc-{version}/pandoc.exe"
@@ -1231,12 +1323,48 @@ def download_pandoc(project_root: Path) -> bool:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 引擎安装分发（统一入口）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _install_engine(engine_name: str, engines: dict, py: str, project_root: Path) -> bool:
+    """安装单个引擎的 pip_packages + 源码。返回是否成功。"""
+    cfg = engines.get(engine_name, {})
+    packages: list[str] = cfg.get("pip_packages", [])
+    ok = True
+
+    # pip_packages
+    if engine_name == "rvc":
+        if not setup_rvc_engine(project_root):
+            ok = False
+    elif engine_name == "flux":
+        if not setup_flux_engine(project_root, packages, py):
+            ok = False
+    elif packages:
+        if not setup_pip_packages(engine_name, packages, py):
+            ok = False
+
+    # 引擎源码 setup
+    engine_source_map = {
+        "fish_speech": lambda: setup_fish_speech_engine(project_root),
+        "gpt_sovits": lambda: setup_gpt_sovits_engine(project_root),
+        "seed_vc": lambda: setup_seed_vc_engine(project_root),
+        "facefusion": lambda: setup_facefusion_engine(project_root),
+        "liveportrait": lambda: setup_liveportrait_engine(project_root),
+    }
+    source_fn = engine_source_map.get(engine_name)
+    if source_fn and not source_fn():
+        ok = False
+
+    return ok
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 主流程
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def main_full_setup(project_root: Path) -> int:
-    """全量 setup：下载 Python + backend 依赖 + 基础引擎 + FFmpeg + pandoc。"""
-    manifest_path = project_root / "wrappers" / "manifest.json"
+    """全量 setup：下载 Python + backend 依赖 + 全部引擎 + FFmpeg + pandoc。"""
+    manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json: {manifest_path}")
         return 1
@@ -1245,48 +1373,38 @@ def main_full_setup(project_root: Path) -> int:
     engines: dict = manifest.get("engines", {})
 
     # 1. 确保嵌入式 Python
-    print("\n=== 1/4 嵌入式 Python ===")
+    print("\n=== 1/5 嵌入式 Python ===")
     py = ensure_embedded_python(project_root)
     print(f"嵌入式 Python: {py}")
 
     all_ok = True
 
     # 2. 安装 backend 依赖
-    print("\n=== 2/4 安装 backend 依赖 ===")
+    print("\n=== 2/5 安装 backend 依赖 ===")
     if not install_backend_deps(project_root, py):
         all_ok = False
 
     # 3. 安装基础引擎 pip_packages + 源码
-    print("\n=== 3/4 安装基础引擎 ===")
+    print("\n=== 3/5 安装基础引擎 ===")
     for engine_name in sorted(BASE_ENGINES):
-        cfg = engines.get(engine_name, {})
-        packages: list[str] = cfg.get("pip_packages", [])
         print(f"\n▶ {engine_name}")
+        if not _install_engine(engine_name, engines, py, project_root):
+            all_ok = False
 
-        if engine_name == "rvc":
-            if not setup_rvc_engine(project_root):
-                all_ok = False
-        else:
-            if packages:
-                if not setup_pip_packages(engine_name, packages, py):
-                    all_ok = False
+    # 4. 安装额外引擎 pip_packages + 源码
+    print("\n=== 4/5 安装额外引擎 ===")
+    for engine_name in sorted(EXTRA_ENGINES):
+        cfg = engines.get(engine_name, {})
+        packages = cfg.get("pip_packages", [])
+        # 跳过无 pip_packages 且无源码的引擎
+        if not packages and engine_name not in ("liveportrait",):
+            continue
+        print(f"\n▶ {engine_name}")
+        if not _install_engine(engine_name, engines, py, project_root):
+            all_ok = False
 
-        # 引擎源码 setup
-        if engine_name == "fish_speech":
-            if not setup_fish_speech_engine(project_root):
-                all_ok = False
-        elif engine_name == "gpt_sovits":
-            if not setup_gpt_sovits_engine(project_root):
-                all_ok = False
-        elif engine_name == "seed_vc":
-            if not setup_seed_vc_engine(project_root):
-                all_ok = False
-        elif engine_name == "facefusion":
-            if not setup_facefusion_engine(project_root):
-                all_ok = False
-
-    # 4. FFmpeg + pandoc
-    print("\n=== 4/4 下载工具 ===")
+    # 5. FFmpeg + pandoc
+    print("\n=== 5/5 下载工具 ===")
     print("\n▶ ffmpeg")
     if not download_ffmpeg(project_root):
         all_ok = False
@@ -1296,7 +1414,7 @@ def main_full_setup(project_root: Path) -> int:
 
     print()
     if all_ok:
-        print("✓ 基础环境初始化完成")
+        print("✓ 环境初始化完成")
         return 0
     else:
         print("✗ 部分步骤失败，请检查上方日志")
@@ -1305,9 +1423,9 @@ def main_full_setup(project_root: Path) -> int:
 
 def main_single_engine(engine: str, project_root: Path) -> int:
     """只安装指定引擎（pip_packages + 源码），供 main.js app:downloadEngine 调用。"""
-    manifest_path = project_root / "wrappers" / "manifest.json"
+    manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
-        manifest_path = Path(os.getenv("RESOURCES_ROOT", "")) / "wrappers" / "manifest.json"
+        manifest_path = Path(os.getenv("RESOURCES_ROOT", "")) / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json")
         return 1
@@ -1323,36 +1441,20 @@ def main_single_engine(engine: str, project_root: Path) -> int:
         print("✗ 嵌入式 Python 未找到")
         return 1
 
-    cfg = engines.get(engine, {})
-    packages = cfg.get("pip_packages", [])
-
     print(f"▶ setup engine: {engine}")
-
-    ok = True
-    # pip_packages
-    if packages:
-        if engine == "rvc":
-            ok = setup_rvc_engine(project_root)
-        else:
-            ok = setup_pip_packages(engine, packages, py)
-
-    # 源码 setup
-    engine_source_map = {
-        "fish_speech": lambda: setup_fish_speech_engine(project_root),
-        "seed_vc": lambda: setup_seed_vc_engine(project_root),
-        "facefusion": lambda: setup_facefusion_engine(project_root),
-    }
-    source_fn = engine_source_map.get(engine)
-    if source_fn and not source_fn():
-        ok = False
-
+    ok = _install_engine(engine, engines, py, project_root)
     return 0 if ok else 1
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="基础环境初始化（嵌入式 Python + backend + 基础引擎）")
+    parser = argparse.ArgumentParser(description="环境初始化（嵌入式 Python + backend + 全部引擎）")
     parser.add_argument("--engine", default="", help="只安装指定引擎（供 UI 按需调用）")
+    parser.add_argument("--pypi-mirror", default="", help="PyPI 镜像源（如 https://pypi.tuna.tsinghua.edu.cn/simple）")
     args = parser.parse_args()
+
+    if args.pypi_mirror:
+        global PYPI_MIRROR
+        PYPI_MIRROR = args.pypi_mirror
 
     project_root = Path(__file__).resolve().parent.parent
 

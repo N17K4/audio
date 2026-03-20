@@ -42,7 +42,7 @@ def load_engine(checkpoint_dir: str, device: str):
     import time as _time
     _t0 = _time.monotonic()
 
-    engine_dir = Path(__file__).resolve().parent.parent.parent / "runtime" / "fish_speech" / "engine"
+    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "fish_speech"
     engine_dir_str = str(engine_dir)
     if engine_dir_str not in sys.path:
         sys.path.insert(0, engine_dir_str)

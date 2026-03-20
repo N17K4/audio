@@ -12,7 +12,7 @@ from utils.engine import get_embedded_python, build_engine_env
 
 
 def _get_flux_script() -> str:
-    candidates = [RUNTIME_ROOT / "flux" / "inference.py"]
+    candidates = [RUNTIME_ROOT / "engine" / "flux" / "inference.py"]
     for p in candidates:
         if p.exists():
             logger.debug("[flux] 找到脚本: %s", p)
@@ -31,7 +31,7 @@ async def run_flux_image_gen(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Flux.1-Schnell 引擎未找到。请确保 runtime/flux/inference.py 存在，"
+                "Flux.1-Schnell 引擎未找到。请确保 runtime/engine/flux/inference.py 存在，"
                 "并运行 pnpm run checkpoints 下载模型。"
             ),
         )

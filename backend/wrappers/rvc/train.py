@@ -56,8 +56,8 @@ def _get_checkpoint_dir(arg_value: str) -> Path:
     env_val = (os.environ.get("RVC_CHECKPOINT_DIR") or "").strip()
     if env_val:
         return Path(env_val).resolve()
-    base = Path(__file__).resolve().parent.parent.parent
-    manifest_path = base / "wrappers" / "manifest.json"
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    manifest_path = base / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))

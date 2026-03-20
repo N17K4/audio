@@ -37,7 +37,7 @@ async def run_rvc_training(
     sample_rate: int,
     voice_subdir: str = "",
 ) -> None:
-    """调用 runtime/rvc/train.py 子进程执行真实 RVC 训练，解析 stdout 进度行更新 TRAIN_JOBS。"""
+    """调用 wrappers/rvc/train.py 子进程执行真实 RVC 训练，解析 stdout 进度行更新 TRAIN_JOBS。"""
     TRAIN_JOBS[job_id]["status"] = "running"
     TRAIN_JOBS[job_id]["started_at"] = datetime.utcnow().isoformat()
     _sync_jobs_status(job_id, "running", started_at=_time.time())
