@@ -239,23 +239,24 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
         _cf.close()
         constraints_file = _cf.name
 
+    total = len(packages)
+    pkg_seq = 0  # 全局序号计数器
     groups = _group_by_namespace(packages)
     for group in groups:
         # 检查哪些包需要安装
         to_install = []
         for pkg in group:
+            pkg_seq += 1
+            tag = f"[{pkg_seq}/{total}]"
             module_name = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
             check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
             if check.returncode == 0:
-                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                _emit({"type": "log", "message": f"  {tag} ✓ {pkg}  (已安装)"}, json_progress)
             else:
                 to_install.append(pkg)
 
         if not to_install:
             continue
-
-        for pkg in to_install:
-            _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
 
         cmd = [py, "-m", "pip", "install"] + to_install + ["--quiet"]
         if target:

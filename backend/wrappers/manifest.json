@@ -176,7 +176,7 @@
         {
           "path": "model.pth",
           "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/275a984d33c33659e39eed41ff5bcd6e67517f4c/model.pth",
-          "size_mb": 500,
+          "size_mb": 1217,
           "required": true,
           "sha256": "918dc960372cc1b77bbafb14c48ef7a1634ecf75d4eb85b78607223b780d6001"
         },
@@ -204,7 +204,7 @@
         {
           "path": "firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
           "url": "https://huggingface.co/fishaudio/fish-speech-1.5/resolve/275a984d33c33659e39eed41ff5bcd6e67517f4c/firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
-          "size_mb": 500,
+          "size_mb": 180,
           "required": true,
           "sha256": "01b81dbf753224a156c3fe139b88bf0b9a0f54b11bee864f95e66511c3ccd754"
         }
@@ -766,7 +766,7 @@
         },
         {
           "path": "chinese-roberta-wwm-ext-large/config.json",
-          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/config.json",
+          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/a25cc9e05974bd9687e528edd516f2cfdb3f5db9/config.json",
           "size_mb": 1,
           "required": true,
           "note": "Chinese RoBERTa 大模型（文本编码）",
@@ -774,14 +774,14 @@
         },
         {
           "path": "chinese-roberta-wwm-ext-large/tokenizer.json",
-          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/tokenizer.json",
+          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/a25cc9e05974bd9687e528edd516f2cfdb3f5db9/tokenizer.json",
           "size_mb": 1,
           "required": true,
           "sha256": "53ff61207898738bbdc000f38abebef01041c8d23b6270c11855fc692d0a3ad6"
         },
         {
           "path": "chinese-roberta-wwm-ext-large/pytorch_model.bin",
-          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/pytorch_model.bin",
+          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/a25cc9e05974bd9687e528edd516f2cfdb3f5db9/pytorch_model.bin",
           "size_mb": 1300,
           "required": true,
           "sha256": "4ac62d49144d770c5ca9a5d1d3039c4995665a080febe63198189857c6bd11cd"

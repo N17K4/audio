@@ -49,6 +49,9 @@ runtime/*
 # engine 源码已 git 跟踪（含各引擎 LICENSE）
 !runtime/engine/
 
+# ─── 引擎运行时模型权重（ONNX 等，由 checkpoints 脚本下载，不进版本库）────────
+runtime/engine/facefusion/.assets/
+
 # ─── checkpoints / 大模型（已整合至 runtime/checkpoints/，保留以防旧目录残留）──
 checkpoints/
 

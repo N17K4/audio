@@ -298,6 +298,7 @@
 let _engines = [];
 let _manifest = {};
 let _stage = null;  // 非 null 时为指定阶段重装模式
+let _mode = null;   // 'dual' | 'ml_only' | 'checkpoints_only' | null(默认)
 
 // ─── 阶段元信息 ──────────────────────────────────────────────────────────────
 const STAGE_META = {
@@ -399,12 +400,62 @@ function appendLog(text, cls) {
 }
 
 // ─── 阶段1 初始化 ──────────────────────────────────────────────────────────
-window.setupAPI.onInfo(({ missingEngines, manifest, stage }) => {
+window.setupAPI.onInfo(({ missingEngines, manifest, stage, mode, autoOpts }) => {
   _engines = missingEngines;
   _manifest = manifest || {};
   _stage = stage || null;
+  _mode = mode || null;
+
+  // ── 自动下载模式（双窗口中的单个窗口）────────────────────────────────
+  if (_mode === 'ml_only' || _mode === 'checkpoints_only') {
+    document.querySelector('#phase-progress .header h1').textContent = `正在${_mode === 'ml_only' ? '安装 ML 依赖' : '下载模型权重'}…`;
+    showPhase('phase-progress');
+    // 自动开始下载
+    window.setupAPI.startAutoDownload({
+      mode: _mode,
+      hfEndpoint: (autoOpts && autoOpts.hfEndpoint) || '',
+      pypiMirror: (autoOpts && autoOpts.pypiMirror) || '',
+    });
+    return;
+  }
 
   const list = document.getElementById('engine-list');
+
+  // ── 双窗口镜像源配置模式 ──────────────────────────────────────────────
+  if (_mode === 'dual') {
+    document.querySelector('#phase-info .header h1').textContent = '重新下载全部 — 选择镜像源';
+    document.querySelector('#phase-info .header p').innerHTML =
+      '确认镜像源后将同时打开 <strong>ML 依赖</strong> 和 <strong>模型权重</strong> 两个下载窗口并行安装';
+
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="engine-icon">🔄</div>
+      <div class="engine-info">
+        <div class="engine-name">ML 依赖 + 模型权重</div>
+        <div class="engine-files">torch · torchaudio · transformers + Fish Speech · Seed-VC · RVC · FaceFusion 模型</div>
+      </div>
+      <div class="engine-size">~10–14 GB</div>
+    `;
+    list.appendChild(li);
+
+    document.getElementById('btn-start').textContent = '开始下载（双窗口并行）';
+    document.getElementById('btn-start').disabled = false;
+
+    // 检测连通性
+    window.setupAPI.testHfConnectivity().then(({ reachable }) => {
+      const hint = document.getElementById('mirror-hint');
+      if (reachable) {
+        hint.textContent = '✓ huggingface.co 可正常访问';
+        hint.className = 'mirror-hint ok';
+      } else {
+        hint.textContent = '✗ huggingface.co 无法访问，建议使用镜像';
+        hint.className = 'mirror-hint warn';
+      }
+    });
+
+    toggleInternational(false);
+    return;
+  }
 
   // ── 指定阶段重装模式 ──────────────────────────────────────────────────
   if (_stage && STAGE_META[_stage]) {
@@ -488,6 +539,13 @@ async function startDownload() {
   const pypiMirror = document.getElementById('pypi-mirror').value.trim()  || PYPI_DEFAULT;
   const international = _isInternational;
   await window.setupAPI.saveConfig({ hfEndpoint: endpoint, pypiMirror, international });
+
+  // 双窗口模式：通知主进程打开两个下载窗口，然后关闭当前配置窗口
+  if (_mode === 'dual') {
+    await window.setupAPI.startDualDownload({ hfEndpoint: endpoint, pypiMirror });
+    return;
+  }
+
   resetFailureState();
   if (_stage && STAGE_META[_stage]) {
     document.querySelector('#phase-progress .header h1').textContent = `正在安装：${STAGE_META[_stage].label}…`;
@@ -614,19 +672,34 @@ window.setupAPI.onDone(({ exitCode }) => {
 // ─── 取消 / 重试 ───────────────────────────────────────────────────────────
 function cancelDownload() {
   window.setupAPI.cancelDownload();
-  showPhase('phase-info');
+  if (_mode === 'ml_only' || _mode === 'checkpoints_only') {
+    // 自动下载窗口：取消后直接关闭
+    window.setupAPI.closeWindow();
+  } else {
+    showPhase('phase-info');
+  }
 }
 
 function retryDownload() {
   resetFailureState();
   showPhase('phase-progress');
-  window.setupAPI.loadConfig().then(cfg => {
-    window.setupAPI.startDownload({
-      hfEndpoint:  cfg.hfEndpoint  || HF_DEFAULT,
-      pypiMirror:  cfg.pypiMirror  || PYPI_DEFAULT,
-      stage:       _stage,
+  if (_mode === 'ml_only' || _mode === 'checkpoints_only') {
+    window.setupAPI.loadConfig().then(cfg => {
+      window.setupAPI.startAutoDownload({
+        mode: _mode,
+        hfEndpoint: cfg.hfEndpoint || '',
+        pypiMirror: cfg.pypiMirror || '',
+      });
     });
-  });
+  } else {
+    window.setupAPI.loadConfig().then(cfg => {
+      window.setupAPI.startDownload({
+        hfEndpoint:  cfg.hfEndpoint  || HF_DEFAULT,
+        pypiMirror:  cfg.pypiMirror  || PYPI_DEFAULT,
+        stage:       _stage,
+      });
+    });
+  }
 }
 
 function closeWindow() {

@@ -334,24 +334,26 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     # ── 筛选需要安装的包 ──────────────────────────────────────────────────
     # --target 模式：只检查 target 目录，不受嵌入式 Python 自带包干扰
     # 无 target：检查全局 Python 环境
+    total = len(packages)
     to_install: list[str] = []
-    for pkg in packages:
+    for idx, pkg in enumerate(packages, 1):
+        tag = f"[{idx}/{total}]"
         raw_module = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
         module_name = _PKG_TO_MODULE.get(raw_module.lower(), raw_module)
         dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
         exact_version = _exact_version_spec(pkg)
         if exact_version:
             if _installed_dist_version(py, target, dist_name) == exact_version:
-                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                _emit({"type": "log", "message": f"  {tag} ✓ {pkg}  (已安装)"}, json_progress)
                 continue
         elif target:
             if _is_importable_in_target(target, module_name):
-                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                _emit({"type": "log", "message": f"  {tag} ✓ {pkg}  (已安装)"}, json_progress)
                 continue
         else:
             check = subprocess.run([py, "-c", f"import {module_name}"], capture_output=True, env=env)
             if check.returncode == 0:
-                _emit({"type": "log", "message": f"  ✓ {pkg}  (已安装)"}, json_progress)
+                _emit({"type": "log", "message": f"  {tag} ✓ {pkg}  (已安装)"}, json_progress)
                 continue
         to_install.append(pkg)
 
@@ -370,17 +372,17 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         return (pkg, r.returncode == 0, r.stderr.strip()[:300])
 
-    _emit({"type": "log", "message": f"  并行下载 {len(to_install)} 个包…"}, json_progress)
-    max_workers = min(4, len(to_install))
+    n_to_install = len(to_install)
+    _emit({"type": "log", "message": f"  并行下载 {n_to_install} 个包…"}, json_progress)
+    max_workers = min(4, n_to_install)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(_download_one, pkg): pkg for pkg in to_install}
         for future in as_completed(futures):
             pkg, ok, err = future.result()
-            if ok:
-                _emit({"type": "log", "message": f"  ↓ {pkg}"}, json_progress)
-            else:
+            if not ok:
                 _emit({"type": "log", "message": f"  ✗ {pkg} 下载失败: {err}"}, json_progress)
                 download_failed[pkg] = err
+    _emit({"type": "log", "message": f"  下载完成，开始安装…"}, json_progress)
 
     # ── Phase 2: 从本地缓存逐个安装（快速、故障隔离）─────────────────────
     # 生成 constraints 文件，锁定 torch 栈版本，防止 transitive dep 升级
@@ -395,12 +397,12 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
         _emit({"type": "log", "message": f"  torch 版本锁定：{', '.join(_torch_constraints)}"}, json_progress)
 
     all_ok = True
-    for pkg in to_install:
+    for inst_idx, pkg in enumerate(to_install, 1):
+        inst_tag = f"[{inst_idx}/{n_to_install}]"
         if pkg in download_failed:
             all_ok = False
             continue
         dist_name = re.split(r"[>=<!\[;\s]", pkg)[0]
-        _emit({"type": "log", "message": f"  安装 {pkg}…"}, json_progress)
         cmd = [py, "-m", "pip", "install", pkg,
                "--find-links", cache_dir, "--quiet"]
         if dist_name.lower().replace("-", "_") in no_deps_names:
@@ -413,7 +415,7 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if r.returncode == 0:
-            _emit({"type": "log", "message": f"  ✓ {pkg}"}, json_progress)
+            _emit({"type": "log", "message": f"  {inst_tag} ✓ {pkg}"}, json_progress)
         else:
             # pip 返回非零但包可能已安装（Windows 长路径 bug、依赖解析警告等）
             raw_module = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
@@ -428,10 +430,10 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
                 chk = subprocess.run([py, "-c", f"import {mod}"], capture_output=True, env=env)
                 actually_ok = chk.returncode == 0
             if actually_ok:
-                _emit({"type": "log", "message": f"  ✓ {pkg}  (pip 警告但已安装)"}, json_progress)
+                _emit({"type": "log", "message": f"  {inst_tag} ✓ {pkg}  (pip 警告但已安装)"}, json_progress)
             else:
                 err = r.stderr.strip()[:300]
-                _emit({"type": "log", "message": f"  ✗ {pkg} 安装失败: {err}"}, json_progress)
+                _emit({"type": "log", "message": f"  {inst_tag} ✗ {pkg} 安装失败: {err}"}, json_progress)
                 all_ok = False
 
     # ── Phase 3: 修复 torch 栈版本（万一 constraints 未能完全阻止）─────────

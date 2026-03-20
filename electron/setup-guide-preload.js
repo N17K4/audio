@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('setupAPI', {
 
   // 操作
   startDownload:       (opts) => ipcRenderer.invoke('setup:startDownload', opts),
+  startDualDownload:   (opts) => ipcRenderer.invoke('setup:startDualDownload', opts),
+  startAutoDownload:   (opts) => ipcRenderer.invoke('setup:startAutoDownload', opts),
   cancelDownload:      ()     => ipcRenderer.invoke('setup:cancelDownload'),
   closeWindow:         ()     => ipcRenderer.invoke('setup:closeWindow'),
   testHfConnectivity:  ()     => ipcRenderer.invoke('setup:testHfConnectivity'),

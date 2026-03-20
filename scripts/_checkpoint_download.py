@@ -52,12 +52,14 @@ def apply_hf_endpoint(url: str) -> str:
 
 # ─── JSON Lines 进度输出（供 Electron IPC 使用）────────────────────────────
 _JSON_MODE: bool = False
+_REAL_STDOUT = sys.stdout  # emit() 专用：保留原始 stdout 引用
 
 
 def emit(msg_type: str, **kwargs) -> None:
     """输出结构化进度消息。--json-progress 时输出 JSON Lines，否则普通打印。"""
     if _JSON_MODE:
-        print(json.dumps({"type": msg_type, **kwargs}, ensure_ascii=False), flush=True)
+        _REAL_STDOUT.write(json.dumps({"type": msg_type, **kwargs}, ensure_ascii=False) + "\n")
+        _REAL_STDOUT.flush()
     elif msg_type == "log":
         print(kwargs.get("message", ""), flush=True)
 
@@ -161,23 +163,15 @@ def download_via_requests(url: str, dest_path: Path) -> None:
     total_from_server = int(resp.headers.get("content-length", 0))
     total = resume_pos + total_from_server if total_from_server else 0
     done = resume_pos
-    last_reported = -1
     mode = "ab" if resume_pos > 0 else "wb"
     with open(dest_path, mode) as f:
         for chunk in resp.iter_content(chunk_size=1048576):  # 1 MB chunks
             f.write(chunk)
             done += len(chunk)
-            if total:
+            if total and _IS_TTY and not _JSON_MODE:
                 pct = done * 100 // total
                 mb = done / 1024 / 1024
-                if _IS_TTY and not _JSON_MODE:
-                    print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
-                elif pct // 2 != last_reported:
-                    last_reported = pct // 2
-                    if not _JSON_MODE:
-                        print(f"  {pct}% ({mb:.1f} MB)", flush=True)
-                    emit("progress", file=dest_path.name, pct=pct,
-                         mb=round(mb, 1), total_mb=round(total / 1024 / 1024, 1))
+                print(f"\r  {pct}% ({mb:.1f} MB)", end="", flush=True)
     if not _JSON_MODE:
         print()
 
@@ -300,24 +294,9 @@ def check_and_download(
                 # 统一优先 hf_hub_download（支持 HF_ENDPOINT 镜像、连接池、CDN），
                 # 失败时回退 HTTP 直连
                 try:
-                    # JSON 模式：用监视线程报告进度
-                    stop_monitor = threading.Event()
-                    monitor = None
-                    if _JSON_MODE and size_mb:
-                        monitor = threading.Thread(
-                            target=_monitor_file_progress,
-                            args=(dest, rel_path, size_mb, stop_monitor),
-                            daemon=True,
-                        )
-                        monitor.start()
-                    try:
-                        downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
-                        if downloaded.resolve() != dest.resolve():
-                            downloaded.rename(dest)
-                    finally:
-                        stop_monitor.set()
-                        if monitor:
-                            monitor.join(timeout=5)
+                    downloaded = download_via_hf_hub(repo_id, filename, checkpoint_dir, revision)
+                    if downloaded.resolve() != dest.resolve():
+                        downloaded.rename(dest)
                 except Exception as hf_err:
                     is_auth_err = ("401" in str(hf_err) or "403" in str(hf_err)
                                    or "authentication" in str(hf_err).lower()
@@ -389,48 +368,6 @@ def save_sha256_to_manifest(manifest: dict, manifest_path: Path, sha256_updates:
             encoding="utf-8",
         )
         print(f"  manifest.json 已更新（sha256 写入）")
-
-
-def _monitor_file_progress(dest: Path, label: str, size_mb: float, stop_event: threading.Event) -> None:
-    """后台线程：每 2 秒报告一次单文件下载进度（用于 hf_hub_download 等无进度回调的场景）。"""
-    if not size_mb:
-        return
-    while not stop_event.wait(timeout=2.0):
-        try:
-            # hf_hub_download 先写到临时文件再 rename，检查同目录下最大的临时文件
-            parent = dest.parent
-            current = 0
-            if dest.exists():
-                current = dest.stat().st_size / 1024 / 1024
-            else:
-                # 查找 hf_hub 的临时下载文件（.incomplete 后缀或无后缀的大文件）
-                for f in parent.iterdir():
-                    if f.is_file():
-                        sz = f.stat().st_size / 1024 / 1024
-                        if sz > current:
-                            current = sz
-            if current > 0:
-                pct = min(99, int(current / size_mb * 100))
-                emit("progress", file=label, pct=pct,
-                     mb=round(current, 1), total_mb=float(size_mb))
-        except Exception:
-            pass
-
-
-def _monitor_hf_cache_progress(cache_dir: Path, label: str, size_mb: float, stop_event: threading.Event) -> None:
-    """后台线程：每 4 秒报告一次 HF cache 目录已下载大小（用于 snapshot_download 等无进度回调的场景）。"""
-    if not size_mb:
-        return
-    while not stop_event.wait(timeout=4.0):
-        try:
-            current = sum(
-                f.stat().st_size for f in cache_dir.rglob("*") if f.is_file()
-            ) / 1024 / 1024
-            pct = min(99, int(current / size_mb * 100))
-            emit("progress", file=label, pct=pct,
-                 mb=round(current, 1), total_mb=float(size_mb))
-        except Exception:
-            pass
 
 
 def download_hf_cache(
@@ -559,20 +496,17 @@ def download_hf_cache(
             if filename:
                 final_dest = cache_dir / filename
                 final_dest.parent.mkdir(parents=True, exist_ok=True)
+                # 清理直接下载模式下的残留 .incomplete 文件
+                for _sf in final_dest.parent.iterdir():
+                    if _sf.is_file() and _sf.name.endswith(('.incomplete', '.lock')) and _sf.name.startswith(final_dest.name):
+                        try:
+                            _sf.unlink()
+                        except Exception:
+                            pass
                 # 统一优先 hf_hub_download（支持镜像、CDN），失败时回退 HTTP 直连
                 msg2 = f"  [HF单文件] {repo_id}  {filename}  revision={revision}  cache_dir={cache_dir}"
                 print(msg2)
                 emit("log", message=msg2)
-                # JSON 模式：用监视线程报告进度
-                stop_file_mon = threading.Event()
-                file_mon = None
-                if _JSON_MODE and size_mb:
-                    file_mon = threading.Thread(
-                        target=_monitor_file_progress,
-                        args=(final_dest, label, size_mb, stop_file_mon),
-                        daemon=True,
-                    )
-                    file_mon.start()
                 try:
                     downloaded = Path(hf_hub_download(
                         repo_id=repo_id, filename=filename,
@@ -584,10 +518,6 @@ def download_hf_cache(
                     emit("log", message=f"    hf_hub_download 失败 ({hf_err.__class__.__name__})，回退 HTTP 直连…")
                     hf_url = f"{HF_ENDPOINT}/{repo_id}/resolve/{revision}/{filename}"
                     download_via_requests(hf_url, final_dest)
-                finally:
-                    stop_file_mon.set()
-                    if file_mon:
-                        file_mon.join(timeout=5)
 
                 if not final_dest.exists() or final_dest.stat().st_size <= 0:
                     raise FileNotFoundError(f"下载完成后目标文件不存在: {final_dest}")
@@ -599,28 +529,11 @@ def download_hf_cache(
                 print(msg2)
                 emit("log", message=msg2)
 
-                # 后台监控已下载大小，每 4 秒上报一次进度
-                stop_monitor = threading.Event()
-                if _JSON_MODE and size_mb:
-                    monitor = threading.Thread(
-                        target=_monitor_hf_cache_progress,
-                        args=(cache_dir, label, size_mb, stop_monitor),
-                        daemon=True,
-                    )
-                    monitor.start()
-                else:
-                    monitor = None
-
-                try:
-                    snapshot_download(
-                        repo_id=repo_id, revision=revision,
-                        cache_dir=str(cache_dir), token=token,
-                        ignore_patterns=ignore_patterns or None,
-                    )
-                finally:
-                    stop_monitor.set()
-                    if monitor:
-                        monitor.join(timeout=5)
+                snapshot_download(
+                    repo_id=repo_id, revision=revision,
+                    cache_dir=str(cache_dir), token=token,
+                    ignore_patterns=ignore_patterns or None,
+                )
 
             done_msg = f"    ✓ 下载完成: {label}"
             emit("log", message=done_msg)
@@ -1030,6 +943,9 @@ def main() -> int:
                         help="逗号分隔的引擎列表（仅处理这些引擎）；省略则处理所有")
     args = parser.parse_args()
     _JSON_MODE = args.json_progress
+    # JSON 模式：print() 重定向到 stderr，只有 emit() 通过 _REAL_STDOUT 写 JSON Lines
+    if _JSON_MODE:
+        sys.stdout = sys.stderr
 
     # CLI 参数优先于环境变量
     if args.hf_endpoint:
