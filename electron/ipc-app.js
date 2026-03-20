@@ -36,11 +36,7 @@ ipcMain.handle('app:getDiskUsage', () => {
   const _size = (k) => (_ui(k).size_display || '');
   const _fmtVer = (v) => v ? (/^\d/.test(v) ? `v${v}` : v) : '';
   const _engLabel  = (k, suffix) => `${_ui(k).label || k} ${suffix}`.trim();
-  const _ckptLabel = (k, suffix) => {
-    const s = _size(k);
-    const base = suffix ? `${_ui(k).label || k} ${suffix}` : (_ui(k).label || k);
-    return `${base}${s ? `（${s}）` : ''}`;
-  };
+  const _ckptLabel = (k, suffix) => `${_ui(k).label || k}${suffix ? ' ' + suffix : ''}`.trim();
   const measureRes = (relPath) => {
     const full = path.join(resRoot, relPath);
     return dirExists(full) ? getDirSize(full) : 0;
