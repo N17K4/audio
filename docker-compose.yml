@@ -8,8 +8,31 @@ services:
     environment:
       - BACKEND_HOST=0.0.0.0
       - BACKEND_PORT=8000
+      - RESOURCES_ROOT=/app
+      - CHECKPOINTS_DIR=/app/runtime/checkpoints
+      - USER_DATA_ROOT=/app/user_data
+      - CACHE_DIR=/app/cache
+      - LOGS_DIR=/app/logs
     volumes:
-      - ./models:/app/models
+      - checkpoints:/app/runtime/checkpoints
+      - user_data:/app/user_data
+      - cache:/app/cache
+      - logs:/app/logs
+    # ── GPU 支持（需要 NVIDIA Container Toolkit） ──────────────────────────
+    # 无 GPU 时注释掉 deploy 块即可，云端 API 仍可正常使用
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   frontend:
     build:
@@ -18,4 +41,11 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
+volumes:
+  checkpoints:
+  user_data:
+  cache:
+  logs:

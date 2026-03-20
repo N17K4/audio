@@ -250,6 +250,19 @@ PYTHONPATH=backend runtime/python/mac/bin/python3 tests/smoke_test2.py  # 进阶
 
 测试向真实后端发 HTTP 请求，需要嵌入式 Python + 引擎 + checkpoint 已就绪。
 
+**判定规则**：日志中 ✅ = 通过、❌ = 失败。smoke_test.py 失败时抛 AssertionError；smoke_test2.py 失败时 `return False`（前端通过 exit code 和日志 ❌ 判定）。
+
+---
+
+## 禁止直接修改 gitignored 的外部代码
+
+`runtime/ml/`、`runtime/engine/`、`runtime/python/` 下的文件都是 pip install 或 git clone 生成的，gitignored，下次构建会被覆盖。**严禁直接修改这些文件来修 bug**。
+
+正确做法：
+- **wrapper 层拦截**：在 `backend/wrappers/` 的适配器脚本中处理兼容性问题（如 monkey-patch）
+- **安装后 patch**：在 `scripts/runtime.py` 或 `scripts/afterPack.js` 中添加自动 patch 步骤
+- **manifest 声明**：缺少的依赖加到 `backend/wrappers/manifest.json` 的 `pip_packages` 或 `runtime_pip_packages`
+
 ---
 
 ## 特殊约束

@@ -79,7 +79,12 @@ def _reporthook(count: int, block_size: int, total_size: int) -> None:
 
 
 def get_embedded_python(root: Path) -> str:
-    """返回嵌入式 Python 可执行路径，找不到返回空串。"""
+    """返回嵌入式 Python 可执行路径，找不到返回空串。
+
+    Linux（含 Docker）：直接返回当前解释器，无需嵌入式 Python。
+    """
+    if platform.system() == "Linux":
+        return sys.executable
     if platform.system() == "Windows":
         p = root / "runtime" / "python" / "win" / "python.exe"
     else:
@@ -95,6 +100,10 @@ def get_embedded_python(root: Path) -> str:
 def _download_pbs_python(dest_dir: Path) -> None:
     """下载 python-build-standalone 到 dest_dir（macOS / Windows 共用）。"""
     system = platform.system()
+    if system == "Linux":
+        # Linux / Docker：使用系统 Python，无需下载 python-build-standalone
+        print("  [pbs] Linux 环境，跳过嵌入式 Python 下载")
+        return
     if system == "Darwin":
         import struct
         arch = "aarch64" if struct.calcsize("P") * 8 == 64 and platform.machine() == "arm64" else "x86_64"
@@ -152,7 +161,10 @@ def ensure_embedded_python(project_root: Path) -> str:
         return py
 
     system = platform.system()
-    if system == "Darwin":
+    if system == "Linux":
+        # Linux / Docker：使用系统 Python，无需下载嵌入式版本
+        return sys.executable
+    elif system == "Darwin":
         dest = project_root / "runtime" / "python" / "mac"
     elif system == "Windows":
         dest = project_root / "runtime" / "python" / "win"
@@ -1302,9 +1314,45 @@ def main_single_engine(engine: str, project_root: Path) -> int:
     return 0 if ok else 1
 
 
+def main_engines_only(project_root: Path) -> int:
+    """仅 clone 引擎源码（Docker 构建用）。
+
+    pip 依赖由 Dockerfile 单独安装，此处只执行引擎源码 clone + patch。
+    """
+    manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
+    if not manifest_path.exists():
+        print(f"✗ 找不到 manifest.json: {manifest_path}")
+        return 1
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    engines: dict = manifest.get("engines", {})
+
+    engine_source_map = {
+        "fish_speech": lambda: setup_fish_speech_engine(project_root),
+        "gpt_sovits": lambda: setup_gpt_sovits_engine(project_root),
+        "seed_vc": lambda: setup_seed_vc_engine(project_root),
+        "facefusion": lambda: setup_facefusion_engine(project_root),
+        "liveportrait": lambda: setup_liveportrait_engine(project_root),
+    }
+
+    all_ok = True
+    for name, fn in engine_source_map.items():
+        print(f"\n▶ {name} (clone)")
+        if not fn():
+            all_ok = False
+
+    if all_ok:
+        print("\n✓ 引擎源码 clone 完成")
+    else:
+        print("\n✗ 部分引擎 clone 失败")
+    return 0 if all_ok else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="环境初始化（嵌入式 Python + backend + 全部引擎）")
     parser.add_argument("--engine", default="", help="只安装指定引擎（供 UI 按需调用）")
+    parser.add_argument("--engines-only", action="store_true",
+                        help="仅 clone 引擎源码，跳过 Python 下载和 pip 安装（Docker 构建用）")
     parser.add_argument("--pypi-mirror", default="", help="PyPI 镜像源（如 https://pypi.tuna.tsinghua.edu.cn/simple）")
     args = parser.parse_args()
 
@@ -1314,6 +1362,8 @@ def main() -> int:
 
     project_root = Path(__file__).resolve().parent.parent
 
+    if args.engines_only:
+        return main_engines_only(project_root)
     if args.engine:
         return main_single_engine(args.engine, project_root)
     return main_full_setup(project_root)

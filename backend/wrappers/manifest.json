@@ -823,7 +823,8 @@
         "einops",
         "soundfile",
         "librosa",
-        "pytorch_lightning"
+        "pytorch_lightning",
+        "x_transformers"
       ],
       "checkpoint_files": [
         {

@@ -1,3 +1,4 @@
+# ── AI Workshop Frontend（Docker 用） ─────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -12,9 +13,10 @@ COPY frontend/ ./
 
 RUN pnpm build
 
-# ── 静态文件用 nginx 托管 ──────────────────────────────────────────────────────
+# ── nginx 托管静态文件 + API 反向代理 ─────────────────────────────────────────
 FROM nginx:alpine
 
 COPY --from=builder /app/out /usr/share/nginx/html
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

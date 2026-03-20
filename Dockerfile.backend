@@ -1,20 +1,88 @@
-FROM python:3.11-slim
+# ── AI Workshop Backend（Docker 用） ──────────────────────────────────────────
+# 设计思路：
+#   1) 系统依赖 + backend pip 依赖（变动少，缓存层稳定）
+#   2) 引擎 pip_packages + runtime_pip_packages（ML 重型包，缓存层大但稳定）
+#   3) 引擎源码 clone（runtime.py 负责 clone + patch）
+#   4) backend 源码（变动频繁，放最后）
+#   checkpoints 不打入镜像，通过 volume 挂载
+
+FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir poetry
+# ── 系统依赖 ─────────────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        pandoc \
+        git \
+        libsndfile1 \
+        libgl1 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
+# ── backend Python 依赖（poetry → pip） ──────────────────────────────────────
 COPY backend/pyproject.toml backend/poetry.lock* ./backend/
 
-RUN cd backend \
+RUN pip install --no-cache-dir poetry \
+    && cd backend \
     && poetry config virtualenvs.create false \
-    && (poetry install --no-root || (poetry lock && poetry install --no-root))
+    && poetry install --no-root --no-interaction \
+    && pip uninstall -y poetry \
+    && rm -rf /root/.cache/pip /root/.cache/pypoetry
 
+# ── 引擎 pip_packages（轻量依赖，manifest.json 中定义） ──────────────────────
+# 先拷贝 manifest + 安装脚本，利用 Docker 缓存
+COPY backend/wrappers/manifest.json ./backend/wrappers/manifest.json
+COPY scripts/runtime.py scripts/_checkpoint_download.py ./scripts/
+
+# 从 manifest.json 提取所有 pip_packages + runtime_pip_packages 并安装
+# 使用 Python 解析 JSON，避免引入 jq 等额外依赖
+RUN python -c "\
+import json, subprocess, sys; \
+m = json.load(open('backend/wrappers/manifest.json')); \
+engines = m.get('engines', {}); \
+pkgs = set(); \
+skip = {'rvc-python==0.1.5'};  # rvc-python 需要特殊安装流程 \
+for e in engines.values(): \
+    for p in e.get('pip_packages', []) + e.get('runtime_pip_packages', []): \
+        if p not in skip: pkgs.add(p); \
+pkgs = sorted(pkgs); \
+print(f'安装 {len(pkgs)} 个引擎依赖...'); \
+open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs)); \
+" && pip install --no-cache-dir -r /tmp/engine_reqs.txt && rm /tmp/engine_reqs.txt
+
+# RVC 特殊安装（fairseq + rvc-python）
+RUN pip install --no-cache-dir setuptools'<72' \
+    && pip install --no-cache-dir --no-deps fairseq==0.12.2 \
+    && pip install --no-cache-dir bitarray \
+    && pip install --no-cache-dir --no-deps rvc-python==0.1.5
+
+# ── 引擎源码 clone（通过 runtime.py --engines-only） ─────────────────────────
+# 仅 clone 引擎源码 + 应用 patch，跳过嵌入式 Python 下载和 pip 安装
+COPY backend/wrappers/ ./backend/wrappers/
+RUN python scripts/runtime.py --engines-only
+
+# ── backend 源码 ─────────────────────────────────────────────────────────────
 COPY backend/ ./backend/
 
+# ── 前端静态文件（可选，如果需要后端直接托管） ────────────────────────────────
+# 如使用 nginx 独立托管前端则无需此步
+# COPY frontend/out/ ./frontend/out/
+
+# ── 环境变量 ─────────────────────────────────────────────────────────────────
 ENV BACKEND_HOST=0.0.0.0
 ENV BACKEND_PORT=8000
+ENV PYTHONPATH=/app/backend
+ENV PYTHONIOENCODING=utf-8
+# 容器内无需 HF 离线模式（可按需开启）
+# ENV HF_HUB_OFFLINE=1
+
+# ── 数据目录（运行时 volume 挂载） ──────────────────────────────────────────
+VOLUME ["/app/runtime/checkpoints", "/app/user_data", "/app/cache", "/app/logs"]
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 CMD ["python", "backend/main.py"]

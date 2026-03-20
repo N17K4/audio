@@ -23,8 +23,17 @@ from logging_setup import logger
 
 
 def get_embedded_python() -> str:
-    """返回平台对应的嵌入式 Python 路径（runtime/mac 或 runtime/win）。找不到则抛出 RuntimeError。"""
+    """返回平台对应的嵌入式 Python 路径。
+
+    Linux / Docker 环境：直接返回当前解释器（sys.executable），无需嵌入式 Python。
+    macOS / Windows：查找 runtime/python/{mac,win}/ 下的嵌入式 Python。
+    找不到则抛出 RuntimeError。
+    """
     import sys as _sys
+    # Linux（含 Docker 容器）：容器自身的 Python 即可用，无需嵌入式二进制
+    if _sys.platform == "linux":
+        logger.debug("[embedded-python] Linux 环境，使用 sys.executable: %s", _sys.executable)
+        return _sys.executable
     if _sys.platform == "win32":
         candidates = [
             RUNTIME_ROOT / "python" / "win" / "python.exe",

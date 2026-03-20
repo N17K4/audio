@@ -161,8 +161,27 @@ def main() -> int:
     return 0
 
 
+def _patch_torch_load() -> None:
+    """torch >= 2.6 将 weights_only 默认改为 True，rvc-python 内部未适配。
+    Monkey-patch torch.load 使其默认 weights_only=False。"""
+    try:
+        import torch
+        _orig = torch.load
+        import functools
+
+        @functools.wraps(_orig)
+        def _patched(*args, **kwargs):
+            kwargs.setdefault("weights_only", False)
+            return _orig(*args, **kwargs)
+
+        torch.load = _patched
+    except Exception:
+        pass
+
+
 def _run_via_rvc_python(input_path: Path, output_path: Path, model_path: Path, index_path: Path) -> int:
     """cmd_template 未配置时，直接调用 rvc-python API 进行推理。"""
+    _patch_torch_load()
     try:
         from rvc_python.infer import RVCInference
     except ImportError:

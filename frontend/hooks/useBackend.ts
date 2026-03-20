@@ -21,7 +21,16 @@ export function useBackend() {
         .then(url => { if (url) { setBackendBaseUrl(url); rlog('INFO', '后端地址:', url); } })
         .catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
     } else {
-      setBackendBaseUrl('http://127.0.0.1:8000');
+      // 非 Electron 环境：探测同源 /health（Docker nginx 代理），失败回退直连后端
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      if (origin) {
+        fetch(`${origin}/health`).then(r => {
+          if (r.ok) { setBackendBaseUrl(origin); rlog('INFO', '后端地址(同源):', origin); }
+          else setBackendBaseUrl('http://127.0.0.1:8000');
+        }).catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
+      } else {
+        setBackendBaseUrl('http://127.0.0.1:8000');
+      }
     }
   }, []);
 

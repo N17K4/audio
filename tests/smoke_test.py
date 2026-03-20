@@ -116,7 +116,7 @@ def test_fish_speech_tts():
         else:
             print(f"❌ 失败 — Fish Speech TTS (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_gpt_sovits_tts():
@@ -151,7 +151,7 @@ def test_gpt_sovits_tts():
         else:
             print(f"❌ 失败 — GPT-SoVITS TTS (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_gpt_sovits_create_voice():
@@ -215,7 +215,7 @@ def test_gpt_sovits_create_voice():
         else:
             print(f"❌ 失败 — GPT-SoVITS 创建音色 (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_gpt_sovits_tts_advanced():
@@ -265,7 +265,7 @@ def test_gpt_sovits_tts_advanced():
         else:
             print(f"❌ 失败 — GPT-SoVITS TTS（高级参数）(HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_faster_whisper_stt():
@@ -307,7 +307,7 @@ def test_faster_whisper_stt():
         else:
             print(f"❌ 失败 — Faster Whisper STT (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_seed_vc_voice_convert():
@@ -351,7 +351,7 @@ def test_seed_vc_voice_convert():
         else:
             print(f"❌ 失败 — Seed-VC (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_rvc_voice_convert():
@@ -413,7 +413,7 @@ def test_rvc_voice_convert():
         else:
             print(f"❌ 失败 — RVC (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 def test_ffmpeg_media_convert():
@@ -455,7 +455,7 @@ def test_ffmpeg_media_convert():
         else:
             print(f"❌ 失败 — FFmpeg (HTTP {resp.status_code})")
             print(f"   响应：{resp.text}")
-            return False
+            raise AssertionError("test failed")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
