@@ -57,9 +57,6 @@ runtime/engine/facefusion/
 # ─── checkpoints / 大模型（已整合至 runtime/checkpoints/，保留以防旧目录残留）──
 checkpoints/
 
-# ─── 本地开发 ML 包（已整合至 runtime/ml/，保留以防旧目录残留）──────────────
-local_data/
-
 # ─── 引擎独立 pip 包目录（已整合到 runtime/engine/{engine}/.packages/）────────
 # FaceFusion packages: runtime/engine/facefusion/.packages/ （上面 runtime/engine/facefusion/ 已 ignore）
 

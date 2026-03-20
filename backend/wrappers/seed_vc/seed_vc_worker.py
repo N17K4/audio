@@ -24,6 +24,8 @@ import threading
 import time
 from pathlib import Path
 
+from wrappers._common import get_root
+
 # 空闲超时（秒）：无请求时自动退出，释放 GPU/CPU 内存
 IDLE_TIMEOUT = 600  # 10 分钟
 
@@ -258,8 +260,7 @@ def _send(conn: socket.socket, payload: dict) -> None:
 def main() -> int:
     args = parse_args()
 
-    # project_root = runtime/seed_vc 上两级
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    project_root = get_root()
     setup_engine(project_root)
 
     try:

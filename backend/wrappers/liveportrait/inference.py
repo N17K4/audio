@@ -18,15 +18,13 @@ import os
 import sys
 from pathlib import Path
 
+from wrappers._common import get_root, get_engine_dir
+
 
 def _find_engine_dir() -> str:
-    runtime_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "liveportrait"
-    candidates = [
-        runtime_dir,
-    ]
-    for c in candidates:
-        if (c / "liveportrait").is_dir() or (c / "inference.py").exists():
-            return str(c.resolve())
+    engine_dir = get_engine_dir("liveportrait")
+    if (engine_dir / "liveportrait").is_dir() or (engine_dir / "inference.py").exists():
+        return str(engine_dir.resolve())
     return ""
 
 
@@ -96,8 +94,8 @@ def _resolve_pretrained_weights(checkpoint_dir: str, engine_dir: str) -> None:
         return
 
     # 回退：从 HF cache 中查找 KwaiVGI/LivePortrait 快照
-    script_dir = Path(__file__).parent.parent.parent.parent  # 项目根目录
-    hf_cache = script_dir / "runtime" / "checkpoints" / "hf_cache" / "models--KwaiVGI--LivePortrait" / "snapshots"
+    root = get_root()
+    hf_cache = root / "runtime" / "checkpoints" / "hf_cache" / "models--KwaiVGI--LivePortrait" / "snapshots"
     if hf_cache.is_dir():
         snapshots = sorted(hf_cache.iterdir())
         if snapshots:

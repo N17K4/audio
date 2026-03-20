@@ -20,6 +20,8 @@ import os
 import sys
 from pathlib import Path
 
+from wrappers._common import get_root, get_engine_dir
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GPT-SoVITS TTS 适配器")
@@ -52,29 +54,24 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = os.getenv("GPT_SOVITS_CHECKPOINT_DIR", "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    manifest_path = base / "backend" / "wrappers" / "manifest.json"
+    root = get_root()
+    manifest_path = root / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
             rel = (data.get("engines") or {}).get("gpt_sovits", {}).get("checkpoint_dir", "")
             if rel:
-                return str((base / rel).resolve())
+                return str((root / rel).resolve())
         except Exception:
             pass
-    return str((base / "runtime" / "checkpoints" / "gpt_sovits").resolve())
+    return str((root / "runtime" / "checkpoints" / "gpt_sovits").resolve())
 
 
 def _detect_engine_dir() -> Path | None:
     """检测 GPT-SoVITS 引擎目录。"""
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    candidates = [
-        base / "runtime" / "engine" / "gpt_sovits",
-        base / "runtime" / "engine" / "gpt_sovits",
-    ]
-    for d in candidates:
-        if d.exists() and (d / "GPT_SoVITS").exists():
-            return d
+    engine_dir = get_engine_dir("gpt_sovits")
+    if engine_dir.exists() and (engine_dir / "GPT_SoVITS").exists():
+        return engine_dir
     return None
 
 
@@ -87,8 +84,8 @@ def main() -> int:
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
 
     # HF 缓存统一指向 checkpoints/hf_cache
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    hf_cache = str((base / "runtime" / "checkpoints" / "hf_cache").resolve())
+    root = get_root()
+    hf_cache = str((root / "runtime" / "checkpoints" / "hf_cache").resolve())
     os.environ.setdefault("HF_HUB_CACHE", hf_cache)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_cache)
 

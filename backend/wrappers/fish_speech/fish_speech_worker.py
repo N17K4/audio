@@ -23,6 +23,8 @@ import threading
 import time
 from pathlib import Path
 
+from wrappers._common import get_engine_dir
+
 # 空闲超时（秒）：无请求时自动退出，释放 GPU/CPU 内存
 IDLE_TIMEOUT = 600  # 10 分钟
 
@@ -42,7 +44,7 @@ def load_engine(checkpoint_dir: str, device: str):
     import time as _time
     _t0 = _time.monotonic()
 
-    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "fish_speech"
+    engine_dir = get_engine_dir("fish_speech")
     engine_dir_str = str(engine_dir)
     if engine_dir_str not in sys.path:
         sys.path.insert(0, engine_dir_str)

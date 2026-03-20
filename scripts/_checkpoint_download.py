@@ -19,7 +19,6 @@ import argparse
 import hashlib
 import json
 import os
-import platform
 import queue
 import shutil
 import subprocess
@@ -601,14 +600,6 @@ def download_hf_cache(
     return all_ok
 
 
-def get_embedded_python(project_root: Path) -> str:
-    """返回嵌入式 Python 可执行路径，找不到返回空串。"""
-    if platform.system() == "Windows":
-        p = project_root / "runtime" / "python" / "win" / "python.exe"
-    else:
-        p = project_root / "runtime" / "python" / "mac" / "bin" / "python3"
-    return str(p) if p.exists() else ""
-
 
 # clone 后删除的开发专用目录和文件（不影响运行时）
 _FACEFUSION_RM = [
@@ -691,13 +682,8 @@ def setup_facefusion_engine(
         print(f"  ✓ clone 完成，已精简（{n} 个文件）")
         emit("log", message="  ✓ 克隆完成，开发文件已清理")
 
-    # ── Step 2: 找嵌入式 Python ─────────────────────────────────────────────
-    py = get_embedded_python(project_root) or get_embedded_python(resources_root)
-    if not py:
-        msg = "嵌入式 Python 未找到，请先运行 pnpm run setup"
-        print(f"  [facefusion] ✗ {msg}")
-        emit("log", message=f"  ✗ {msg}")
-        return False
+    # ── Step 2: 当前脚本已由嵌入式 Python 执行，直接复用 ─────────────────
+    py = sys.executable
 
     # ── Step 3: 直接用嵌入式 pip 安装依赖（绕过 install.py 的 conda 检查）──────
     # FaceFusion 的 install.py 需要 conda，但我们用的是嵌入式 Python，直接读 requirements.txt
@@ -831,10 +817,7 @@ def prefetch_faster_whisper_model(
     if check_only:
         return False
 
-    py = get_embedded_python(resources_root) or get_embedded_python(project_root)
-    if not py:
-        print("  [faster-whisper] 嵌入式 Python 未找到，跳过模型预下载")
-        return False
+    py = sys.executable
 
     runtime_env = dict(os.environ)
 
@@ -974,8 +957,6 @@ def main() -> int:
         print(f"✗ 找不到 manifest.json: {manifest_path}")
         return 1
 
-    resources_root = active_root
-
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     engines: dict = manifest.get("engines", {})
 
@@ -1106,25 +1087,24 @@ def main() -> int:
     # transformers / diffusers / seed_vc / wan / flux / got_ocr 等引擎均需要 >=1.3.0。
     # 必须在所有引擎 pip 安装完成后执行，确保最终版本满足要求。
     if not args.check_only:
-        py = get_embedded_python(project_root)
-        if py:
-            print("── 修复 huggingface_hub 版本（强制升级至 >=1.3.0）──")
-            r = subprocess.run(
-                [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
-                 "--force-reinstall", "--quiet"],
-                capture_output=True, text=True, timeout=120,
+        py = sys.executable
+        print("── 修复 huggingface_hub 版本（强制升级至 >=1.3.0）──")
+        r = subprocess.run(
+            [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
+             "--force-reinstall", "--quiet"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if r.returncode == 0:
+            # 验证安装版本
+            ver_check = subprocess.run(
+                [py, "-c",
+                 "import huggingface_hub; print(huggingface_hub.__version__)"],
+                capture_output=True, text=True,
             )
-            if r.returncode == 0:
-                # 验证安装版本
-                ver_check = subprocess.run(
-                    [py, "-c",
-                     "import huggingface_hub; print(huggingface_hub.__version__)"],
-                    capture_output=True, text=True,
-                )
-                ver = ver_check.stdout.strip()
-                print(f"  ✓ huggingface_hub=={ver}")
-            else:
-                print(f"  ✗ 升级失败: {r.stderr.strip()[:200]}")
+            ver = ver_check.stdout.strip()
+            print(f"  ✓ huggingface_hub=={ver}")
+        else:
+            print(f"  ✗ 升级失败: {r.stderr.strip()[:200]}")
             print()
 
     if all_ready:

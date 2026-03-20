@@ -26,6 +26,8 @@ import sys
 import time
 from pathlib import Path
 
+from wrappers._common import get_engine_dir
+
 
 def _ts() -> str:
     """返回 +Xs 相对于启动时的时间戳。"""
@@ -56,7 +58,7 @@ def main() -> int:
     print(f"[fish_speech_cli] {_ts()} output={output_path}", file=sys.stderr)
 
     # engine 目录：本脚本位于 backend/wrappers/fish_speech/，engine 在 runtime/engine/fish_speech/
-    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "fish_speech"
+    engine_dir = get_engine_dir("fish_speech")
     print(f"[fish_speech_cli] {_ts()} engine_dir={engine_dir}  exists={engine_dir.exists()}", file=sys.stderr)
     if not engine_dir.exists():
         print(f"[fish_speech_cli] {_ts()} ERROR: engine 目录不存在", file=sys.stderr)

@@ -26,6 +26,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from wrappers._common import get_root, get_embedded_python, get_engine_dir
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Faster-Whisper STT 适配器")
@@ -43,39 +45,17 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = (os.getenv("FASTER_WHISPER_CHECKPOINT_DIR") or "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    manifest_path = base / "backend" / "wrappers" / "manifest.json"
+    root = get_root()
+    manifest_path = root / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
             rel = (data.get("engines") or {}).get("faster_whisper", {}).get("checkpoint_dir", "")
             if rel:
-                return str((base / rel).resolve())
+                return str((root / rel).resolve())
         except Exception:
             pass
-    return str((base / "runtime" / "checkpoints" / "faster_whisper").resolve())
-
-
-def get_embedded_python() -> str:
-    """返回平台对応の嵌入式 Python 路径（runtime/python/mac 或 runtime/python/win）。找不到则报错退出。"""
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    if sys.platform == "win32":
-        candidates = [base / "runtime" / "python" / "win" / "python.exe"]
-        platform_name = "win"
-    else:
-        candidates = [
-            base / "runtime" / "python" / "mac" / "bin" / "python3",
-            base / "runtime" / "python" / "mac" / "bin" / "python",
-        ]
-        platform_name = "mac"
-    for p in candidates:
-        if p.exists():
-            return str(p)
-    print(
-        f"[faster-whisper] 嵌入式 Python 未找到，请将 Python 放置于 runtime/python/{platform_name}/",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    return str((root / "runtime" / "checkpoints" / "faster_whisper").resolve())
 
 
 def load_cmd_template() -> str:
@@ -98,7 +78,7 @@ def load_cmd_template() -> str:
 
 def detect_engine_cmd() -> str:
     """自动探测 engine/ 子目录中的推理脚本。"""
-    engine_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "faster_whisper"
+    engine_dir = get_engine_dir("faster_whisper")
     if not engine_dir.exists():
         return ""
 

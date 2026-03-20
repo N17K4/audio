@@ -26,6 +26,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from wrappers._common import get_root, get_embedded_python, get_engine_dir
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RVC inference adapter")
@@ -44,17 +46,17 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = (os.getenv("RVC_CHECKPOINT_DIR") or "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    manifest_path = base / "backend" / "wrappers" / "manifest.json"
+    root = get_root()
+    manifest_path = root / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
             rel = (data.get("engines") or {}).get("rvc", {}).get("checkpoint_dir", "")
             if rel:
-                return str((base / rel).resolve())
+                return str((root / rel).resolve())
         except Exception:
             pass
-    return str((base / "runtime" / "checkpoints" / "rvc").resolve())
+    return str((root / "runtime" / "checkpoints" / "rvc").resolve())
 
 
 def load_cmd_template() -> str:
@@ -75,32 +77,8 @@ def load_cmd_template() -> str:
     return detect_project_local_engine_cmd()
 
 
-def get_embedded_python() -> str:
-    """返回平台对応の嵌入式 Python 路径（runtime/python/mac 或 runtime/python/win）。找不到则报错退出。"""
-    # __file__ = wrappers/rvc/infer_cli.py，上三级为项目根目录
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    if sys.platform == "win32":
-        candidates = [base / "runtime" / "python" / "win" / "python.exe"]
-        platform_name = "win"
-    else:
-        candidates = [
-            base / "runtime" / "python" / "mac" / "bin" / "python3",
-            base / "runtime" / "python" / "mac" / "bin" / "python",
-        ]
-        platform_name = "mac"
-    for p in candidates:
-        if p.exists():
-            return str(p)
-    print(
-        f"[infer_cli] 嵌入式 Python 未找到，请将 Python 放置于 runtime/python/{platform_name}/",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
 def detect_project_local_engine_cmd() -> str:
-    base_dir = Path(__file__).resolve().parent
-    engine_dir = base_dir.parent.parent / "runtime" / "engine" / "rvc"
+    engine_dir = get_engine_dir("rvc")
     if not engine_dir.exists():
         return ""
 

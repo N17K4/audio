@@ -25,6 +25,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from wrappers._common import get_root
+
 # macOS ARM：PYTORCH_ENABLE_MPS_FALLBACK 允许不支持的算子自动降级到 CPU
 if not os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK"):
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
@@ -56,17 +58,17 @@ def _get_checkpoint_dir(arg_value: str) -> Path:
     env_val = (os.environ.get("RVC_CHECKPOINT_DIR") or "").strip()
     if env_val:
         return Path(env_val).resolve()
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    manifest_path = base / "backend" / "wrappers" / "manifest.json"
+    root = get_root()
+    manifest_path = root / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
             rel = (data.get("engines") or {}).get("rvc", {}).get("checkpoint_dir", "")
             if rel:
-                return (base / rel).resolve()
+                return (root / rel).resolve()
         except Exception:
             pass
-    return (base / "checkpoints" / "rvc").resolve()
+    return (root / "checkpoints" / "rvc").resolve()
 
 
 def extract_audio_files(dataset_path: Path, work_dir: Path) -> list[Path]:

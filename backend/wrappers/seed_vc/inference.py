@@ -24,6 +24,8 @@ import sys
 import time
 from pathlib import Path
 
+from wrappers._common import get_root, get_embedded_python
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Seed-VC 声音转换适配器")
@@ -45,35 +47,17 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     env_val = (os.getenv("SEED_VC_CHECKPOINT_DIR") or "").strip()
     if env_val:
         return env_val
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    manifest_path = base / "backend" / "wrappers" / "manifest.json"
+    root = get_root()
+    manifest_path = root / "backend" / "wrappers" / "manifest.json"
     if manifest_path.exists():
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
             rel = (data.get("engines") or {}).get("seed_vc", {}).get("checkpoint_dir", "")
             if rel:
-                return str((base / rel).resolve())
+                return str((root / rel).resolve())
         except Exception:
             pass
-    return str((base / "runtime" / "checkpoints" / "seed_vc").resolve())
-
-
-def get_embedded_python() -> str:
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    if sys.platform == "win32":
-        candidates = [base / "runtime" / "python" / "win" / "python.exe"]
-        platform_name = "win"
-    else:
-        candidates = [
-            base / "runtime" / "python" / "mac" / "bin" / "python3",
-            base / "runtime" / "python" / "mac" / "bin" / "python",
-        ]
-        platform_name = "mac"
-    for p in candidates:
-        if p.exists():
-            return str(p)
-    print(f"[seed_vc] 嵌入式 Python 未找到，请将 Python 放置于 runtime/python/{platform_name}/", file=sys.stderr)
-    sys.exit(1)
+    return str((root / "runtime" / "checkpoints" / "seed_vc").resolve())
 
 
 def _find_file(directory: str, suffix: str) -> str:
@@ -290,15 +274,15 @@ def main() -> int:
         return 2
 
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
-    base = Path(__file__).resolve().parent.parent.parent.parent
-    hf_cache = str((base / "runtime" / "checkpoints" / "hf_cache").resolve())
+    root = get_root()
+    hf_cache = str((root / "runtime" / "checkpoints" / "hf_cache").resolve())
     os.environ.setdefault("HF_HUB_CACHE", hf_cache)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_cache)
 
     # f0_condition=True 需要不同模型，回退到子进程
     if args.f0_condition:
         print("[seed_vc] f0_condition=True，使用子进程模式", file=sys.stderr)
-        return run_subprocess_fallback(args, checkpoint_dir, base)
+        return run_subprocess_fallback(args, checkpoint_dir, root)
 
     # ── 持久化 Worker 模式 ────────────────────────────────────────────────────
     checkpoint_pth = _find_file(checkpoint_dir, ".pth")

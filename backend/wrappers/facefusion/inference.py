@@ -17,9 +17,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from wrappers._common import get_engine_dir
+
 
 def _find_facefusion_script() -> str:
-    runtime_dir = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "engine" / "facefusion"
+    runtime_dir = get_engine_dir("facefusion")
     candidates = [
         runtime_dir / "facefusion.py",
     ]
