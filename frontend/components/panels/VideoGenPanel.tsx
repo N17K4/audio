@@ -1,5 +1,6 @@
 import type { Status } from '../../types';
 import { VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS, LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS } from '../../constants';
+import { btnMiscPrimary } from '../../constants/styles';
 import ComboSelect from '../shared/ComboSelect';
 import FileDrop from '../shared/FileDrop';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
@@ -45,8 +46,6 @@ interface VideoGenPanelProps {
   fileCls: string;
   labelCls: string;
 }
-
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
 
 export default function VideoGenPanel({
   status, apiKey, setApiKey, cloudEndpoint, setCloudEndpoint,
@@ -187,7 +186,7 @@ export default function VideoGenPanel({
       </div>
 
       <button
-        className={btnPrimary}
+        className={btnMiscPrimary}
         disabled={busy || isUnsupported || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
         onClick={handleRun}>
         {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成视频'}

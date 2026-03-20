@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type { Status, Job, VcInputMode } from '../types';
 import { safeJson } from '../utils';
+import { useAudioRecorder } from './useAudioRecorder';
 
 interface UseTTSParams {
   backendBaseUrl: string;
@@ -38,10 +39,13 @@ export function useTTS({
   const [ttsVoiceId, setTtsVoiceId] = useState('');
   const [ttsRefAudios, setTtsRefAudios] = useState<File[]>([]);
   const [ttsRefInputMode, setTtsRefInputMode] = useState<VcInputMode>('upload');
-  const [ttsRefRecordedObjectUrl, setTtsRefRecordedObjectUrl] = useState<string | null>(null);
-  const [ttsRecordingDir, setTtsRecordingDir] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recorder = useAudioRecorder({ setStatus, setError });
+
+  useEffect(() => {
+    if (recorder.recordedFile) {
+      setTtsRefAudios([recorder.recordedFile]);
+    }
+  }, [recorder.recordedFile]);
 
   // GPT-SoVITS 高級パラメータ
   const [gptSovitsTextLang, setGptSovitsTextLang] = useState('auto');
@@ -59,40 +63,9 @@ export function useTTS({
   const [gptSovitsFragmentInterval, setGptSovitsFragmentInterval] = useState(0.3);
   const [gptSovitsSampleSteps, setGptSovitsSampleSteps] = useState(32);
 
-  async function startTtsRefRecording() {
-    setError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        if (ttsRefRecordedObjectUrl) URL.revokeObjectURL(ttsRefRecordedObjectUrl);
-        setTtsRefRecordedObjectUrl(URL.createObjectURL(blob));
-        setTtsRefAudios([new File([blob], 'recording.webm', { type: 'audio/webm' })]);
-        setTtsRecordingDir('recording');
-        setStatus('idle');
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-      setStatus('recording');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '启动录音失败');
-      setStatus('idle');
-    }
-  }
-
-  function stopTtsRefRecording() {
-    recorderRef.current?.stop();
-  }
-
   function clearTtsRefRecording() {
-    if (ttsRefRecordedObjectUrl) URL.revokeObjectURL(ttsRefRecordedObjectUrl);
-    setTtsRefRecordedObjectUrl(null);
+    recorder.clearRecording();
     setTtsRefAudios([]);
-    setTtsRecordingDir(null);
   }
 
   async function runTts() {
@@ -157,9 +130,9 @@ export function useTTS({
     ttsVoiceId, setTtsVoiceId,
     ttsRefAudios, setTtsRefAudios,
     ttsRefInputMode, setTtsRefInputMode,
-    ttsRefRecordedObjectUrl,
-    ttsRecordingDir,
-    startTtsRefRecording, stopTtsRefRecording, clearTtsRefRecording,
+    ttsRefRecordedObjectUrl: recorder.recordedObjectUrl,
+    ttsRecordingDir: recorder.recordingDir,
+    startTtsRefRecording: recorder.startRecording, stopTtsRefRecording: recorder.stopRecording, clearTtsRefRecording,
     gptSovitsTextLang, setGptSovitsTextLang,
     gptSovitsPromptLang, setGptSovitsPromptLang,
     gptSovitsRefText, setGptSovitsRefText,

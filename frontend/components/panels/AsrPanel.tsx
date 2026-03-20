@@ -4,6 +4,9 @@ import ModelInput from '../shared/ModelInput';
 import HowToSteps from '../shared/HowToSteps';
 import FileDrop from '../shared/FileDrop';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+import RecordingControls from '../shared/RecordingControls';
+import RecordingDownloadLink from '../shared/RecordingDownloadLink';
+import TabBar from '../shared/TabBar';
 
 // ─── 本地 Whisper / Faster-Whisper 流程 ──────────────────────────────────────
 const ASR_FLOW_LOCAL: FlowStep[] = [
@@ -119,15 +122,11 @@ export default function AsrPanel({
       {/* 输入音频 */}
       <div className="space-y-3">
         <span className="block text-xs font-medium text-slate-400 uppercase tracking-wide">输入音频</span>
-        <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm bg-slate-50/50 dark:bg-slate-800/50">
-          {(['upload', 'record'] as VcInputMode[]).map(m => (
-            <button key={m}
-              className={`flex-1 py-2 text-sm font-medium transition-all ${asrInputMode === m ? 'bg-slate-800 dark:bg-slate-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200'}`}
-              onClick={() => { setAsrInputMode(m); if (m === 'upload') onClearAsrRecording(); }}>
-              {m === 'record' ? '电脑内录' : '上传文件'}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          tabs={[{ value: 'upload' as const, label: '上传文件' }, { value: 'record' as const, label: '电脑内录' }]}
+          value={asrInputMode}
+          onChange={m => { setAsrInputMode(m); if (m === 'upload') onClearAsrRecording(); }}
+        />
 
         {asrInputMode === 'upload' ? (
           <FileDrop
@@ -140,35 +139,13 @@ export default function AsrPanel({
           />
         ) : (
           <div className="space-y-3">
-            {/* 录音控制按钮 */}
-            <div className="flex gap-2">
-              {status === 'idle' && !asrRecordedObjectUrl && (
-                <button className="flex-1 rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartAsrRecording}>开始录音</button>
-              )}
-              {status === 'recording' && (
-                <button className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 text-sm font-semibold text-white shadow-sm animate-pulse transition-all" onClick={onStopAsrRecording}>停止录音</button>
-              )}
-              {status === 'processing' && (
-                <span className="flex-1 text-center text-sm text-slate-400 py-2.5">处理中...</span>
-              )}
-              {status === 'idle' && asrRecordedObjectUrl && (
-                <button className="flex-1 rounded-xl bg-[#1A8FE3] hover:bg-[#1680d0] py-2.5 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.99]" onClick={onStartAsrRecording}>重新录音</button>
-              )}
-            </div>
+            <RecordingControls status={status} recordedObjectUrl={asrRecordedObjectUrl} onStart={onStartAsrRecording} onStop={onStopAsrRecording} />
 
             {/* 录音结果播放器 */}
             {asrRecordedObjectUrl && (
               <div className="space-y-2">
                 <audio controls src={asrRecordedObjectUrl} className="w-full h-9" />
-                {asrRecordingDir && asrRecordedObjectUrl && (
-                  <a href={asrRecordedObjectUrl} download="asr_recording.webm"
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    下载录音
-                  </a>
-                )}
+                <RecordingDownloadLink recordedObjectUrl={asrRecordedObjectUrl} filename="asr_recording.webm" />
               </div>
             )}
           </div>

@@ -68,17 +68,34 @@ async def hw_accel_info():
 @router.get("/settings")
 async def get_settings():
     s = load_settings()
-    return {"local_concurrency": max(1, min(4, int(s.get("local_concurrency", 1))))}
+    return {
+        "local_concurrency": max(1, min(4, int(s.get("local_concurrency", 1)))),
+        "pip_mirror": s.get("pip_mirror", ""),
+        "hf_endpoint": s.get("hf_endpoint", ""),
+    }
 
 
 @router.post("/settings")
-async def update_settings(local_concurrency: int = Body(..., embed=True)):
-    n = max(1, min(4, local_concurrency))
+async def update_settings(
+    local_concurrency: int | None = Body(None, embed=True),
+    pip_mirror: str | None = Body(None, embed=True),
+    hf_endpoint: str | None = Body(None, embed=True),
+):
     s = load_settings()
-    s["local_concurrency"] = n
+    if local_concurrency is not None:
+        n = max(1, min(4, local_concurrency))
+        s["local_concurrency"] = n
+        job_queue.set_local_concurrency(n)
+    if pip_mirror is not None:
+        s["pip_mirror"] = pip_mirror.strip()
+    if hf_endpoint is not None:
+        s["hf_endpoint"] = hf_endpoint.strip().rstrip("/")
     save_settings(s)
-    job_queue.set_local_concurrency(n)
-    return {"local_concurrency": n}
+    return {
+        "local_concurrency": max(1, min(4, int(s.get("local_concurrency", 1)))),
+        "pip_mirror": s.get("pip_mirror", ""),
+        "hf_endpoint": s.get("hf_endpoint", ""),
+    }
 
 
 @router.post("/smoketest/run")

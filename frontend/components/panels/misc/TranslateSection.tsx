@@ -8,6 +8,7 @@ import {
   TRANSLATE_PROVIDERS, TRANSLATE_LANGUAGES, PROVIDER_LABELS, DEFAULT_MODELS,
 } from '../../../constants';
 import { TRANSLATE_FLOW } from '../../../constants/flows';
+import { btnMiscPrimary } from '../../../constants/styles';
 
 interface TranslateSectionProps {
   status: Status;
@@ -29,8 +30,6 @@ interface TranslateSectionProps {
   labelCls: string;
   fieldCls: string;
 }
-
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
 
 export default function TranslateSection({
   status, apiKey, setApiKey, cloudEndpoint, setCloudEndpoint,
@@ -103,7 +102,7 @@ export default function TranslateSection({
           placeholder="在此输入要翻译的文本..." />
       </div>
 
-      <button className={btnPrimary} disabled={busy || !translateText.trim()} onClick={onRunTranslate}>
+      <button className={btnMiscPrimary} disabled={busy || !translateText.trim()} onClick={onRunTranslate}>
         {busy ? '翻译中...' : '开始翻译'}
       </button>
     </div>

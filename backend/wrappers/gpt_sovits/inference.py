@@ -194,11 +194,13 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
 
     # 构建推理参数
     ref_audio = args.voice_ref[0] if args.voice_ref else ""
+    # 过滤空字符串（服务层可能传入 ""）
+    if ref_audio and not ref_audio.strip():
+        ref_audio = ""
 
     inputs = {
         "text": args.text,
         "text_lang": args.text_lang if args.text_lang != "auto" else "auto",
-        "ref_audio_path": ref_audio,
         "prompt_text": args.ref_text,
         "prompt_lang": args.prompt_lang if args.prompt_lang != "auto" else "auto",
         "top_k": args.top_k,
@@ -213,10 +215,13 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
         "fragment_interval": args.fragment_interval,
         "sample_steps": args.sample_steps,
     }
+    # ref_audio_path が空なら inputs に含めない（GPT-SoVITS が ValueError を投げるため）
+    if ref_audio:
+        inputs["ref_audio_path"] = ref_audio
 
     # 辅助参考音频
     if len(args.voice_ref) > 1:
-        inputs["aux_ref_audio_paths"] = args.voice_ref[1:]
+        inputs["aux_ref_audio_paths"] = [r for r in args.voice_ref[1:] if r.strip()]
 
     try:
         result = tts_engine.run(inputs)

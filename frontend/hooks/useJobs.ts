@@ -8,16 +8,19 @@ function loadStoredJobs(): Job[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as Job[];
+    const jobs = JSON.parse(raw) as Job[];
+    // 刷新后 running/queued 的前端 instant 任务无法恢复，标记为中断
+    return jobs.map(j =>
+      (j.status === 'running' || j.status === 'queued') && j.id.startsWith('instant_')
+        ? { ...j, status: 'failed' as const, error: '页面刷新，任务中断' }
+        : j,
+    );
   } catch { return []; }
 }
 
 function saveJobs(jobs: Job[]) {
   try {
-    // 只持久化已完成/失败的任务，进行中的重启后无意义
-    const toStore = jobs
-      .filter(j => j.status === 'completed' || j.status === 'failed')
-      .slice(0, MAX_STORED);
+    const toStore = jobs.slice(0, MAX_STORED);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
   } catch { /**/ }
 }
@@ -50,6 +53,12 @@ export function useJobs(
     });
   }
 
+  // backendReady 时自动同步后端任务状态（刷新后恢复）
+  useEffect(() => {
+    if (!backendReady || !backendBaseUrl) return;
+    fetchJobsInternal();
+  }, [backendReady, backendBaseUrl]);
+
   // 轮询进行中的任务
   useEffect(() => {
     if (!backendReady || !backendBaseUrl) return;
@@ -66,7 +75,7 @@ export function useJobs(
     return () => clearTimeout(timer);
   }, [jobs, backendReady, backendBaseUrl]);
 
-  async function fetchJobs() {
+  async function fetchJobsInternal() {
     if (!backendBaseUrl) return;
     try {
       const r = await fetch(`${backendBaseUrl}/jobs`);
@@ -75,6 +84,8 @@ export function useJobs(
       setJobs(prev => mergeJobs(prev, d.jobs || []));
     } catch { /**/ }
   }
+
+  const fetchJobs = fetchJobsInternal;
 
   function addPendingJob(type: string, label: string, provider: string, isLocal: boolean): string {
     const id = `instant_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;

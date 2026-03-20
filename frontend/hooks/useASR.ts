@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Status, VcInputMode } from '../types';
 import { safeJson } from '../utils';
+import { useAudioRecorder } from './useAudioRecorder';
 
 interface UseASRParams {
   backendBaseUrl: string;
@@ -33,46 +34,18 @@ export function useASR({
   const [asrFile, setAsrFile] = useState<File | null>(null);
   const [asrModel, setAsrModel] = useState('');
   const [asrInputMode, setAsrInputMode] = useState<VcInputMode>('upload');
-  const [asrRecordedObjectUrl, setAsrRecordedObjectUrl] = useState<string | null>(null);
-  const [asrRecordingDir, setAsrRecordingDir] = useState<string | null>(null);
   const abortCtrlRef = useRef<AbortController | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recorder = useAudioRecorder({ setStatus, setError });
 
-  async function startAsrRecording() {
-    setError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        if (asrRecordedObjectUrl) URL.revokeObjectURL(asrRecordedObjectUrl);
-        setAsrRecordedObjectUrl(URL.createObjectURL(blob));
-        setAsrFile(new File([blob], 'recording.webm', { type: 'audio/webm' }));
-        setAsrRecordingDir('recording');
-        setStatus('idle');
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-      setStatus('recording');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '启动录音失败');
-      setStatus('idle');
+  useEffect(() => {
+    if (recorder.recordedFile) {
+      setAsrFile(recorder.recordedFile);
     }
-  }
-
-  function stopAsrRecording() {
-    recorderRef.current?.stop();
-  }
+  }, [recorder.recordedFile]);
 
   function clearAsrRecording() {
-    if (asrRecordedObjectUrl) URL.revokeObjectURL(asrRecordedObjectUrl);
-    setAsrRecordedObjectUrl(null);
+    recorder.clearRecording();
     setAsrFile(null);
-    setAsrRecordingDir(null);
   }
 
   async function runAsr() {
@@ -113,9 +86,9 @@ export function useASR({
     asrFile, setAsrFile,
     asrModel, setAsrModel,
     asrInputMode, setAsrInputMode,
-    asrRecordedObjectUrl,
-    asrRecordingDir,
-    startAsrRecording, stopAsrRecording, clearAsrRecording,
+    asrRecordedObjectUrl: recorder.recordedObjectUrl,
+    asrRecordingDir: recorder.recordingDir,
+    startAsrRecording: recorder.startRecording, stopAsrRecording: recorder.stopRecording, clearAsrRecording,
     runAsr, abortCurrentRequest,
   };
 }

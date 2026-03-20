@@ -88,8 +88,32 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   const [concurrencySaving, setConcurrencySaving] = useState(false);
   const [concurrencyMsg, setConcurrencyMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // ── 镜像源（始终使用默认值，不缓存） ─────────────────────────────────────
+  const PIP_DEFAULT = 'https://pypi.tuna.tsinghua.edu.cn/simple';
+  const HF_DEFAULT = 'https://hf-mirror.com';
+  const [pipMirror, setPipMirror] = useState(PIP_DEFAULT);
+  const [hfEndpoint, setHfEndpoint] = useState(HF_DEFAULT);
+
+  // 镜像源变更后立即写入 settings（下次安装时生效）
+  function updateMirror(field: 'pip_mirror' | 'hf_endpoint', value: string) {
+    if (field === 'pip_mirror') setPipMirror(value);
+    else setHfEndpoint(value);
+    if (!backendBaseUrl) return;
+    fetch(`${backendBaseUrl}/settings`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    }).catch(() => {});
+  }
+
+  // 初始化：写入默认镜像源 + 加载并发设置
   useEffect(() => {
     if (!backendBaseUrl) return;
+    // 写入默认镜像源
+    fetch(`${backendBaseUrl}/settings`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pip_mirror: PIP_DEFAULT, hf_endpoint: HF_DEFAULT }),
+    }).catch(() => {});
+    // 加载并发数
     fetch(`${backendBaseUrl}/settings`)
       .then(r => r.json())
       .then(d => { const n = d?.local_concurrency ?? 1; setConcurrency(n); setConcurrencyInput(String(n)); })
@@ -101,15 +125,16 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   const [diskLoading, setDiskLoading] = useState(false);
   const [diskRefreshedAt, setDiskRefreshedAt] = useState<Date | null>(null);
   const [clearingRow, setClearingRow] = useState<Record<string, boolean>>({});
-  const [installLog, setInstallLog] = useState<string[]>([]);
-  const [installLogKey, setInstallLogKey] = useState<string>('');
-  const installLogRef = useRef<HTMLPreElement>(null);
+  const [installLogs, setInstallLogs] = useState<Record<string, string[]>>({});
+  const installLogRefs = useRef<Record<string, HTMLPreElement | null>>({});
   const [stageStatus, setStageStatus] = useState<Record<string, 'idle' | 'reinstalling' | 'deleting'>>({});
 
   useEffect(() => {
-    const el = installLogRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [installLog]);
+    for (const stage of Object.keys(installLogs)) {
+      const el = installLogRefs.current[stage];
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [installLogs]);
 
   // ── 重置 ────────────────────────────────────────────────────────────────────
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -138,10 +163,14 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   }
 
   // ── 补充安装（SSE ストリーム）────────────────────────────────────────────────
+  function appendLog(stage: string, line: string) {
+    setInstallLogs(prev => ({ ...prev, [stage]: [...(prev[stage] || []), line] }));
+  }
+
   async function doSupplementInstall(stage: string) {
     if (!backendBaseUrl) return;
     setStageStatus(s => ({ ...s, [stage]: 'reinstalling' }));
-    setInstallLogKey(stage);
+    setInstallLogs(prev => ({ ...prev, [stage]: [] }));
     try {
       const r = await fetch(`${backendBaseUrl}/system/install/${stage}`, { method: 'POST' });
       if (r.ok && r.body) {
@@ -158,16 +187,16 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
             if (line.startsWith('data: ')) {
               try {
                 const msg = JSON.parse(line.slice(6));
-                if (msg.log) setInstallLog(prev => [...prev, msg.log]);
+                if (msg.log) appendLog(stage, msg.log);
               } catch { /**/ }
             }
           }
         }
       } else {
-        setInstallLog(prev => [...prev, `✗ 操作失败：HTTP ${r.status}`]);
+        appendLog(stage, `✗ 操作失败：HTTP ${r.status}`);
       }
     } catch (e: any) {
-      setInstallLog(prev => [...prev, `✗ 操作失败：${e.message}`]);
+      appendLog(stage, `✗ 操作失败：${e.message}`);
     }
     await doRefreshDisk();
     setStageStatus(s => ({ ...s, [stage]: 'idle' }));
@@ -267,6 +296,22 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     const total = diskRows.reduce((s, r) => s + Math.max(0, r.size), 0);
     const anyBusy = Object.values(stageStatus).some(s => s !== 'idle');
 
+    const PIP_PRESETS = [
+      { label: '清华 TUNA', value: 'https://pypi.tuna.tsinghua.edu.cn/simple' },
+      { label: '官方 PyPI', value: '' },
+      { label: '阿里云', value: 'https://mirrors.aliyun.com/pypi/simple' },
+      { label: '中科大 USTC', value: 'https://pypi.mirrors.ustc.edu.cn/simple' },
+      { label: '华为云', value: 'https://repo.huaweicloud.com/repository/pypi/simple' },
+      { label: '腾讯云', value: 'https://mirrors.cloud.tencent.com/pypi/simple' },
+    ];
+
+    const HF_PRESETS = [
+      { label: 'hf-mirror.com', value: 'https://hf-mirror.com' },
+      { label: '官方 HuggingFace', value: '' },
+    ];
+
+    const SELECT_CLS = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-[#1A8FE3] focus:ring-2 focus:ring-[#1A8FE3]/15 outline-none transition-all dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 appearance-none cursor-pointer';
+
     // 折叠辅助
     const ChevronIcon = ({ open }: { open: boolean }) => (
       <svg className={`w-4 h-4 transition-transform ${open ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -276,6 +321,36 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
 
     return (
       <div className="space-y-4">
+        {/* 下载源配置（置顶） */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">pip 下载源</label>
+            <select
+              className={SELECT_CLS}
+              value={pipMirror}
+              onChange={e => updateMirror('pip_mirror', e.target.value)}>
+              {PIP_PRESETS.map(p => (
+                <option key={p.value} value={p.value}>
+                  {p.value ? `${p.value}（${p.label}）` : `https://pypi.org/simple（${p.label}）`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">HuggingFace 下载源</label>
+            <select
+              className={SELECT_CLS}
+              value={hfEndpoint}
+              onChange={e => updateMirror('hf_endpoint', e.target.value)}>
+              {HF_PRESETS.map(p => (
+                <option key={p.value} value={p.value}>
+                  {p.value ? `${p.value}（${p.label}）` : `https://huggingface.co（${p.label}）`}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* 全量重置卡片（置顶） */}
         <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
           <button className="w-full px-5 py-3 flex items-center gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"
@@ -370,7 +445,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                   <button
                     className="shrink-0 rounded border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1"
                     style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
-                    disabled={isBusy || anyBusy}
+                    disabled={isBusy}
                     onClick={() => doSupplementInstall(stage)}>
                     {isBusy && stageStatus[stage] === 'reinstalling' ? <><Spinner />安装中</> : '补充安装'}
                   </button>
@@ -405,6 +480,25 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                       </span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* 安装日志（内联） */}
+              {(installLogs[stage]?.length ?? 0) > 0 && (
+                <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">安装日志</span>
+                    <button className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                      onClick={() => setInstallLogs(prev => { const next = { ...prev }; delete next[stage]; return next; })}>
+                      清除
+                    </button>
+                  </div>
+                  <pre
+                    ref={el => { installLogRefs.current[stage] = el; }}
+                    className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
+                    style={{ maxHeight: '14rem' }}>
+                    {installLogs[stage].join('\n')}
+                  </pre>
                 </div>
               )}
             </div>
@@ -454,23 +548,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
           </div>
         )}
 
-        {/* 安装日志 */}
-        {installLog.length > 0 && (
-          <Card
-            title={`安装日志${installLogKey ? ` · ${installLogKey}` : ''}`}
-            action={
-              <button className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                onClick={() => { setInstallLog([]); setInstallLogKey(''); }}>清除</button>
-            }
-          >
-            <pre
-              ref={installLogRef}
-              className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
-              style={{ maxHeight: '14rem' }}>
-              {installLog.join('\n')}
-            </pre>
-          </Card>
-        )}
 
       </div>
     );

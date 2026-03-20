@@ -28,6 +28,7 @@ from config import (
     LOGS_DIR,
     HF_CACHE_DIR,
     _MANIFEST,
+    load_settings,
 )
 from logging_setup import logger
 
@@ -328,6 +329,11 @@ async def install_stage(stage: str):
     except Exception:
         return {"ok": False, "error": "Python 解释器未找到"}
 
+    # 从 settings 读取镜像源配置
+    settings = load_settings()
+    pip_mirror = settings.get("pip_mirror", "").strip()
+    hf_endpoint = settings.get("hf_endpoint", "").strip().rstrip("/")
+
     def generate():
         env = os.environ.copy()
         env["PYTHONPATH"] = str(APP_ROOT)
@@ -335,6 +341,10 @@ async def install_stage(stage: str):
         env["PYTHONIOENCODING"] = "utf-8"
         env["RESOURCES_ROOT"] = str(RESOURCES_ROOT)
         env["CHECKPOINTS_DIR"] = str(CHECKPOINTS_ROOT)
+
+        # 将 HF 镜像端点通过环境变量传递（_checkpoint_download.py 读取 HF_ENDPOINT）
+        if hf_endpoint:
+            env["HF_ENDPOINT"] = hf_endpoint
 
         for script_rel in scripts:
             script_path = APP_ROOT / script_rel
@@ -344,9 +354,17 @@ async def install_stage(stage: str):
 
             yield f"data: {json.dumps({'log': f'▶ 运行脚本: {script_rel}'})}\n\n"
 
+            # 构建命令行参数：传递镜像源（各脚本支持的参数不同）
+            extra_args: list[str] = []
+            if pip_mirror:
+                extra_args += ["--pypi-mirror", pip_mirror]
+            # --hf-endpoint 仅 checkpoints 脚本支持
+            if hf_endpoint and stage in ("checkpoints_base", "checkpoints_extra"):
+                extra_args += ["--hf-endpoint", hf_endpoint]
+
             try:
                 proc = subprocess.Popen(
-                    [py_cmd, "-u", str(script_path)],
+                    [py_cmd, "-u", str(script_path), *extra_args],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -377,6 +395,56 @@ async def install_stage(stage: str):
         yield f"data: {json.dumps({'done': True})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# ─── GET /system/browse-dir ────────────────────────────────────────────────
+
+@router.get("/browse-dir")
+async def browse_dir(path: str = ""):
+    """指定パスのサブディレクトリ一覧を返す。パス未指定時はホームディレクトリ。"""
+    import platform
+
+    if not path:
+        path = str(Path.home())
+
+    target = Path(path).resolve()
+
+    if not target.exists():
+        return {"ok": False, "error": f"路径不存在：{path}"}
+    if not target.is_dir():
+        return {"ok": False, "error": f"不是目录：{path}"}
+
+    dirs: List[dict] = []
+    try:
+        for entry in sorted(target.iterdir(), key=lambda e: e.name.lower()):
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                dirs.append({"name": entry.name, "path": str(entry)})
+    except PermissionError:
+        return {"ok": False, "error": f"无权限访问：{path}"}
+
+    parent = str(target.parent) if target.parent != target else None
+
+    # 提供常用快捷目录
+    shortcuts: List[dict] = []
+    home = Path.home()
+    for name, p in [
+        ("主目录", home),
+        ("桌面", home / "Desktop"),
+        ("下载", home / "Downloads"),
+        ("文档", home / "Documents"),
+    ]:
+        if p.exists():
+            shortcuts.append({"name": name, "path": str(p)})
+
+    return {
+        "ok": True,
+        "current": str(target),
+        "parent": parent,
+        "dirs": dirs,
+        "shortcuts": shortcuts,
+    }
 
 
 # ─── GET /system/logs ──────────────────────────────────────────────────────

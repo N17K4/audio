@@ -1,3 +1,5 @@
 {
-  "local_concurrency": 1
+  "local_concurrency": 1,
+  "pip_mirror": "https://pypi.tuna.tsinghua.edu.cn/simple",
+  "hf_endpoint": "https://hf-mirror.com"
 }

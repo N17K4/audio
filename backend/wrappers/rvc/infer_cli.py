@@ -184,9 +184,9 @@ def _run_via_rvc_python(input_path: Path, output_path: Path, model_path: Path, i
     _patch_torch_load()
     try:
         from rvc_python.infer import RVCInference
-    except ImportError:
+    except ImportError as e:
         print(
-            "[infer_cli] rvc-python 未安装且无 cmd_template。\n"
+            f"[infer_cli] rvc-python 导入失败: {e}\n"
             "请运行 pnpm run setup 安装 rvc-python，或配置 engine.json cmd_template。",
             file=sys.stderr,
         )

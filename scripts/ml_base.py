@@ -310,6 +310,50 @@ def _repair_torch_stack(py: str, target: str, mirror: str, json_progress: bool) 
                     pass
 
 
+def _cleanup_duplicate_dist_info(target: str, json_progress: bool) -> None:
+    """清理 target 目录中的重复 dist-info。
+
+    pip install --target --upgrade 安装新版包时会替换模块目录，
+    但往往不删除旧版的 .dist-info，导致 importlib.metadata 返回错误版本。
+    对每个包只保留最新版本的 dist-info。
+    """
+    target_path = Path(target)
+    if not target_path.exists():
+        return
+    # 收集所有 dist-info：{normalized_name: [(version_str, path), ...]}
+    dist_map: dict[str, list[tuple[str, Path]]] = {}
+    for item in target_path.iterdir():
+        if not item.name.endswith(".dist-info") or not item.is_dir():
+            continue
+        m = re.match(r"^(.+?)[-_](\d[\w.]*?)\.dist.info$", item.name.lower().replace("-", "_"))
+        if m:
+            name = m.group(1)
+            version = m.group(2)
+            dist_map.setdefault(name, []).append((version, item))
+    removed = []
+    for name, versions in dist_map.items():
+        if len(versions) <= 1:
+            continue
+        # 按版本排序，保留最新
+        from packaging.version import Version, InvalidVersion
+        valid = []
+        for ver_str, path in versions:
+            try:
+                valid.append((Version(ver_str), path))
+            except InvalidVersion:
+                valid.append((Version("0"), path))
+        valid.sort(key=lambda x: x[0], reverse=True)
+        for _, old_path in valid[1:]:
+            try:
+                shutil.rmtree(old_path)
+                removed.append(old_path.name)
+            except OSError:
+                pass
+    if removed:
+        _emit({"type": "log", "message":
+               f"  清理重复 dist-info: {', '.join(removed)}"}, json_progress)
+
+
 def _ensure_pip_updated(py: str, json_progress: bool) -> None:
     """尝试升级 pip，避免旧版 pip 在 Windows 上的已知 bug（长路径、依赖解析异常等）。"""
     r = subprocess.run(
@@ -385,16 +429,23 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     _emit({"type": "log", "message": f"  下载完成，开始安装…"}, json_progress)
 
     # ── Phase 2: 从本地缓存逐个安装（快速、故障隔离）─────────────────────
-    # 生成 constraints 文件，锁定 torch 栈版本，防止 transitive dep 升级
+    # 生成 constraints 文件，锁定关键包版本，防止 transitive dep 升级
     constraints_file = os.path.join(cache_dir, "_constraints.txt")
-    _torch_constraints = []
+    _constraints = []
     for dist_name in ("torch", "torchaudio", "torchvision"):
         ver = _embedded_dist_version(py, dist_name)
         if ver:
-            _torch_constraints.append(f"{dist_name}=={ver}")
-    if _torch_constraints:
-        Path(constraints_file).write_text("\n".join(_torch_constraints) + "\n")
-        _emit({"type": "log", "message": f"  torch 版本锁定：{', '.join(_torch_constraints)}"}, json_progress)
+            _constraints.append(f"{dist_name}=={ver}")
+    # manifest 中带版本上限的包也加入 constraints，防止 peft 等拉升 transformers
+    for pkg in packages:
+        m = re.match(r"^([A-Za-z0-9_-]+).*(<=\d[^\s,]*).*$", pkg)
+        if m:
+            dist_name = m.group(1).lower().replace("-", "_")
+            if dist_name not in ("torch", "torchaudio", "torchvision"):
+                _constraints.append(pkg)
+    if _constraints:
+        Path(constraints_file).write_text("\n".join(_constraints) + "\n")
+        _emit({"type": "log", "message": f"  版本锁定：{', '.join(_constraints)}"}, json_progress)
 
     all_ok = True
     for inst_idx, pkg in enumerate(to_install, 1):
@@ -409,7 +460,7 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
             cmd.append("--no-deps")
         if target:
             cmd += ["--target", target, "--upgrade"]
-        if _torch_constraints:
+        if _constraints:
             cmd += ["--constraint", constraints_file]
         if mirror:
             cmd += ["--index-url", mirror, "--extra-index-url", "https://pypi.org/simple"]
@@ -439,6 +490,10 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     # ── Phase 3: 修复 torch 栈版本（万一 constraints 未能完全阻止）─────────
     if target:
         _repair_torch_stack(py, target, mirror, json_progress)
+
+    # ── Phase 4: 清理重复 dist-info（pip --upgrade 留下旧版 metadata）──────
+    if target:
+        _cleanup_duplicate_dist_info(target, json_progress)
 
     # ── 清理临时缓存 ──────────────────────────────────────────────────────
     shutil.rmtree(cache_dir, ignore_errors=True)

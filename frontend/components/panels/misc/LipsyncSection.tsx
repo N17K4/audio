@@ -7,18 +7,10 @@ import OutputDirRow from '../../shared/OutputDirRow';
 import type { Status } from '../../../types';
 import {
   LIPSYNC_PROVIDERS, LIPSYNC_PROVIDER_LABELS, LIPSYNC_MODELS,
-  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS,
+  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS, cleanProviderLabel,
 } from '../../../constants';
 import { LIPSYNC_FLOWS } from '../../../constants/flows';
-
-const PILL_BASE = 'rounded-xl border px-2 py-2 text-xs font-medium transition-all text-center leading-tight';
-const PILL_ON  = 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:border-violet-500 dark:text-violet-300';
-const PILL_OFF = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50';
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
-
-function shortProv(label: string): string {
-  return label.replace(/（[^）]*）/g, '').replace(/【[^】]*】/g, '').trim();
-}
+import { pillBase, pillOn, pillOff, btnMiscPrimary } from '../../../constants/styles';
 
 interface LipsyncSectionProps {
   status: Status;
@@ -63,8 +55,8 @@ export default function LipsyncSection({
         <label className={labelCls}>服务商</label>
         <div className="grid grid-cols-2 gap-2">
           {LIPSYNC_PROVIDERS.map(p => (
-            <button key={p} onClick={() => onLipsyncProviderChange(p)} className={`${PILL_BASE} ${lipsyncProvider === p ? PILL_ON : PILL_OFF}`}>
-              {shortProv(LIPSYNC_PROVIDER_LABELS[p] || p)}
+            <button key={p} onClick={() => onLipsyncProviderChange(p)} className={`${pillBase} ${lipsyncProvider === p ? pillOn : pillOff}`}>
+              {cleanProviderLabel(LIPSYNC_PROVIDER_LABELS[p] || p)}
             </button>
           ))}
         </div>
@@ -120,7 +112,7 @@ export default function LipsyncSection({
         />
       </div>
       <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
-      <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile || isUnsupported} onClick={onRunLipsync}>
+      <button className={`${btnMiscPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !lipsyncVideoFile || !lipsyncAudioFile || isUnsupported} onClick={onRunLipsync}>
         {busy ? '处理中...' : isUnsupported ? '暂不支持' : '开始口型同步'}
       </button>
     </div>

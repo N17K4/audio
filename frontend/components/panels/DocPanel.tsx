@@ -1,6 +1,10 @@
 import type { DocSubPage } from '../../types';
 import OutputDirRow from '../shared/OutputDirRow';
 import FileDrop from '../shared/FileDrop';
+import OptionButton from '../shared/OptionButton';
+import TabBar from '../shared/TabBar';
+import { IMG_OUTPUT_FORMATS, TEXT_ENCODINGS } from '../../constants';
+import { numCls } from '../../constants/styles';
 
 const PANDOC_OUTPUT_FORMATS = [
   { value: 'docx',     label: 'DOCX'     },
@@ -11,9 +15,6 @@ const PANDOC_OUTPUT_FORMATS = [
   { value: 'rst',      label: 'RST'      },
   { value: 'txt',      label: '纯文本'   },
 ];
-
-const IMG_OUTPUT_FORMATS = ['png', 'jpg', 'webp', 'bmp'];
-const TEXT_ENCODINGS = ['utf-8', 'gbk', 'gb2312', 'latin-1', 'utf-16', 'big5'];
 
 interface DocPanelProps {
   docSubPage: DocSubPage;
@@ -82,13 +83,6 @@ export default function DocPanel({
   outputDir, setOutputDir, status,
   fieldCls, fileCls, labelCls, btnSec,
 }: DocPanelProps) {
-  const numCls = 'w-24 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 transition-all text-center';
-
-  const tabBtn = (active: boolean) =>
-    `flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`;
-  const subLbl = (active: boolean) =>
-    `text-xs ${active ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-600'}`;
-
   const canRunToolbox = status !== 'processing' && (
     (docSubPage === 'image' && !!imgFile) ||
     (docSubPage === 'qr' && (qrMode === 'generate' ? !!qrText.trim() : !!qrFile)) ||
@@ -129,11 +123,7 @@ export default function DocPanel({
           <span className={labelCls}>输出格式</span>
           <div className="flex flex-wrap gap-2">
             {PANDOC_OUTPUT_FORMATS.map(f => (
-              <button key={f.value}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${docOutputFormat === f.value ? 'bg-slate-800 dark:bg-slate-600 border-slate-800 dark:border-slate-600 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                onClick={() => setDocOutputFormat(f.value)}>
-                {f.label}
-              </button>
+              <OptionButton key={f.value} selected={docOutputFormat === f.value} label={f.label} onClick={() => setDocOutputFormat(f.value)} />
             ))}
           </div>
         </div>
@@ -142,18 +132,15 @@ export default function DocPanel({
       {docSubPage === 'pdf_extract' && (
         <div>
           <span className={labelCls}>提取内容</span>
-          <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-            {([
-              { value: 'text',   label: '提取文字', sub: '输出 .txt' },
-              { value: 'images', label: '提取图片', sub: '输出 .zip' },
-            ] as { value: 'text' | 'images'; label: string; sub: string }[]).map(opt => (
-              <button key={opt.value} className={tabBtn(docExtractMode === opt.value)}
-                onClick={() => setDocExtractMode(opt.value)}>
-                <span className="text-sm font-medium">{opt.label}</span>
-                <span className={subLbl(docExtractMode === opt.value)}>{opt.sub}</span>
-              </button>
-            ))}
-          </div>
+          <TabBar
+            variant="pill"
+            tabs={[
+              { value: 'text' as const, label: '提取文字', sub: '输出 .txt' },
+              { value: 'images' as const, label: '提取图片', sub: '输出 .zip' },
+            ]}
+            value={docExtractMode}
+            onChange={setDocExtractMode}
+          />
         </div>
       )}
 
@@ -176,19 +163,16 @@ export default function DocPanel({
             <span className={labelCls}>输出格式</span>
             <div className="flex flex-wrap gap-2">
               {IMG_OUTPUT_FORMATS.map(f => (
-                <button key={f}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold uppercase transition-all ${imgOutputFmt === f ? 'bg-slate-800 dark:bg-slate-600 border-slate-800 dark:border-slate-600 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                  onClick={() => setImgOutputFmt(f)}>{f}
-                </button>
+                <OptionButton key={f} selected={imgOutputFmt === f} label={f} onClick={() => setImgOutputFmt(f)} uppercase />
               ))}
             </div>
           </div>
           <div>
             <span className={labelCls}>缩放尺寸（留空保持原尺寸）</span>
             <div className="flex items-center gap-2">
-              <input className={numCls} type="number" min="1" placeholder="宽 px" value={imgResizeW} onChange={e => setImgResizeW(e.target.value)} />
+              <input className={numCls()} type="number" min="1" placeholder="宽 px" value={imgResizeW} onChange={e => setImgResizeW(e.target.value)} />
               <span className="text-sm text-slate-400">×</span>
-              <input className={numCls} type="number" min="1" placeholder="高 px" value={imgResizeH} onChange={e => setImgResizeH(e.target.value)} />
+              <input className={numCls()} type="number" min="1" placeholder="高 px" value={imgResizeH} onChange={e => setImgResizeH(e.target.value)} />
             </div>
           </div>
           {(imgOutputFmt === 'jpg' || imgOutputFmt === 'webp') && (
@@ -207,14 +191,15 @@ export default function DocPanel({
         <>
           <div>
             <span className={labelCls}>模式</span>
-            <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-              {([{ v: 'generate', l: '生成二维码' }, { v: 'decode', l: '识别二维码' }] as const).map(opt => (
-                <button key={opt.v}
-                  className={`flex-1 py-2 text-sm font-medium transition-all ${qrMode === opt.v ? 'bg-slate-800 dark:bg-slate-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-200'}`}
-                  onClick={() => setQrMode(opt.v)}>{opt.l}
-                </button>
-              ))}
-            </div>
+            <TabBar
+              variant="pill"
+              tabs={[
+                { value: 'generate' as const, label: '生成二维码' },
+                { value: 'decode' as const, label: '识别二维码' },
+              ]}
+              value={qrMode}
+              onChange={setQrMode}
+            />
           </div>
           {qrMode === 'generate' ? (
             <div>
@@ -258,10 +243,7 @@ export default function DocPanel({
             <span className={labelCls}>目标编码</span>
             <div className="flex flex-wrap gap-2">
               {TEXT_ENCODINGS.map(enc => (
-                <button key={enc}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold uppercase transition-all ${encTarget === enc ? 'bg-slate-800 dark:bg-slate-600 border-slate-800 dark:border-slate-600 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                  onClick={() => setEncTarget(enc)}>{enc}
-                </button>
+                <OptionButton key={enc} selected={encTarget === enc} label={enc} onClick={() => setEncTarget(enc)} uppercase />
               ))}
             </div>
           </div>

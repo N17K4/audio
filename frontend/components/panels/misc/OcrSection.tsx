@@ -7,17 +7,10 @@ import type { Status } from '../../../types';
 import {
   OCR_PROVIDERS, OCR_PROVIDER_LABELS, OCR_MODELS,
   LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS,
+  cleanProviderLabel,
 } from '../../../constants';
 import { OCR_FLOW_LOCAL, OCR_FLOW_CLOUD } from '../../../constants/flows';
-
-const PILL_BASE = 'rounded-xl border px-2 py-2 text-xs font-medium transition-all text-center leading-tight';
-const PILL_ON  = 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:border-violet-500 dark:text-violet-300';
-const PILL_OFF = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50';
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
-
-function shortProv(label: string): string {
-  return label.replace(/（[^）]*）/g, '').replace(/【[^】]*】/g, '').trim();
-}
+import { pillBase, pillOn, pillOff, btnMiscPrimary } from '../../../constants/styles';
 
 interface OcrSectionProps {
   status: Status;
@@ -58,8 +51,8 @@ export default function OcrSection({
         <label className={labelCls}>服务商</label>
         <div className="grid grid-cols-2 gap-2">
           {OCR_PROVIDERS.map(p => (
-            <button key={p} onClick={() => onOcrProviderChange(p)} className={`${PILL_BASE} ${ocrProvider === p ? PILL_ON : PILL_OFF}`}>
-              {shortProv(OCR_PROVIDER_LABELS[p] || p)}
+            <button key={p} onClick={() => onOcrProviderChange(p)} className={`${pillBase} ${ocrProvider === p ? pillOn : pillOff}`}>
+              {cleanProviderLabel(OCR_PROVIDER_LABELS[p] || p)}
             </button>
           ))}
         </div>
@@ -100,7 +93,7 @@ export default function OcrSection({
           emptyLabel="点击或拖拽图片/PDF"
         />
       </div>
-      <button className={`${btnPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !ocrFile || isUnsupported} onClick={onRunOcr}>
+      <button className={`${btnMiscPrimary} !bg-teal-600 hover:!bg-teal-700`} disabled={busy || !ocrFile || isUnsupported} onClick={onRunOcr}>
         {busy ? '识别中...' : isUnsupported ? '暂不支持' : '开始 OCR 识别'}
       </button>
     </div>

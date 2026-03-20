@@ -362,6 +362,11 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
+    # runtime/ml/ を PYTHONPATH に追加（torch, torchaudio 等の ML パッケージ）
+    ml_dir = str(RUNTIME_ROOT / "ml")
+    existing_pypath = merged.get("PYTHONPATH", "")
+    if os.path.isdir(ml_dir) and ml_dir not in existing_pypath.split(os.pathsep):
+        merged["PYTHONPATH"] = ml_dir + (os.pathsep + existing_pypath if existing_pypath else "")
     # backend/wrappers/ を PYTHONPATH に追加（_common.py を import するため）
     # backend/ 全体を入れると backend/models.py が GPT-SoVITS engine の models パッケージと衝突する
     wrappers_dir = str(WRAPPERS_ROOT)

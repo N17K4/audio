@@ -7,18 +7,10 @@ import OutputDirRow from '../../shared/OutputDirRow';
 import type { Status } from '../../../types';
 import {
   VIDEO_GEN_PROVIDERS, VIDEO_GEN_PROVIDER_LABELS, VIDEO_GEN_MODELS, VIDEO_GEN_DURATIONS,
-  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS,
+  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS, cleanProviderLabel,
 } from '../../../constants';
 import { VIDEO_GEN_FLOW_LOCAL, VIDEO_GEN_FLOW_CLOUD } from '../../../constants/flows';
-
-const PILL_BASE = 'rounded-xl border px-2 py-2 text-xs font-medium transition-all text-center leading-tight';
-const PILL_ON  = 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:border-violet-500 dark:text-violet-300';
-const PILL_OFF = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50';
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
-
-function shortProv(label: string): string {
-  return label.replace(/（[^）]*）/g, '').replace(/【[^】]*】/g, '').trim();
-}
+import { pillBase, pillOn, pillOff, btnMiscPrimary } from '../../../constants/styles';
 
 interface VideoGenSectionProps {
   status: Status;
@@ -72,8 +64,8 @@ export default function VideoGenSection({
         <label className={labelCls}>服务商</label>
         <div className="grid grid-cols-3 gap-2">
           {VIDEO_GEN_PROVIDERS.map(p => (
-            <button key={p} onClick={() => onVideoGenProviderChange(p)} className={`${PILL_BASE} ${videoGenProvider === p ? PILL_ON : PILL_OFF}`}>
-              {shortProv(VIDEO_GEN_PROVIDER_LABELS[p] || p)}
+            <button key={p} onClick={() => onVideoGenProviderChange(p)} className={`${pillBase} ${videoGenProvider === p ? pillOn : pillOff}`}>
+              {cleanProviderLabel(VIDEO_GEN_PROVIDER_LABELS[p] || p)}
             </button>
           ))}
         </div>
@@ -148,7 +140,7 @@ export default function VideoGenSection({
       </div>
       <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
       <button
-        className={btnPrimary}
+        className={btnMiscPrimary}
         disabled={busy || isUnsupported || (!videoGenPrompt.trim() && videoGenMode === 't2v') || (!videoGenImageFile && videoGenMode === 'i2v')}
         onClick={onRunVideoGen}>
         {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成视频'}

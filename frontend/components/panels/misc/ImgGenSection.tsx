@@ -6,18 +6,10 @@ import OutputDirRow from '../../shared/OutputDirRow';
 import type { Status } from '../../../types';
 import {
   IMG_GEN_PROVIDERS, IMG_GEN_PROVIDER_LABELS, IMG_GEN_MODELS, IMG_GEN_SIZES,
-  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS,
+  LOCAL_PROVIDERS, UNSUPPORTED_PROVIDERS, cleanProviderLabel,
 } from '../../../constants';
 import { IMG_GEN_FLOW_LOCAL, IMG_GEN_FLOW_CLOUD } from '../../../constants/flows';
-
-const PILL_BASE = 'rounded-xl border px-2 py-2 text-xs font-medium transition-all text-center leading-tight';
-const PILL_ON  = 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:border-violet-500 dark:text-violet-300';
-const PILL_OFF = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50';
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
-
-function shortProv(label: string): string {
-  return label.replace(/（[^）]*）/g, '').replace(/【[^】]*】/g, '').trim();
-}
+import { pillBase, pillOn, pillOff, btnMiscPrimary } from '../../../constants/styles';
 
 interface ImgGenSectionProps {
   status: Status;
@@ -69,8 +61,8 @@ export default function ImgGenSection({
         <label className={labelCls}>服务商</label>
         <div className="grid grid-cols-3 gap-2">
           {IMG_GEN_PROVIDERS.map(p => (
-            <button key={p} onClick={() => onImgGenProviderChange(p)} className={`${PILL_BASE} ${imgGenProvider === p ? PILL_ON : PILL_OFF}`}>
-              {shortProv(IMG_GEN_PROVIDER_LABELS[p] || p)}
+            <button key={p} onClick={() => onImgGenProviderChange(p)} className={`${pillBase} ${imgGenProvider === p ? pillOn : pillOff}`}>
+              {cleanProviderLabel(IMG_GEN_PROVIDER_LABELS[p] || p)}
             </button>
           ))}
         </div>
@@ -124,7 +116,7 @@ export default function ImgGenSection({
         <textarea rows={4} className={fieldCls} value={imgGenPrompt} onChange={e => setImgGenPrompt(e.target.value)} placeholder="描述你想生成的图像内容，越详细越好..." />
       </div>
       <OutputDirRow required outputDir={outputDir} setOutputDir={setOutputDir} fieldCls={fieldCls} labelCls={labelCls} btnSec={btnSec} />
-      <button className={`${btnPrimary} !bg-pink-600 hover:!bg-pink-700`} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={onRunImgGen}>
+      <button className={`${btnMiscPrimary} !bg-pink-600 hover:!bg-pink-700`} disabled={busy || !imgGenPrompt.trim() || isUnsupported} onClick={onRunImgGen}>
         {busy ? '生成中...' : isUnsupported ? '暂不支持' : '生成图像'}
       </button>
     </div>

@@ -2,6 +2,8 @@ import type { ChatMessage, CapabilityMap } from '../../types';
 import { INPUT_CLS } from '../shared/ModelInput';
 import LlmConfigBar from '../shared/LlmConfigBar';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
+import LoadingDots from '../shared/LoadingDots';
+import ChatBubble from '../shared/ChatBubble';
 
 // ─── LLM 聊天实际流程 ─────────────────────────────────────────────────────────
 const LLM_FLOW: FlowStep[] = [
@@ -93,24 +95,12 @@ export default function LlmPanel({
           </div>
         )}
         {llmMessages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[14px] whitespace-pre-wrap leading-relaxed ${
-              msg.role === 'user'
-                ? 'bg-indigo-600 text-white rounded-br-md shadow-sm'
-                : 'bg-white border border-slate-200 text-slate-800 rounded-bl-md shadow-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
-            }`}>
-              {msg.content}
-            </div>
-          </div>
+          <ChatBubble key={i} role={msg.role} content={msg.content} />
         ))}
         {llmLoading && (
           <div className="flex justify-start">
             <div className="bg-slate-100 dark:bg-slate-700 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 flex items-center gap-2">
-              <span className="inline-flex gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
-              </span>
+              <LoadingDots />
             </div>
           </div>
         )}

@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import type { Status, Job } from '../types';
 import { LOCAL_PROVIDERS } from '../constants';
 import { safeJson } from '../utils';
+import { useAudioRecorder } from './useAudioRecorder';
 
 interface UseVCParams {
   backendBaseUrl: string;
@@ -67,11 +68,7 @@ export function useVC({
   rvcRmsMixRate,
   rvcProtect,
 }: UseVCParams) {
-  const [vcRecordedFile, setVcRecordedFile] = useState<File | null>(null);
-  const [vcRecordedObjectUrl, setVcRecordedObjectUrl] = useState<string | null>(null);
-  const [vcRecordingDir, setVcRecordingDir] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recorder = useAudioRecorder({ setStatus, setError });
   const abortCtrlRef = useRef<AbortController | null>(null);
 
   async function handleVoiceConvert(audio: Blob | File) {
@@ -134,41 +131,12 @@ export function useVC({
     }
   }
 
-  async function startVcRecording() {
-    setError(''); setSuccessMsg('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        if (vcRecordedObjectUrl) URL.revokeObjectURL(vcRecordedObjectUrl);
-        setVcRecordedObjectUrl(URL.createObjectURL(blob));
-        setVcRecordedFile(new File([blob], 'recording.webm', { type: 'audio/webm' }));
-        setVcRecordingDir('recording');
-        setStatus('idle');
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-      setStatus('recording');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '启动录音失败');
-      setStatus('idle');
-    }
-  }
-
-  function stopVcRecording() { recorderRef.current?.stop(); }
-
-  function clearVcRecording() {
-    if (vcRecordedObjectUrl) URL.revokeObjectURL(vcRecordedObjectUrl);
-    setVcRecordedFile(null);
-    setVcRecordedObjectUrl(null);
-    setVcRecordingDir(null);
+  function startVcRecording() {
+    setSuccessMsg('');
+    recorder.startRecording();
   }
 
   function abortCurrentRequest() { abortCtrlRef.current?.abort(); }
 
-  return { handleVoiceConvert, startVcRecording, stopVcRecording, vcRecordedFile, vcRecordedObjectUrl, vcRecordingDir, clearVcRecording, abortCurrentRequest };
+  return { handleVoiceConvert, startVcRecording, stopVcRecording: recorder.stopRecording, vcRecordedFile: recorder.recordedFile, vcRecordedObjectUrl: recorder.recordedObjectUrl, vcRecordingDir: recorder.recordingDir, clearVcRecording: recorder.clearRecording, abortCurrentRequest };
 }

@@ -1,4 +1,4 @@
-import { PROVIDER_LABELS, PROVIDER_TO_ENGINE, DEFAULT_CAPS } from '../../constants';
+import { PROVIDER_LABELS, PROVIDER_TO_ENGINE, DEFAULT_CAPS, cleanProviderLabel } from '../../constants';
 import type { TaskType, CapabilityMap } from '../../types';
 
 interface ProviderRowProps {
@@ -15,10 +15,6 @@ interface ProviderRowProps {
   setCloudEndpoint: (v: string) => void;
   fieldCls: string;
   labelCls: string;
-}
-
-function shortLabel(label: string): string {
-  return label.replace(/（[^）]*）/g, '').trim();
 }
 
 export default function ProviderRow({
@@ -52,7 +48,7 @@ export default function ProviderRow({
                   ? 'border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:border-violet-500 dark:text-violet-300'
                   : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50'
               }`}>
-              {shortLabel(PROVIDER_LABELS[p] || p)}
+              {cleanProviderLabel(PROVIDER_LABELS[p] || p)}
             </button>
           ))}
         </div>

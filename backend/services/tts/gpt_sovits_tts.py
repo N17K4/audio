@@ -38,13 +38,14 @@ def run_local_gpt_sovits_tts_cmd(
             ),
         )
     import shlex
-    refs_arg = " ".join(shlex.quote(r) for r in voice_refs if r) if voice_refs else '""'
-    cmd = (
-        cmd_tpl
-        .replace("{text}", shlex.quote(text))
-        .replace("{output}", str(output_path.resolve()))
-        .replace("{voice_ref}", refs_arg)
-    )
+    refs_arg = " ".join(shlex.quote(r) for r in voice_refs if r) if voice_refs else ""
+    cmd = cmd_tpl.replace("{text}", shlex.quote(text)).replace("{output}", str(output_path.resolve()))
+    if refs_arg:
+        cmd = cmd.replace("{voice_ref}", refs_arg)
+    else:
+        # voice_ref 为空时移除整个 --voice_ref 参数，避免传空字符串给引擎
+        import re
+        cmd = re.sub(r'--voice_ref\s+\{voice_ref\}', '', cmd)
     # GPT-SoVITS 模型选择模式：通过 voice_meta 传递训练好的 GPT/SoVITS 模型路径
     if voice_meta:
         voice_dir = voice_meta.get("path", "")

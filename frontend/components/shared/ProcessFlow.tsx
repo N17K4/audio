@@ -1,78 +1,54 @@
 /**
  * ProcessFlow — 实际运行流程可视化条
- *
- * 在每个 AI 进阶页面顶部显示，让用户直观看到"幕后发生了什么"。
- * 每个节点显示步骤名 + 技术名称，节点间用箭头连接。
- * 节点过多时自动换行。
  */
 
 export interface FlowStep {
-  label: string;   // 步骤动作（中文），如"切片"
-  tech?: string;   // 使用的技术 / 库（英文），如"SimpleDirectoryReader"
-  note?: string;   // 可选补充说明，如"768 维向量"
+  label: string;
+  tech?: string;
+  note?: string;
 }
 
 interface Props {
   steps: FlowStep[];
-  color?: string;  // 主题色，默认靛蓝
+  color?: string;
 }
 
 export default function ProcessFlow({ steps, color = '#4f46e5' }: Props) {
   return (
-    <div style={{
-      padding: '10px 14px',
-      background: '#f8f8ff',
-      borderRadius: 8,
-      border: `1px solid ${color}22`,
-      marginBottom: 4,
-    }}>
-      <div style={{
-        fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase',
-        letterSpacing: 1, marginBottom: 8,
-      }}>
+    <div
+      className="px-3.5 py-2.5 rounded-lg mb-1"
+      style={{ background: `${color}08`, border: `1px solid ${color}22` }}
+    >
+      <div
+        className="text-[11px] font-bold uppercase tracking-wider mb-2"
+        style={{ color }}
+      >
         实际运行流程
       </div>
-
-      {/* 流程节点横向排列，自动换行 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+      <div className="flex flex-wrap items-center gap-1">
         {steps.map((step, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {/* 单个步骤节点 */}
-            <div style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              background: '#fff',
-              border: `1px solid ${color}44`,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              minWidth: 64,
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#333', whiteSpace: 'nowrap' }}>
+          <div key={i} className="flex items-center gap-1">
+            <div
+              className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 flex flex-col items-center min-w-[64px]"
+              style={{ border: `1px solid ${color}44` }}
+            >
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
                 {step.label}
               </span>
               {step.tech && (
-                <span style={{
-                  fontSize: 10, color, fontFamily: 'monospace',
-                  marginTop: 1, whiteSpace: 'nowrap',
-                }}>
+                <span className="text-[10px] font-mono mt-px whitespace-nowrap" style={{ color }}>
                   {step.tech}
                 </span>
               )}
               {step.note && (
-                <span style={{ fontSize: 9, color: '#999', marginTop: 1, whiteSpace: 'nowrap' }}>
+                <span className="text-[9px] text-slate-400 mt-px whitespace-nowrap">
                   {step.note}
                 </span>
               )}
             </div>
-
-            {/* 箭头（最后一个节点后不加）*/}
             {i < steps.length - 1 && (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
-                style={{ flexShrink: 0, color: '#bbb' }}>
-                <path d="M3 8H13M9 4L13 8L9 12"
-                  stroke="currentColor" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round" />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 text-slate-400">
+                <path d="M3 8H13M9 4L13 8L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
           </div>

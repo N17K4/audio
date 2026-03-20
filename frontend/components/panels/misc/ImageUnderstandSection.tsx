@@ -8,6 +8,7 @@ import {
   IMAGE_UNDERSTAND_PROVIDERS, IMAGE_UNDERSTAND_PROVIDER_LABELS, IMAGE_UNDERSTAND_MODELS,
 } from '../../../constants';
 import { IMG_UNDERSTAND_FLOW } from '../../../constants/flows';
+import { btnMiscPrimary } from '../../../constants/styles';
 
 interface ImageUnderstandSectionProps {
   status: Status;
@@ -27,8 +28,6 @@ interface ImageUnderstandSectionProps {
   labelCls: string;
   fieldCls: string;
 }
-
-const btnPrimary = 'w-full rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors';
 
 export default function ImageUnderstandSection({
   status, apiKey, setApiKey, cloudEndpoint, setCloudEndpoint,
@@ -107,7 +106,7 @@ export default function ImageUnderstandSection({
           placeholder="请详细描述这张图片" />
       </div>
 
-      <button className={btnPrimary} disabled={busy || !imageUnderstandFile} onClick={onRunImageUnderstand}>
+      <button className={btnMiscPrimary} disabled={busy || !imageUnderstandFile} onClick={onRunImageUnderstand}>
         {busy ? '分析中...' : '分析图片'}
       </button>
     </div>

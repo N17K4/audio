@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { FinetuneJob } from '../../types';
+import { fieldCls, labelCls } from '../../constants/styles';
 import HowToSteps from '../shared/HowToSteps';
 import ComboSelect from '../shared/ComboSelect';
 import ProcessFlow, { FlowStep } from '../shared/ProcessFlow';
@@ -74,12 +75,12 @@ const PARAM_TIPS: Record<string, string> = {
     '最大序列长度：每条样本最多处理多少个 token。超过会被截断。默认 64 快速验证，正式训练可调到 256～512',
 };
 
-// ─── 任务状态颜色与标签 ────────────────────────────────────────────────────
-const STATUS_COLORS: Record<string, string> = {
-  running:   '#3182ce',  // 蓝色：训练中
-  done:      '#38a169',  // 绿色：已完成
-  error:     '#e53e3e',  // 红色：失败
-  cancelled: '#718096',  // 灰色：已取消
+// ─── 任务状态颜色（Tailwind bg classes）────────────────────────────────────
+const STATUS_BG: Record<string, string> = {
+  running:   'bg-blue-600',
+  done:      'bg-emerald-600',
+  error:     'bg-red-600',
+  cancelled: 'bg-slate-500',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -220,24 +221,24 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
     }
   };
 
+  const isDisabled = submitting || datasets.length === 0 || !outputDir.trim();
+  const isFailed = submitMsg.includes('失败');
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', gap: 24, padding: 24, height: '100%', flexDirection: 'column' }}>
+    <div className="flex flex-col gap-6 p-6 h-full">
 
       {/* ── 实际运行流程可视化 ── */}
       <ProcessFlow steps={FINETUNE_FLOW} color="#d97706" />
 
       {/* ── 主体：配置 → 任务监控（纵向） ── */}
-      <div style={{ display: 'flex', gap: 24, flex: 1, minHeight: 0, flexDirection: 'column' }}>
+      <div className="flex flex-col gap-6 flex-1 min-h-0">
 
         {/* ━━ 配置区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div style={{
-          display: 'flex', flexDirection: 'column',
-          gap: 14, overflowY: 'auto', paddingRight: 4
-        }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
+        <div className="flex flex-col gap-3.5 overflow-y-auto pr-1">
+          <h3 className="m-0 text-base font-bold">
             LoRA 微调
-            <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
+            <span className="text-[11px] font-normal text-slate-400 ml-2">
               QLoRA · Fine-tuning
             </span>
           </h3>
@@ -311,8 +312,8 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
 
           {/* ── 训练数据上传 ── */}
           {(
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
+            <div className="flex flex-col gap-1.5">
+              <label className={labelCls}>
                 训练数据（JSONL 格式，支持多文件）
               </label>
               <FileDrop
@@ -342,37 +343,30 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
                   const file = new File([blob], `sample_train_${datasets.length + 1}.jsonl`, { type: 'application/jsonl' });
                   setDatasets(prev => [...prev, file]);
                 }}
-                style={{
-                  fontSize: 12, background: 'none',
-                  border: '1px dashed #d97706', borderRadius: 6,
-                  padding: '6px 12px', cursor: 'pointer', color: '#d97706', fontWeight: 500,
-                  transition: 'all 0.2s'
-                }}
+                className="text-xs bg-transparent border border-dashed border-amber-600 rounded-md px-3 py-1.5 cursor-pointer text-amber-600 font-medium transition-all hover:bg-amber-50 dark:hover:bg-amber-900/20"
               >
                 + 导入样例数据
               </button>
               {/* 数据格式说明 */}
-              <div style={{
-                fontSize: 11, color: '#888', background: '#f9f9f9',
-                borderRadius: 4, padding: '6px 8px', lineHeight: 1.6
-              }}>
+              <div className="text-[11px] text-slate-400 bg-slate-50 dark:bg-slate-800 rounded px-2 py-1.5 leading-relaxed">
                 至少准备 50～200 条，数据质量比数量更重要
               </div>
             </div>
           )}
 
           {/* ── 常用参数网格：训练轮次 + Batch Size ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="grid grid-cols-2 gap-2.5">
             {[
               { key: 'num_epochs', label: '训练轮次',   val: numEpochs,  set: setNumEpochs,  step: 1  },
               { key: 'batch_size', label: 'Batch Size', val: batchSize,   set: setBatchSize,  step: 1  },
             ].map(({ key, label, val, set, step }) => (
-              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div key={key} className="flex flex-col gap-1">
                 <label
                   title={PARAM_TIPS[key]}
-                  style={{ fontSize: 11, fontWeight: 600, color: '#555', cursor: 'help' }}
+                  className={`${labelCls} cursor-help`}
                 >
-                  {label} ❓
+                  {label}
+                  <span className="ml-1" title={PARAM_TIPS[key]}>?</span>
                 </label>
                 <input
                   type="number"
@@ -380,41 +374,35 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
                   step={step}
                   min={1}
                   onChange={e => set(Number(e.target.value))}
-                  style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                  className={fieldCls}
                 />
               </div>
             ))}
           </div>
 
           {/* ── 高级设置（可折叠） ── */}
-          <details style={{
-            border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden'
-          }}>
-            <summary style={{
-              fontSize: 12, fontWeight: 600, color: '#555',
-              padding: '10px 12px', cursor: 'pointer',
-              background: '#fafafa', userSelect: 'none',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
+          <details className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+            <summary className="text-xs font-semibold text-slate-500 dark:text-slate-400 px-3 py-2.5 cursor-pointer bg-slate-50 dark:bg-slate-800 select-none flex justify-between items-center">
               <span>高级设置</span>
-              <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </summary>
 
-            <div style={{ padding: 12, background: '#fff', borderTop: '1px solid #ddd', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-3">
               {/* LoRA Rank 和 Alpha */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="grid grid-cols-2 gap-2.5">
                 {[
                   { key: 'lora_r',     label: 'LoRA Rank', val: loraR,      set: setLoraR,      step: 4  },
                   { key: 'lora_alpha', label: 'LoRA Alpha', val: loraAlpha,  set: setLoraAlpha,  step: 8  },
                 ].map(({ key, label, val, set, step }) => (
-                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div key={key} className="flex flex-col gap-1">
                     <label
                       title={PARAM_TIPS[key]}
-                      style={{ fontSize: 11, fontWeight: 600, color: '#555', cursor: 'help' }}
+                      className={`${labelCls} cursor-help`}
                     >
-                      {label} ❓
+                      {label}
+                      <span className="ml-1" title={PARAM_TIPS[key]}>?</span>
                     </label>
                     <input
                       type="number"
@@ -422,19 +410,20 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
                       step={step}
                       min={1}
                       onChange={e => set(Number(e.target.value))}
-                      style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                      className={fieldCls}
                     />
                   </div>
                 ))}
               </div>
 
               {/* 学习率 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="flex flex-col gap-1">
                 <label
                   title={PARAM_TIPS['learning_rate']}
-                  style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'help' }}
+                  className={`${labelCls} cursor-help`}
                 >
-                  学习率 ❓
+                  学习率
+                  <span className="ml-1" title={PARAM_TIPS['learning_rate']}>?</span>
                 </label>
                 <input
                   type="number"
@@ -442,17 +431,18 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
                   step={0.00001}
                   min={0.000001}
                   onChange={e => setLr(Number(e.target.value))}
-                  style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                  className={fieldCls}
                 />
               </div>
 
               {/* 最大序列长度 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="flex flex-col gap-1">
                 <label
                   title={PARAM_TIPS['max_seq_length']}
-                  style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'help' }}
+                  className={`${labelCls} cursor-help`}
                 >
-                  最大序列长度 ❓
+                  最大序列长度
+                  <span className="ml-1" title={PARAM_TIPS['max_seq_length']}>?</span>
                 </label>
                 <input
                   type="number"
@@ -460,13 +450,13 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
                   step={64}
                   min={128}
                   onChange={e => setMaxSeqLen(Number(e.target.value))}
-                  style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+                  className={fieldCls}
                 />
               </div>
 
               {/* 导出格式 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>导出格式</label>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>导出格式</label>
                 <ComboSelect
                   value={exportFmt}
                   onChange={v => setExportFmt(v as 'adapter' | 'merged')}
@@ -493,27 +483,19 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
           {/* ── 提交按钮 ── */}
           <button
             onClick={handleStart}
-            disabled={submitting || datasets.length === 0 || !outputDir.trim()}
-            style={{
-              padding: '10px', borderRadius: 8,
-              background: '#4f46e5', color: '#fff',
-              border: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: 600,
-              opacity: (submitting || datasets.length === 0 || !outputDir.trim()) ? 0.5 : 1,
-            }}
+            disabled={isDisabled}
+            className={`py-2.5 rounded-lg bg-indigo-600 text-white border-none cursor-pointer text-sm font-semibold transition-all hover:bg-indigo-700 ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {submitting ? '提交中...' : '开始微调'}
           </button>
 
           {/* ── 提交反馈消息 ── */}
           {submitMsg && (
-            <div style={{
-              fontSize: 12, color: submitMsg.includes('失败') ? '#e53e3e' : '#38a169',
-              background: submitMsg.includes('失败') ? '#fff5f5' : '#f0fff4',
-              padding: '10px 12px', borderRadius: 6,
-              border: `1px solid ${submitMsg.includes('失败') ? '#feb2b2' : '#9ae6b4'}`,
-              whiteSpace: 'pre-line', lineHeight: 1.5
-            }}>
+            <div className={`text-xs whitespace-pre-line leading-normal px-3 py-2.5 rounded-md border ${
+              isFailed
+                ? 'text-red-600 bg-red-50 border-red-300 dark:text-red-400 dark:bg-red-900/20 dark:border-red-700'
+                : 'text-emerald-600 bg-emerald-50 border-emerald-300 dark:text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-700'
+            }`}>
               {submitMsg}
             </div>
           )}
@@ -522,53 +504,38 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
 
       {/* ━━ 任务监控区 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       {jobStatus && (
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 12,
-          border: '1px solid #e0e0e0', borderRadius: 8, padding: 16,
-          background: '#fafafa'
-        }}>
+        <div className="flex flex-col gap-3 border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-800/50">
           {/* 标题 + 状态 */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
+          <div className="flex justify-between items-center">
+            <h4 className="m-0 text-sm font-bold">
               训练监控
-              <span style={{ fontSize: 11, fontWeight: 400, color: '#999', marginLeft: 8 }}>
+              <span className="text-[11px] font-normal text-slate-400 ml-2">
                 {jobStatus.model}
               </span>
             </h4>
-            <span style={{
-              fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-              color: '#fff',
-              background: STATUS_COLORS[jobStatus.status] || '#718096'
-            }}>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded text-white ${STATUS_BG[jobStatus.status] || 'bg-slate-500'}`}>
               {STATUS_LABELS[jobStatus.status] || jobStatus.status}
             </span>
           </div>
 
           {/* 进度条 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              flex: 1, height: 8, background: '#e0e0e0', borderRadius: 4, overflow: 'hidden'
-            }}>
-              <div style={{
-                width: `${Math.round(jobStatus.progress * 100)}%`,
-                height: '100%', background: STATUS_COLORS[jobStatus.status] || '#3182ce',
-                borderRadius: 4, transition: 'width 0.3s'
-              }} />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden">
+              <div
+                className={`h-full rounded transition-[width] duration-300 ${STATUS_BG[jobStatus.status] || 'bg-blue-600'}`}
+                style={{ width: `${Math.round(jobStatus.progress * 100)}%` }}
+              />
             </div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#555', minWidth: 40 }}>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 min-w-[40px]">
               {Math.round(jobStatus.progress * 100)}%
             </span>
           </div>
 
           {/* Loss 曲线（简易文本图表） */}
           {jobStatus.loss_curve && jobStatus.loss_curve.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Loss 曲线</label>
-              <div style={{
-                display: 'flex', alignItems: 'flex-end', gap: 1,
-                height: 60, background: '#fff', borderRadius: 4, padding: '4px 6px',
-                border: '1px solid #e8e8e8'
-              }}>
+            <div className="flex flex-col gap-1">
+              <label className={labelCls}>Loss 曲线</label>
+              <div className="flex items-end gap-px h-[60px] bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-1">
                 {(() => {
                   const curve = jobStatus.loss_curve;
                   const max = Math.max(...curve);
@@ -581,17 +548,15 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
                     <div
                       key={i}
                       title={`step ${i * step}: loss=${v.toFixed(4)}`}
+                      className="flex-1 min-w-[2px] max-w-[6px] bg-amber-600 rounded-sm transition-[height] duration-200"
                       style={{
-                        flex: 1, minWidth: 2, maxWidth: 6,
                         height: `${Math.max(4, ((v - min) / range) * 100)}%`,
-                        background: '#d97706', borderRadius: 1,
-                        transition: 'height 0.2s'
                       }}
                     />
                   ));
                 })()}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#999' }}>
+              <div className="flex justify-between text-[10px] text-slate-400">
                 <span>loss: {jobStatus.loss_curve[jobStatus.loss_curve.length - 1]?.toFixed(4)}</span>
                 <span>{jobStatus.loss_curve.length} steps</span>
               </div>
@@ -600,14 +565,9 @@ export default function FinetunePanel({ backendUrl, outputDir, setOutputDir, add
 
           {/* 日志 */}
           {jobStatus.log_tail && jobStatus.log_tail.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>日志（最近 {jobStatus.log_tail.length} 行）</label>
-              <div style={{
-                maxHeight: 150, overflowY: 'auto',
-                background: '#1e1e1e', color: '#d4d4d4', borderRadius: 6,
-                padding: '8px 10px', fontSize: 11, fontFamily: 'monospace',
-                lineHeight: 1.6, whiteSpace: 'pre-wrap'
-              }}>
+            <div className="flex flex-col gap-1">
+              <label className={labelCls}>日志（最近 {jobStatus.log_tail.length} 行）</label>
+              <div className="max-h-[150px] overflow-y-auto bg-[#1e1e1e] text-[#d4d4d4] rounded-md px-2.5 py-2 text-[11px] font-mono leading-relaxed whitespace-pre-wrap">
                 {jobStatus.log_tail.map((line, i) => (
                   <div key={i}>{line}</div>
                 ))}

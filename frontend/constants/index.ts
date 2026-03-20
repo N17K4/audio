@@ -483,3 +483,12 @@ export const TOOL_CARDS = [
   { id: 'format_convert', label: '文档工具',   desc: 'PDF / Word / 编码 / 二维码',      category: ['convert'] as const, iconBg: '#FFEDE0', iconColor: '#b45309', iconType: 'doc' },
   { id: 'misc',           label: '智能翻译',   desc: '多语言 LLM 翻译',                 category: ['convert'] as const, iconBg: '#E2F0FE', iconColor: '#0284c7', iconType: 'translate',        subPage: 'translate' },
 ];
+
+// ─── 共享定数 ──────────────────────────────────────────────────────────────────
+export const IMG_OUTPUT_FORMATS = ['png', 'jpg', 'webp', 'bmp'];
+export const TEXT_ENCODINGS = ['utf-8', 'gbk', 'gb2312', 'latin-1', 'utf-16', 'big5'];
+
+/** Provider ラベルから括弧付き注釈を除去 */
+export function cleanProviderLabel(label: string): string {
+  return label.replace(/（[^）]*）/g, '').replace(/【[^】]*】/g, '').trim();
+}

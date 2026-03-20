@@ -256,16 +256,25 @@ def check_and_download(
                     print(f"    SHA256 不匹配，重新下载...")
                     dest.unlink()
                 else:
-                    print(f"  ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256={expected_sha256[:12]}…")
+                    _skip_idx = _next_file_index()
+                    _skip_tag = _fmt_tag(_skip_idx)
+                    print(f"  {_skip_tag} ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256={expected_sha256[:12]}…")
+                    emit("log", message=f"  {_skip_tag} ✓ {rel_path}  (已安装)")
                     continue
             else:
                 actual = sha256_file(dest)
                 sha256_updates.setdefault(engine_name, {})[rel_path] = actual
-                print(f"  ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256 已记录")
+                _skip_idx = _next_file_index()
+                _skip_tag = _fmt_tag(_skip_idx)
+                print(f"  {_skip_tag} ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256 已记录")
+                emit("log", message=f"  {_skip_tag} ✓ {rel_path}  (已安装)")
                 continue
 
         if not required and not explicit:
-            print(f"    跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）")
+            _skip_idx = _next_file_index()
+            _skip_tag = _fmt_tag(_skip_idx)
+            print(f"  {_skip_tag} 跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）")
+            emit("log", message=f"  {_skip_tag} 跳过 {rel_path}（可选）")
             continue
 
         _idx = emit("file_start", engine=engine_name, file=rel_path, size_mb=size_mb)
@@ -463,7 +472,9 @@ def download_hf_cache(
 
         if already_cached and not force:
             cached_size_mb = max(blobs_real_size, direct_size) / 1024 / 1024
-            msg = f"  ✓ {label}  (已缓存 {cached_size_mb:.0f} MB)  {note}"
+            _skip_idx = _next_file_index()
+            _skip_tag = _fmt_tag(_skip_idx)
+            msg = f"  {_skip_tag} ✓ {label}  (已缓存 {cached_size_mb:.0f} MB)  {note}"
             emit("log", message=msg)
             continue
 
@@ -474,7 +485,9 @@ def download_hf_cache(
             partial_mb = max(blobs_real_size, direct_size) / 1024 / 1024
             partial_hint = f"  (已有 {partial_mb:.1f} MB 部分数据，将继续下载)"
         if not required and not force and not explicit:
-            skip_msg = f"    跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）"
+            _skip_idx = _next_file_index()
+            _skip_tag = _fmt_tag(_skip_idx)
+            skip_msg = f"  {_skip_tag} 跳过 {label}（可选）"
             emit("log", message=skip_msg)
             continue
 
@@ -806,7 +819,10 @@ def prefetch_faster_whisper_model(
 
     if model_bin.exists() and model_bin.stat().st_size > 0:
         size_mb = model_bin.stat().st_size // 1024 // 1024
-        print(f"  ✓ faster-whisper/{model}  ({size_mb} MB)")
+        _skip_idx = _next_file_index()
+        _skip_tag = _fmt_tag(_skip_idx)
+        print(f"  {_skip_tag} ✓ faster-whisper/{model}  ({size_mb} MB)")
+        emit("log", message=f"  {_skip_tag} ✓ faster-whisper/{model}  (已安装)")
         return True
 
     size_hint = {"tiny": 40, "base": 150, "small": 490, "medium": 1500,
