@@ -48,13 +48,11 @@ def setup_engine(project_root: Path) -> None:
     engine_str = str(engine_dir)
     if engine_str not in sys.path:
         sys.path.insert(0, engine_str)
-    # engine/inference.py 模块级：os.environ['HF_HUB_CACHE'] = './checkpoints/hf_cache'
-    # 以及 hf_utils.load_custom_model_from_hf(..., cache_dir="./checkpoints")
-    # 均使用相对路径，CWD 必须是 checkpoints/ 的父目录。
-    # 生产模式 checkpoints 在 userData（而非 app bundle），须从 HF_HUB_CACHE 推算。
+    # engine 内部使用相对路径引用 checkpoints/，CWD 须是 checkpoints/ 的父目录。
+    # 从 HF_HUB_CACHE（checkpoints/hf_cache）推算。
     hf_cache = os.getenv("HF_HUB_CACHE", "").strip()
     if hf_cache and Path(hf_cache).parent.parent.exists():
-        cwd = str(Path(hf_cache).parent.parent)  # .../userData/  or  project_root/
+        cwd = str(Path(hf_cache).parent.parent)  # checkpoints/hf_cache → 上两级
     else:
         cwd = str(project_root)
     os.chdir(cwd)

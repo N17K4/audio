@@ -1,6 +1,5 @@
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Dict
 
@@ -32,12 +31,18 @@ SEED_VC_ENGINE_JSON = WRAPPERS_ROOT / "seed_vc" / "engine.json"
 WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "whisper" / "engine.json"
 FASTER_WHISPER_ENGINE_JSON = WRAPPERS_ROOT / "faster_whisper" / "engine.json"
 
-RUNTIME_TEMP_DIR = Path(tempfile.gettempdir()) / "ai-workshop-temp"
-DOWNLOAD_DIR = RUNTIME_TEMP_DIR / "download"
-TRAIN_DATA_DIR = RUNTIME_TEMP_DIR / "train-data"
 # dev + prod 统一：Electron 传入 LOGS_DIR 环境变量；未传则回退到 APP_ROOT/logs/
 _LOGS_DIR_ENV = os.getenv("LOGS_DIR", "").strip()
 LOGS_DIR: Path = Path(_LOGS_DIR_ENV).resolve() if _LOGS_DIR_ENV else (APP_ROOT / "logs")
+
+# 音频缓存与 logs 同级；Electron 传入环境变量，未传则回退到 APP_ROOT 下
+_AUDIO_CACHE_ENV = os.getenv("AUDIO_CACHE_DIR", "").strip()
+AUDIO_CACHE_DIR: Path = Path(_AUDIO_CACHE_ENV).resolve() if _AUDIO_CACHE_ENV else (APP_ROOT / "audio_cache")
+DOWNLOAD_DIR = AUDIO_CACHE_DIR
+TRAIN_DATA_DIR = AUDIO_CACHE_DIR / "train-data"
+
+# HF 缓存在 checkpoints/hf_cache/ 下，与其他模型权重统一管理
+HF_CACHE_DIR: Path = CHECKPOINTS_ROOT / "hf_cache"
 
 BACKEND_HOST = os.getenv("BACKEND_HOST", "127.0.0.1")
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))

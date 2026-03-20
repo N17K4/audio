@@ -242,7 +242,7 @@ def run_subprocess_fallback(args, checkpoint_dir: str, project_root: Path) -> in
         )
         print(f"[seed_vc] 执行推理命令: {cmd}", file=sys.stderr, flush=True)
         _t0 = _time.monotonic()
-        # CWD 须为 checkpoints/ 的父目录（生产模式 checkpoints 在 userData，非 app bundle）
+        # CWD 须为 checkpoints/ 的父目录（从 HF_HUB_CACHE=checkpoints/hf_cache 推算）
         _hf_cache = os.getenv("HF_HUB_CACHE", "").strip()
         _run_cwd = str(Path(_hf_cache).parent.parent) if (_hf_cache and Path(_hf_cache).parent.parent.exists()) else str(project_root)
         completed = subprocess.run(

@@ -42,7 +42,7 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_refs: list
     try:
         completed = subprocess.run(
             cmd, shell=True, check=False, capture_output=True, text=True, timeout=1200,
-            env=build_engine_env("fish_speech"),
+            env=build_engine_env("fish_speech"), encoding="utf-8", errors="replace",
         )
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or b"").decode(errors="replace").strip()[:10000] if exc.stdout else ""

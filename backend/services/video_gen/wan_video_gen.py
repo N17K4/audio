@@ -64,7 +64,7 @@ async def run_wan_video_gen(
         completed = await asyncio.to_thread(
             subprocess.run,
             cmd, check=False, capture_output=True, text=True, timeout=1800,
-            env=build_engine_env("wan"),
+            env=build_engine_env("wan"), encoding="utf-8", errors="replace",
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Wan 执行失败: {exc}") from exc

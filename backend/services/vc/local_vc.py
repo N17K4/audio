@@ -79,6 +79,7 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
             timeout=600,
             env=merged_env,
             cwd=str(APP_ROOT),  # fairseq/HuBERT 在 backend/ 目录下会 SIGSEGV，需从项目根目录启动
+            encoding="utf-8", errors="replace",
         )
     except Exception as exc:
         log_ai_error("rvc", exc)
@@ -217,7 +218,7 @@ def run_seed_vc_cmd(
     try:
         completed = subprocess.run(
             cmd, shell=True, check=False, capture_output=True, text=True, timeout=1800,
-            env=build_engine_env("seed_vc"),
+            env=build_engine_env("seed_vc"), encoding="utf-8", errors="replace",
         )
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or b"").decode(errors="replace").strip()[:5000] if isinstance(exc.stdout, bytes) else (exc.stdout or "")[:5000]

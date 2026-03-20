@@ -913,6 +913,91 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GPT-SoVITS 引擎源码
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_GPT_SOVITS_REPO = "https://github.com/RVC-Boss/GPT-SoVITS"
+_GPT_SOVITS_TAG = "main"
+
+# 只保留推理必须的目录/文件，其余全部丢弃
+_GPT_SOVITS_KEEP = [
+    "GPT_SoVITS",
+    "tools",
+    "inference_cli.py",
+    "api.py",
+    "api_v2.py",
+    "config.py",
+    "requirements.txt",
+]
+
+_GPT_SOVITS_RM = [
+    "GPT_SoVITS/pretrained_models",
+    "GPT_SoVITS/configs",
+    "tools/asr",
+    "tools/uvr5",
+    "tools/slicer",
+    ".github",
+    "docs",
+    "Dockerfile",
+]
+
+
+def setup_gpt_sovits_engine(project_root: Path) -> bool:
+    """克隆 GPT-SoVITS 并精简到推理所需文件。"""
+    engine_dir = project_root / "runtime" / "gpt_sovits" / "engine"
+    sentinel = engine_dir / "GPT_SoVITS"
+
+    if sentinel.exists():
+        print(f"  ✓ gpt_sovits engine 已存在（{sentinel}）")
+        return True
+
+    if _download_engine_zip_from_hf("gpt_sovits_v2.zip", engine_dir):
+        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+        print(f"  ✓ gpt_sovits engine 就绪（{n} 个文件，HF 下载）")
+        return True
+
+    print(f"  [gpt_sovits] 克隆 {_GPT_SOVITS_REPO} @ {_GPT_SOVITS_TAG} ...")
+    tmp_dir = project_root / "runtime" / "gpt_sovits" / "_engine_tmp"
+    if tmp_dir.exists():
+        shutil.rmtree(tmp_dir)
+
+    r = subprocess.run(
+        ["git", "clone", "--depth", "1", "--branch", _GPT_SOVITS_TAG,
+         _GPT_SOVITS_REPO, str(tmp_dir)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        print(f"  ✗ 克隆失败: {r.stderr.strip()[:300]}")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return False
+
+    engine_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in _GPT_SOVITS_KEEP:
+        src = tmp_dir / item
+        dst = engine_dir / item
+        if src.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+        elif src.is_file():
+            shutil.copy2(src, dst)
+
+    for rel in _GPT_SOVITS_RM:
+        p = engine_dir / rel
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.is_file():
+            p.unlink(missing_ok=True)
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(engine_dir / ".git", ignore_errors=True)
+    n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
+    print(f"  ✓ gpt_sovits engine 就绪（{n} 个文件）")
+    return True
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # FaceFusion 引擎源码
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1189,6 +1274,9 @@ def main_full_setup(project_root: Path) -> int:
         # 引擎源码 setup
         if engine_name == "fish_speech":
             if not setup_fish_speech_engine(project_root):
+                all_ok = False
+        elif engine_name == "gpt_sovits":
+            if not setup_gpt_sovits_engine(project_root):
                 all_ok = False
         elif engine_name == "seed_vc":
             if not setup_seed_vc_engine(project_root):

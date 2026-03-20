@@ -109,13 +109,16 @@ async def run_smoketest():
     def generate():
         """流式输出测试结果。"""
         try:
-            # PYTHONPATH 包含 local_data/python-packages/（开发模式 ML 包）
+            # 继承后端进程的 PYTHONPATH（main.js 已设置好 python-packages 路径），
+            # 并确保 local_data/python-packages/ 也在搜索路径中（开发模式 ML 包）。
             env = os.environ.copy()
             ml_pkg_dir = str(project_root / "local_data" / "python-packages")
             existing = env.get("PYTHONPATH", "")
-            env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
+            if ml_pkg_dir not in existing:
+                env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
             env["BACKEND_PORT"] = str(BACKEND_PORT)
             env["PYTHONUNBUFFERED"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
 
             proc = subprocess.Popen(
                 [py_cmd, "-u", str(test_file)],
@@ -123,7 +126,8 @@ async def run_smoketest():
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-                env=env
+                env=env,
+                encoding="utf-8", errors="replace",
             )
 
             for line in iter(proc.stdout.readline, ''):
@@ -176,13 +180,14 @@ async def run_smoketest2():
     def generate():
         """流式输出测试结果。"""
         try:
-            # PYTHONPATH 包含 local_data/python-packages/（开发模式 ML 包）
             env = os.environ.copy()
             ml_pkg_dir = str(project_root / "local_data" / "python-packages")
             existing = env.get("PYTHONPATH", "")
-            env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
+            if ml_pkg_dir not in existing:
+                env["PYTHONPATH"] = f"{ml_pkg_dir}{os.pathsep}{existing}" if existing else ml_pkg_dir
             env["BACKEND_PORT"] = str(BACKEND_PORT)
             env["PYTHONUNBUFFERED"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
 
             proc = subprocess.Popen(
                 [py_cmd, "-u", str(test_file)],
@@ -190,7 +195,8 @@ async def run_smoketest2():
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-                env=env
+                env=env,
+                encoding="utf-8", errors="replace",
             )
 
             # 流式输出 stdout

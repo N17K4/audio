@@ -42,7 +42,7 @@ async def run_whisper_stt(content: bytes, filename: str, model: str = "base") ->
             completed = await asyncio.to_thread(
                 subprocess.run,
                 cmd, shell=True, check=False, capture_output=True, text=True, timeout=600,
-                env=build_engine_env("whisper"),
+                env=build_engine_env("whisper"), encoding="utf-8", errors="replace",
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Whisper command failed: {exc}") from exc

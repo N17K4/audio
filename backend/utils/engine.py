@@ -369,9 +369,8 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     engines = (_MANIFEST.get("engines") or {})
     cfg = engines.get(engine, {})
     env_key = cfg.get("env_key") or f"{engine.upper()}_CHECKPOINT_DIR"
-    # HF 缓存：优先 resources/checkpoints/hf_cache（打包预置），否则 userData
-    _bundled_hf = RESOURCES_ROOT / "checkpoints" / "hf_cache"
-    hf_cache = str(_bundled_hf if _bundled_hf.exists() else CHECKPOINTS_ROOT / "hf_cache")
+    # HF 缓存：统一在 checkpoints/hf_cache/ 下，与其他模型权重同级管理
+    hf_cache = str(CHECKPOINTS_ROOT / "hf_cache")
     merged = {
         **os.environ,
         env_key: get_checkpoint_dir(engine),
@@ -379,15 +378,10 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         "HUGGINGFACE_HUB_CACHE": hf_cache,   # 兼容旧版
         "TOKENIZERS_PARALLELISM": "false",
     }
-    # 默认强制离线：额外模型须通过 pnpm run checkpoints 预先下载。
-    # Seed-VC 目前仍依赖少量 HF 单文件（如 campplus / rmvpe）；
-    # 若 setup 阶段未落盘，允许运行时回退联网下载，避免直接不可用。
-    if engine == "seed_vc":
-        merged.pop("HF_HUB_OFFLINE", None)
-        merged.pop("TRANSFORMERS_OFFLINE", None)
-    else:
-        merged["HF_HUB_OFFLINE"] = "1"
-        merged["TRANSFORMERS_OFFLINE"] = "1"
+    # 全引擎强制离线：所有 HF 模型须通过 pnpm run checkpoints 预先下载。
+    # 确保本地应用不依赖运行时网络连接。
+    merged["HF_HUB_OFFLINE"] = "1"
+    merged["TRANSFORMERS_OFFLINE"] = "1"
     # macOS ARM CPU 下 fairseq/HuBERT 在不启用 MPS fallback 时会 SIGSEGV；
     # 对所有引擎统一开启，允许 MPS 不支持的算子自动降级到 CPU
     merged["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
@@ -395,6 +389,9 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     # 新版 protobuf (>=4.x) 的 C 扩展禁用了 Descriptor 直接创建，导致 ImportError。
     # 强制使用纯 Python 实现以规避此问题（对所有引擎无副作用）。
     merged["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+    # Windows 子进程 stderr/stdout 默认使用系统编码（cp1252/cp932 等），
+    # 导致中文错误信息丢失或乱码。强制 UTF-8 保证诊断输出完整。
+    merged["PYTHONIOENCODING"] = "utf-8"
     ffmpeg_bin = get_ffmpeg_binary()
     if ffmpeg_bin:
         ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)

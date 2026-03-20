@@ -77,20 +77,28 @@ def get_embedded_python() -> str:
     sys.exit(1)
 
 
+_USE_TCP = sys.platform == "win32"
+
+
 def _worker_paths(checkpoint_dir: str) -> tuple[str, str]:
-    """返回 (socket_path, pid_path)，以 checkpoint_dir hash 区分不同实例。"""
+    """返回 (connection_path, pid_path)。
+
+    Unix: connection_path 是 Unix socket 路径。
+    Windows: connection_path 是存储 TCP 端口号的文件路径。
+    """
     import hashlib
     import tempfile
     h = hashlib.md5(checkpoint_dir.encode()).hexdigest()[:8]
     tmp = tempfile.gettempdir()
+    suffix = "port" if _USE_TCP else "sock"
     return (
-        os.path.join(tmp, f"fish_speech_worker_{h}.sock"),
+        os.path.join(tmp, f"fish_speech_worker_{h}.{suffix}"),
         os.path.join(tmp, f"fish_speech_worker_{h}.pid"),
     )
 
 
 def _worker_alive(socket_path: str, pid_path: str) -> bool:
-    """检查 worker 是否存活：PID 存在 + socket 可连接。"""
+    """检查 worker 是否存活：PID 存在 + socket/TCP 可连接。"""
     if not os.path.exists(socket_path):
         return False
     # 检查 PID
@@ -100,14 +108,20 @@ def _worker_alive(socket_path: str, pid_path: str) -> bool:
             os.kill(pid, 0)  # 不发送信号，仅探活
         except (ProcessLookupError, ValueError, PermissionError, OSError):
             return False
-    # 尝试连接 socket
+    # 尝试连接
     try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2.0)
-        s.connect(socket_path)
+        if _USE_TCP:
+            port = int(Path(socket_path).read_text().strip())
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(("127.0.0.1", port))
+        else:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(socket_path)
         s.close()
         return True
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
@@ -129,10 +143,14 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
     stderr_fd, stderr_log = tempfile.mkstemp(prefix="fish_worker_err_", suffix=".log")
     os.close(stderr_fd)
 
+    cmd = [py, worker_script, "--checkpoint_dir", checkpoint_dir]
+    if _USE_TCP:
+        cmd.extend(["--tcp", "--port_file", socket_path])
+    else:
+        cmd.extend(["--socket_path", socket_path])
+
     proc = subprocess.Popen(
-        [py, worker_script,
-         "--checkpoint_dir", checkpoint_dir,
-         "--socket_path", socket_path],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=open(stderr_log, "w", encoding="utf-8", errors="replace"),
         env=env,
@@ -195,11 +213,17 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
 
 
 def _send_request(socket_path: str, text: str, voice_refs: list, output: str) -> dict:
-    """通过 socket 发送推理请求，返回响应 dict。"""
+    """通过 socket/TCP 发送推理请求，返回响应 dict。"""
     payload = json.dumps({"text": text, "voice_refs": voice_refs, "output": output}, ensure_ascii=False)
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(120.0)  # 推理本身的超时
-    s.connect(socket_path)
+    if _USE_TCP:
+        port = int(Path(socket_path).read_text().strip())
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(120.0)
+        s.connect(("127.0.0.1", port))
+    else:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(120.0)
+        s.connect(socket_path)
     s.sendall((payload + "\n").encode())
     # 接收响应
     buf = b""
@@ -220,7 +244,7 @@ def main() -> int:
 
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
 
-    # HF 缓存统一指向项目 checkpoints/hf_cache（绝对路径）
+    # HF 缓存统一指向 checkpoints/hf_cache（与其他模型权重同级管理）
     base = Path(__file__).resolve().parent.parent.parent
     hf_cache = str((base / "checkpoints" / "hf_cache").resolve())
     os.environ.setdefault("HF_HUB_CACHE", hf_cache)

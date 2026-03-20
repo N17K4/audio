@@ -124,12 +124,21 @@ def _dist_version_in_target(target: str, dist_name: str) -> str:
 
 
 def _is_importable_in_target(target: str, module_name: str) -> bool:
-    """检查模块是否存在于 target 目录中（检查目录或 .py 文件）。"""
+    """检查模块是否存在于 target 目录中（包目录、.py 文件、或编译扩展 .pyd/.so）。"""
     target_path = Path(target)
     if not target_path.exists():
         return False
-    # 检查包目录或单文件模块
-    return (target_path / module_name).is_dir() or (target_path / f"{module_name}.py").is_file()
+    # 包目录
+    if (target_path / module_name).is_dir():
+        return True
+    # 单文件 .py 模块
+    if (target_path / f"{module_name}.py").is_file():
+        return True
+    # 编译扩展（.pyd on Windows, .so on Unix），文件名格式如 parselmouth.cp312-win_amd64.pyd
+    for f in target_path.iterdir():
+        if f.name.startswith(module_name + ".") and f.suffix in (".pyd", ".so"):
+            return True
+    return False
 
 
 # pip 包名 → 实际 import 模块名的映射（仅针对名称不一致的包）
@@ -406,9 +415,24 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
         if r.returncode == 0:
             _emit({"type": "log", "message": f"  ✓ {pkg}"}, json_progress)
         else:
-            err = r.stderr.strip()[:300]
-            _emit({"type": "log", "message": f"  ✗ {pkg} 安装失败: {err}"}, json_progress)
-            all_ok = False
+            # pip 返回非零但包可能已安装（Windows 长路径 bug、依赖解析警告等）
+            raw_module = pkg.replace("-", "_").split("==")[0].split(">=")[0].split("[")[0]
+            mod = _PKG_TO_MODULE.get(raw_module.lower(), raw_module)
+            exact_ver = _exact_version_spec(pkg)
+            actually_ok = False
+            if exact_ver:
+                actually_ok = _installed_dist_version(py, target, dist_name) == exact_ver
+            elif target:
+                actually_ok = _is_importable_in_target(target, mod)
+            else:
+                chk = subprocess.run([py, "-c", f"import {mod}"], capture_output=True, env=env)
+                actually_ok = chk.returncode == 0
+            if actually_ok:
+                _emit({"type": "log", "message": f"  ✓ {pkg}  (pip 警告但已安装)"}, json_progress)
+            else:
+                err = r.stderr.strip()[:300]
+                _emit({"type": "log", "message": f"  ✗ {pkg} 安装失败: {err}"}, json_progress)
+                all_ok = False
 
     # ── Phase 3: 修复 torch 栈版本（万一 constraints 未能完全阻止）─────────
     if target:

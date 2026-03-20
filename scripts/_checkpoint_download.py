@@ -635,8 +635,8 @@ def download_hf_cache(
                     refs_main.write_text(revision, encoding="utf-8")
             # 同时在 hf_cache 目录创建软链接，使绝对路径 HF_HUB_CACHE 也能找到该缓存
             # （当 cache_dir_rel != "checkpoints/hf_cache" 时，模型存于 checkpoints/ 根目录）
+            hf_cache_dir = (checkpoints_base or (resources_root / "checkpoints")) / "hf_cache"
             if cache_dir_rel != "checkpoints/hf_cache":
-                hf_cache_dir = (checkpoints_base or (resources_root / "checkpoints")) / "hf_cache"
                 hf_cache_dir.mkdir(parents=True, exist_ok=True)
                 link_target = hf_cache_dir / marker_dir.name
                 try:
@@ -931,16 +931,13 @@ def prefetch_faster_whisper_model(
         return False
 
     runtime_env = dict(os.environ)
-    check = subprocess.run([py, "-c", "import faster_whisper"], capture_output=True, env=runtime_env)
-    if check.returncode != 0:
-        print("  [faster-whisper] faster-whisper 未安装，跳过模型预下载")
-        return False
 
     print(f"  [faster-whisper] 下载 {model} 模型到 {model_dir} ...")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    # 用 faster_whisper.utils.download_model(output_dir=...) 直接下载到指定目录（非 HF cache 格式）
-    # 回退：huggingface_hub.snapshot_download(local_dir=...) 也会直接写入目标目录
+    # 优先使用 faster_whisper.utils.download_model（如果已安装），
+    # 否则回退到 huggingface_hub.snapshot_download（不依赖 faster-whisper 包）。
+    # 这样即使 checkpoint 与 ml-base 并行运行（faster-whisper 尚未安装）也能下载。
     script = f"""
 import sys, os
 # 确保不受外部 HF_HUB_OFFLINE 影响
@@ -952,7 +949,7 @@ try:
     download_model({model!r}, output_dir=output_dir, local_files_only=False)
     print("ok:download_model")
 except Exception as e1:
-    # 回退到 huggingface_hub
+    # 回退到 huggingface_hub（不需要 faster-whisper 已安装）
     try:
         from huggingface_hub import snapshot_download
         snapshot_download(

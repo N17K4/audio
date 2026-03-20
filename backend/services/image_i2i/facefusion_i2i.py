@@ -62,7 +62,7 @@ async def run_facefusion_i2i(
         completed = await asyncio.to_thread(
             subprocess.run,
             cmd, check=False, capture_output=True, text=True, timeout=600,
-            env=build_engine_env("facefusion"),
+            env=build_engine_env("facefusion"), encoding="utf-8", errors="replace",
             cwd=engine_dir,
         )
     except Exception as exc:

@@ -62,7 +62,7 @@ async def run_liveportrait_lipsync(
         completed = await asyncio.to_thread(
             subprocess.run,
             cmd, check=False, capture_output=True, text=True, timeout=600,
-            env=build_engine_env("liveportrait"),
+            env=build_engine_env("liveportrait"), encoding="utf-8", errors="replace",
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"LivePortrait 执行失败: {exc}") from exc

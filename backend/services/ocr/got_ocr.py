@@ -61,7 +61,7 @@ async def run_got_ocr(
             completed = await asyncio.to_thread(
                 subprocess.run,
                 cmd, check=False, capture_output=True, text=True, timeout=300,
-                env=build_engine_env("got_ocr"),
+                env=build_engine_env("got_ocr"), encoding="utf-8", errors="replace",
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"GOT-OCR 执行失败: {exc}") from exc

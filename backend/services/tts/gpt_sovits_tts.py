@@ -92,7 +92,7 @@ def run_local_gpt_sovits_tts_cmd(
     try:
         completed = subprocess.run(
             cmd, shell=True, check=False, capture_output=True, text=True, timeout=1200,
-            env=build_engine_env("gpt_sovits"),
+            env=build_engine_env("gpt_sovits"), encoding="utf-8", errors="replace",
         )
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or b"").decode(errors="replace").strip()[:10000] if exc.stdout else ""

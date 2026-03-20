@@ -733,7 +733,60 @@
         "soundfile",
         "librosa"
       ],
-      "checkpoint_files": [],
+      "checkpoint_files": [
+        {
+          "path": "chinese-hubert-base/preprocessor_config.json",
+          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/preprocessor_config.json",
+          "size_mb": 1,
+          "required": true,
+          "note": "Chinese HuBERT 基础模型（音素提取）"
+        },
+        {
+          "path": "chinese-hubert-base/config.json",
+          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/config.json",
+          "size_mb": 1,
+          "required": true
+        },
+        {
+          "path": "chinese-hubert-base/pytorch_model.bin",
+          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/pytorch_model.bin",
+          "size_mb": 380,
+          "required": true
+        },
+        {
+          "path": "chinese-roberta-wwm-ext-large/config.json",
+          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/config.json",
+          "size_mb": 1,
+          "required": true,
+          "note": "Chinese RoBERTa 大模型（文本编码）"
+        },
+        {
+          "path": "chinese-roberta-wwm-ext-large/tokenizer.json",
+          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/tokenizer.json",
+          "size_mb": 1,
+          "required": true
+        },
+        {
+          "path": "chinese-roberta-wwm-ext-large/pytorch_model.bin",
+          "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/pytorch_model.bin",
+          "size_mb": 1300,
+          "required": true
+        },
+        {
+          "path": "gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
+          "url": "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
+          "size_mb": 600,
+          "required": true,
+          "note": "GPT v2 预训练模型（Text-to-Semantic）"
+        },
+        {
+          "path": "gsv-v2final-pretrained/s2G2333k.pth",
+          "url": "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main/gsv-v2final-pretrained/s2G2333k.pth",
+          "size_mb": 800,
+          "required": true,
+          "note": "SoVITS v2 预训练模型（Semantic-to-Audio）"
+        }
+      ],
       "env_key": "GPT_SOVITS_CHECKPOINT_DIR"
     },
     "cosyvoice": {

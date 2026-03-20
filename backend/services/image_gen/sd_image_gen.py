@@ -56,7 +56,7 @@ async def run_sd_image_gen(
         completed = await asyncio.to_thread(
             subprocess.run,
             cmd, check=False, capture_output=True, text=True, timeout=600,
-            env=build_engine_env("sd"),
+            env=build_engine_env("sd"), encoding="utf-8", errors="replace",
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"SD 执行失败: {exc}") from exc

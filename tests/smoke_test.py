@@ -139,15 +139,6 @@ class TestBasicFeatures:
         print("🎙️  测试 GPT-SoVITS TTS")
 
         with httpx.Client(timeout=30) as client:
-            # 先检查 capabilities 是否包含 gpt_sovits
-            cap_resp = client.get(f"{_BASE_URL}/capabilities")
-            if cap_resp.status_code == 200:
-                caps = cap_resp.json()
-                tts_providers = caps.get("tts", [])
-                if "gpt_sovits" not in tts_providers:
-                    print("⚠️  GPT-SoVITS 未在 capabilities 中，跳过（需先安装引擎）")
-                    pytest.skip("GPT-SoVITS 引擎未安装")
-
             data = {
                 "text": "烟雾测试文本合成",
                 "provider": "gpt_sovits",
@@ -243,15 +234,6 @@ class TestBasicFeatures:
         print("🎛️  测试 GPT-SoVITS TTS 高级参数")
 
         with httpx.Client(timeout=60) as client:
-            # 先检查 capabilities 是否包含 gpt_sovits
-            cap_resp = client.get(f"{_BASE_URL}/capabilities")
-            if cap_resp.status_code == 200:
-                caps = cap_resp.json()
-                tts_providers = caps.get("tts", [])
-                if "gpt_sovits" not in tts_providers:
-                    print("⚠️  GPT-SoVITS 未在 capabilities 中，跳过（需先安装引擎）")
-                    pytest.skip("GPT-SoVITS 引擎未安装")
-
             data = {
                 "text": "高级参数烟雾测试",
                 "provider": "gpt_sovits",
