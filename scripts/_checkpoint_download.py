@@ -625,13 +625,20 @@ _FACEFUSION_RM = [
 
 
 def get_facefusion_packages_dir(project_root: Path, checkpoints_base: "Path | None" = None) -> Path:
-    """返回 FaceFusion 独立 site-packages 目录。"""
+    """返回 FaceFusion 独立 site-packages 目录。
+
+    与 backend/utils/engine.py build_engine_env() 保持一致：
+    开发：runtime/engine/facefusion/.packages/
+    生产：<RESOURCES_ROOT>/runtime/engine/facefusion/.packages/
+
+    FaceFusion packages 与引擎源码同级，避免 runtime 根目录污染。
+    """
     if checkpoints_base is not None:
-        return checkpoints_base.parent / "facefusion-packages"
+        return checkpoints_base.parent.parent / "runtime" / "engine" / "facefusion" / ".packages"
     checkpoints_dir_env = os.getenv("CHECKPOINTS_DIR", "").strip()
     if checkpoints_dir_env:
-        return Path(checkpoints_dir_env).resolve().parent / "facefusion-packages"
-    return project_root / "local_data" / "facefusion-packages"
+        return Path(checkpoints_dir_env).resolve().parent.parent / "runtime" / "engine" / "facefusion" / ".packages"
+    return project_root / "runtime" / "engine" / "facefusion" / ".packages"
 
 
 def setup_facefusion_engine(

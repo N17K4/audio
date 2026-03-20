@@ -92,7 +92,7 @@ backend/
 | `POST /tasks/realtime` | 实时对话 WebSocket 引导 |
 | `POST /tasks/audio-understanding` | 音频理解分析 |
 | `POST /tasks/media-convert` | FFmpeg 格式转换 / 提取音频 / 截取片段 |
-| `POST /train` | 音色训练（当前为占位 mock） |
+| `POST /train` | RVC 音色训练（6 段流程：预处理 → ContentVec 提取 → FAISS 索引 → 基础模型转换 → meta.json 生成） |
 | `GET /voices` | 列出 `models/voices/` 下的音色模型 |
 | `GET /jobs` | 任务队列列表 |
 
@@ -122,7 +122,7 @@ models/
 - CORS 完全开放（`*`）— 桌面应用无跨域顾虑，intentional。
 - 打包前必须重新构建 `frontend/out/`，生产模式 Electron 直接加载静态文件。
 - 大型模型文件（`.pth`、`.onnx`、`.pt`、`.ckpt`、`.safetensors`）和 `runtime/`（整个目录）已 gitignore；wrapper 脚本已移至 `wrappers/`。
-- `POST /train` 是 mock — 只创建目录结构和占位 `model.pth`，不做真实训练。
+- `POST /train` 实现了完整的 RVC 训练流程（音频预处理 → ContentVec 特征提取 → FAISS 索引构建 → 基础模型转换）。fairseq 依赖在 Python 3.12 上存在 dataclass 不兼容问题（已在 train.py 中加入 patch）。
 
 ---
 
@@ -168,7 +168,7 @@ models/
 |------|------|------|------|
 | **Poetry 虚拟环境** | `~/.cache/pypoetry/virtualenvs/test001-*/` | backend 依赖（fastapi、uvicorn、httpx 等） | 开发模式后端（`poetry run uvicorn`） |
 | **嵌入式 Python** | `runtime/mac/python/bin/python3` | backend 依赖 + `pip_packages`（轻量：rvc-python 等） | 生产模式后端、ML 脚本运行器 |
-| **本地 ML 包** | `local_data/python-packages/`（开发） | torch、torchaudio、faiss、llama-index 等 | 开发模式 ML 包（gitignored） |
+| **本地 ML 包** | `runtime/ml/`（开发） | torch、torchaudio、faiss、llama-index 等 | 开发模式 ML 包（gitignored） |
 | **用户 ML 包** | `userData/python-packages/`（生产） | 同上 | 生产模式用户首次启动下载 |
 
 ### 核心原则
@@ -178,8 +178,8 @@ models/
 ```
 开发模式：
   pnpm run setup          # setup_base.py：下载嵌入式 Python + backend 依赖 + pip_packages + 引擎源码 + FFmpeg
-  pnpm run ml / ml:extra  # 装 ML 包到 local_data/python-packages/（不污染嵌入式 Python）
-  npx electron .          # main.js 设 PYTHONPATH=local_data/python-packages/
+  pnpm run ml / ml:extra  # 装 ML 包到 runtime/ml/（不污染嵌入式 Python）
+  npx electron .          # main.js 设 PYTHONPATH=runtime/ml/
 
 生产模式（用户下载 .app）：
   app 启动后端            # PYTHONPATH=userData/python-packages/
@@ -190,10 +190,10 @@ models/
 
 **开发模式（main.js）：**
 ```javascript
-// PYTHONPATH 指向 local_data/python-packages/（pnpm run ml 安装的 ML 包）
+// PYTHONPATH 指向 runtime/ml/（pnpm run ml 安装的 ML 包）
 PYTHONPATH: [
   path.join(__dirname, 'backend'),
-  path.join(__dirname, 'local_data', 'python-packages')
+  path.join(__dirname, 'runtime', 'ml')
 ].join(path.delimiter)
 ```
 
@@ -210,27 +210,38 @@ PYTHONPATH: [
 ## 脚本分层架构（pnpm scripts）
 
 ```bash
+# ─── 一键初始化 + 启动开发 ────────────────────────────────────────────────
+pnpm run all            # setup → runtime → ml → checkpoints → dev（完整初始化 + 启动）
+
 # ─── 环境初始化（用系统 Python 运行）──────────────────────────────────────
 pnpm run setup          # = python3 scripts/setup_base.py
   # 下载嵌入式 Python + backend 依赖 + 基础引擎 pip_packages + 源码 + FFmpeg + pandoc
 pnpm run setup:extra    # = python3 scripts/setup_extra.py
   # 额外引擎 pip_packages + 源码（liveportrait 等）
 
+# ─── 嵌入式 Python 初始化 ──────────────────────────────────────────────────
+pnpm run runtime        # = bash scripts/runtime.sh
+  # 在嵌入式 Python 上安装 backend 依赖 + 引擎 pip_packages
+
 # ─── ML 运行库（用嵌入式 Python 运行）─────────────────────────────────────
 pnpm run ml             # = runtime/.../python3 scripts/ml_base.py
-  # 安装 torch、torchaudio、transformers 等 → local_data/python-packages/
+  # 安装 torch、torchaudio、transformers 等 → runtime/ml/
 pnpm run ml:extra       # = runtime/.../python3 scripts/ml_extra.py
-  # 安装 faiss、llama-index、peft 等 → local_data/python-packages/
+  # 安装 faiss、llama-index、peft 等 → runtime/ml/
   # 支持分组：ml:rag / ml:agent / ml:lora
 
 # ─── 模型权重下载 ──────────────────────────────────────────────────────────
-pnpm run checkpoints       # 基础模型（Fish Speech、RVC、Seed-VC 等）
+pnpm run checkpoints       # 基础模型（Fish Speech、RVC、Seed-VC、FaceFusion 等）
 pnpm run checkpoints:extra # 额外模型（RAG、Agent 等）
+
+# ─── 开发模式 ──────────────────────────────────────────────────────────────
+pnpm run dev            # 启动 Electron + Next.js 前端（localhost:3000）
 ```
 
 ### manifest.json 中的包配置
-- **pip_packages** — 轻量依赖（rvc-python、setuptools 等），`setup_base.py` / `setup_extra.py` 阶段装入嵌入式 Python
-- **runtime_pip_packages** — 重型 ML 包（torch、faiss、transformers 等），`ml_base.py` / `ml_extra.py` 装到 `local_data/python-packages/`（开发）或 `userData/python-packages/`（生产）
+- **pip_packages** — 轻量依赖（rvc-python、setuptools、munch 等），`setup_base.py` / `setup_extra.py` 阶段装入嵌入式 Python
+- **runtime_pip_packages** — 重型 ML 包（torch、faiss、transformers 等），`ml_base.py` / `ml_extra.py` 装到 `runtime/ml/`（开发）或 `userData/python-packages/`（生产）
+- **checkpoint_files** — 模型权重文件（Fish Speech ~1.2GB、RVC ~430MB、Seed-VC ~2.7GB、FaceFusion 13 个 ONNX ~1.8GB 等），`checkpoints_base.py` 通过 HuggingFace Hub 下载到 `runtime/checkpoints/`
 
 ---
 
@@ -261,22 +272,23 @@ pnpm run checkpoints:extra # 额外模型（RAG、Agent 等）
 | 阶段 | 时机 | 脚本 | 安装到 | 内容 |
 |------|------|------|--------|------|
 | **CI 构建 / 开发 setup** | 打包前 | `setup_base.py` / `setup_extra.py` | 嵌入式 Python | 引擎源码 + `pip_packages`（轻量：rvc-python、setuptools 等） |
-| **开发 ML** | 本地开发 | `ml_base.py` / `ml_extra.py` | `local_data/python-packages/` | `runtime_pip_packages`（torch、faiss、llama-index 等） |
+| **开发 ML** | 本地开发 | `ml_base.py` / `ml_extra.py` | `runtime/ml/` | `runtime_pip_packages`（torch、faiss、llama-index 等） |
 | **用户首次启动** | 生产首次 | `ml_base.py` / `ml_extra.py --target userData/` | `userData/python-packages/` | 同上 |
 
 ### 开发流程
 
 ```bash
 pnpm run setup        # 下载嵌入式 Python + backend 依赖 + 引擎 pip_packages + 源码 + FFmpeg
-pnpm run ml           # torch 等 → local_data/python-packages/
-pnpm run ml:extra     # faiss 等 → local_data/python-packages/（可选）
-pnpm run checkpoints  # 模型权重 → checkpoints/
+pnpm run runtime      # 在嵌入式 Python 上安装 backend 依赖 + 引擎 pip_packages
+pnpm run ml           # torch 等 → runtime/ml/
+pnpm run ml:extra     # faiss 等 → runtime/ml/（可选）
+pnpm run checkpoints  # 模型权重 → runtime/checkpoints/
 ```
 
 **打包：** `pnpm run dist`
 ```
 安装包只包含：嵌入式 Python（仅 pip_packages，无 ML 包）+ 应用代码
-不包含：local_data/（gitignored）、checkpoints/（gitignored）
+不包含：runtime/ml/（gitignored）、runtime/checkpoints/（gitignored）
 ```
 
 **生产用户首次启动：** 引导页面

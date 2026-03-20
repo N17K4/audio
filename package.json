@@ -18,6 +18,7 @@
     "checkpoints:extra": "runtime/python/mac/bin/python3 scripts/checkpoints_extra.py",
     "clean": "rm -rf runtime/ml runtime/checkpoints runtime/engine && echo '✓ 已清除 ML 依赖、checkpoints、引擎源码'",
     "reinstall": "pnpm run clean && pnpm run setup && pnpm run ml && pnpm run checkpoints",
+    "all": "pnpm run setup && pnpm run runtime && pnpm run ml && pnpm run checkpoints && pnpm run dev",
     "build:frontend": "cd frontend && pnpm build",
     "predist": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'Electron.*test001' 2>/dev/null; true",
     "dist": "bash scripts/dist.sh --mac",

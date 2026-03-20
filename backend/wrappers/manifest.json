@@ -235,7 +235,8 @@
         "soundfile",
         "einops",
         "omegaconf",
-        "transformers"
+        "transformers",
+        "descript-audio-codec"
       ],
       "checkpoint_files": [
         {
@@ -821,7 +822,8 @@
         "transformers",
         "einops",
         "soundfile",
-        "librosa"
+        "librosa",
+        "pytorch_lightning"
       ],
       "checkpoint_files": [
         {

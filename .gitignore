@@ -60,8 +60,8 @@ checkpoints/
 # ─── 本地开发 ML 包（已整合至 runtime/ml/，保留以防旧目录残留）──────────────
 local_data/
 
-# ─── 引擎独立 pip 包目录（如 facefusion 等）──────────────────────────────────
-facefusion-packages/
+# ─── 引擎独立 pip 包目录（已整合到 runtime/engine/{engine}/.packages/）────────
+# FaceFusion packages: runtime/engine/facefusion/.packages/ （上面 runtime/engine/facefusion/ 已 ignore）
 
 # ─── 运行时数据 ──────────────────────────────────────────────────────────────
 backend/.jobs/
@@ -80,9 +80,5 @@ temp/
 
 # ─── Claude 相关（本地开发工具，不进版本库） ──────────────────────────────────
 .claude
-CLAUDE*
-AGENT*
-README.md
-*memorybank*
 
 .env

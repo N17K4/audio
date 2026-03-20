@@ -382,7 +382,8 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
     if engine == "facefusion":
-        facefusion_pkgs = RUNTIME_ROOT / "facefusion-packages"
+        # FaceFusion 独立 site-packages（与引擎源码同级，避免 runtime 根目录污染）
+        facefusion_pkgs = RUNTIME_ROOT / "engine" / "facefusion" / ".packages"
         merged["PYTHONPATH"] = str(facefusion_pkgs)
         merged["PYTHONNOUSERSITE"] = "1"
     return merged

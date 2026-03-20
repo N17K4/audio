@@ -70,6 +70,19 @@ async def run_facefusion_i2i(
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
         stdout = (completed.stdout or "").strip()
+
+        # "no source face detected" 不算致命错误 — 返回提示而非 500
+        combined = f"{stderr} {stdout}".lower()
+        if "no source face detected" in combined or "no target face detected" in combined:
+            logger.warning("[facefusion] 未检测到人脸，跳过处理")
+            return {
+                "status": "no_face",
+                "task": "image_i2i",
+                "provider": "facefusion",
+                "result_url": "",
+                "result_text": "未检测到人脸，请使用包含清晰人脸的图片",
+            }
+
         # 过滤下载进度条等冗余行，只保留有意义的日志
         def _filter_noise(text: str, max_len: int = 3000) -> str:
             lines = text.splitlines()

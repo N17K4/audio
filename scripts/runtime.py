@@ -268,8 +268,12 @@ def setup_pip_packages(engine_name: str, packages: list[str], py: str) -> bool:
 
 def _patch_fairseq_for_py312(py: str) -> None:
     """修补 fairseq 以兼容 Python 3.12 + 新版 omegaconf。"""
+    # fairseq 在未修补前无法 import（hydra_init 崩溃），
+    # 改用 importlib.util.find_spec 获取路径（不触发 __init__.py 执行）。
     result = subprocess.run(
-        [py, "-c", "import fairseq; import os; print(os.path.dirname(fairseq.__file__))"],
+        [py, "-c",
+         "import importlib.util, os; spec = importlib.util.find_spec('fairseq');"
+         "print(os.path.dirname(spec.origin)) if spec and spec.origin else exit(1)"],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -286,17 +290,23 @@ def _patch_fairseq_for_py312(py: str) -> None:
             )
         bulk_imports = re.findall(r"^import fairseq\.\S+.*$", text, re.MULTILINE)
         if bulk_imports:
-            block = "\n".join(bulk_imports)
+            modules = [b.replace("import ", "").replace("  # noqa", "").strip() for b in bulk_imports]
             loop = (
                 "for _m in "
-                + repr([b.replace("import ", "").replace("  # noqa", "").strip() for b in bulk_imports])
+                + repr(modules)
                 + ":\n"
                 "    try:\n"
                 "        import importlib as _il; _il.import_module(_m)\n"
                 "    except Exception:\n"
                 "        pass\n"
             )
-            text = text.replace(block, loop)
+            # 逐行删除原始 import 语句，避免空行导致 block 匹配失败
+            for imp_line in bulk_imports:
+                text = text.replace(imp_line + "\n", "", 1)
+            # 在 hydra_init 块之后插入循环
+            hydra_marker = "    pass  # Py3.12 兼容跳过\n"
+            if hydra_marker in text:
+                text = text.replace(hydra_marker, hydra_marker + "\n" + loop)
         init_py.write_text(text, encoding="utf-8")
 
     def _fix_mutable_defaults(py_file: Path) -> None:
