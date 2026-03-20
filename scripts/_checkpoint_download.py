@@ -54,9 +54,26 @@ def apply_hf_endpoint(url: str) -> str:
 _JSON_MODE: bool = False
 _REAL_STDOUT = sys.stdout  # emit() 专用：保留原始 stdout 引用
 
+# ─── 全局文件计数器（线程安全）────────────────────────────────────────────
+_file_counter = 0
+_file_total = 0
+_file_counter_lock = threading.Lock()
+
+
+def _next_file_index() -> int:
+    """线程安全地递增并返回当前文件序号。"""
+    global _file_counter
+    with _file_counter_lock:
+        _file_counter += 1
+        return _file_counter
+
 
 def emit(msg_type: str, **kwargs) -> None:
     """输出结构化进度消息。--json-progress 时输出 JSON Lines，否则普通打印。"""
+    if msg_type == "file_start":
+        idx = _next_file_index()
+        kwargs["idx"] = idx
+        kwargs["total"] = _file_total
     if _JSON_MODE:
         _REAL_STDOUT.write(json.dumps({"type": msg_type, **kwargs}, ensure_ascii=False) + "\n")
         _REAL_STDOUT.flush()
@@ -583,9 +600,9 @@ def download_hf_cache(
 def get_embedded_python(project_root: Path) -> str:
     """返回嵌入式 Python 可执行路径，找不到返回空串。"""
     if platform.system() == "Windows":
-        p = project_root / "runtime" / "win" / "python" / "python.exe"
+        p = project_root / "runtime" / "python" / "win" / "python.exe"
     else:
-        p = project_root / "runtime" / "mac" / "python" / "bin" / "python3"
+        p = project_root / "runtime" / "python" / "mac" / "bin" / "python3"
     return str(p) if p.exists() else ""
 
 
@@ -628,7 +645,7 @@ def setup_facefusion_engine(
 
     # 优先用 resources_root（打包后指向 app.asar 旁的资源目录）
     runtime_root = resources_root if (resources_root / "runtime").exists() else project_root
-    engine_dir = runtime_root / "runtime" / "facefusion" / "engine"
+    engine_dir = runtime_root / "runtime" / "engine" / "facefusion"
     sentinel = engine_dir / "facefusion" / "__init__.py"
 
     # ── Step 1: git clone ───────────────────────────────────────────────────
@@ -1012,6 +1029,19 @@ def main() -> int:
 
     # 明确指定 --engine 或 --engines 时视为用户主动请求，required=false 的项目也要下载
     explicit = bool(args.engine or args.engines)
+
+    # 预计算全局文件总数（checkpoint_files + hf_cache_downloads + faster_whisper 模型）
+    global _file_total, _file_counter
+    _file_counter = 0
+    total = 0
+    for ename, ecfg in engines.items():
+        if args.engine and ename != args.engine:
+            continue
+        total += len(ecfg.get("checkpoint_files", []))
+        total += len(ecfg.get("hf_cache_downloads", []))
+        if ename == "faster_whisper":
+            total += 2  # large-v3 + base
+    _file_total = total
 
     def _process_engine(engine_name: str, cfg: dict) -> bool:
         """处理单个引擎的 checkpoint 下载。返回是否全部就绪。"""
