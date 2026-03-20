@@ -16,78 +16,6 @@ interface TaskListProps {
   ) => void;
 }
 
-// ─── Smoke test helpers ───────────────────────────────────────────────────────
-
-function createTestWav(): Blob {
-  const sampleRate = 8000, numSamples = 8000, numChannels = 1, bitsPerSample = 16;
-  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-  const blockAlign = numChannels * bitsPerSample / 8;
-  const dataSize = numSamples * blockAlign;
-  const buf = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buf);
-  const ws = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
-  ws(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); ws(8, 'WAVE');
-  ws(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
-  ws(36, 'data'); view.setUint32(40, dataSize, true);
-  return new Blob([buf], { type: 'audio/wav' });
-}
-
-function crc32(data: Uint8Array): number {
-  let crc = 0xFFFFFFFF;
-  for (let i = 0; i < data.length; i++) {
-    crc ^= data[i];
-    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
-  }
-  return (crc ^ 0xFFFFFFFF) >>> 0;
-}
-
-function createTestZip(filename: string, data: Uint8Array): Uint8Array<ArrayBuffer> {
-  const fn = new TextEncoder().encode(filename);
-  const fnLen = fn.length, dataLen = data.length, crc = crc32(data);
-  const now = new Date();
-  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
-  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
-  const buf = new Uint8Array((30 + fnLen) + dataLen + (46 + fnLen) + 22);
-  const view = new DataView(buf.buffer);
-  let o = 0;
-  view.setUint32(o, 0x04034b50, true); o += 4;
-  view.setUint16(o, 20, true); o += 2; view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
-  view.setUint16(o, dosTime, true); o += 2; view.setUint16(o, dosDate, true); o += 2;
-  view.setUint32(o, crc, true); o += 4;
-  view.setUint32(o, dataLen, true); o += 4; view.setUint32(o, dataLen, true); o += 4;
-  view.setUint16(o, fnLen, true); o += 2; view.setUint16(o, 0, true); o += 2;
-  fn.forEach((b, i) => { buf[o + i] = b; }); o += fnLen;
-  buf.set(data, o); o += dataLen;
-  const cdOffset = o;
-  view.setUint32(o, 0x02014b50, true); o += 4;
-  view.setUint16(o, 20, true); o += 2; view.setUint16(o, 20, true); o += 2;
-  view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
-  view.setUint16(o, dosTime, true); o += 2; view.setUint16(o, dosDate, true); o += 2;
-  view.setUint32(o, crc, true); o += 4;
-  view.setUint32(o, dataLen, true); o += 4; view.setUint32(o, dataLen, true); o += 4;
-  view.setUint16(o, fnLen, true); o += 2; view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
-  view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
-  view.setUint32(o, 0, true); o += 4; view.setUint32(o, 0, true); o += 4;
-  fn.forEach((b, i) => { buf[o + i] = b; }); o += fnLen;
-  view.setUint32(o, 0x06054b50, true); o += 4;
-  view.setUint16(o, 0, true); o += 2; view.setUint16(o, 0, true); o += 2;
-  view.setUint16(o, 1, true); o += 2; view.setUint16(o, 1, true); o += 2;
-  view.setUint32(o, 46 + fnLen, true); o += 4; view.setUint32(o, cdOffset, true); o += 4;
-  view.setUint16(o, 0, true);
-  return buf;
-}
-
-function createTestImage(): Blob {
-  const b64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=';
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: 'image/jpeg' });
-}
-
 const SPRING_GREEN = '#6db33f';
 
 function Spinner() {
@@ -193,298 +121,92 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     setSmokeLog([]);
     setSmokeSummary([]);
 
-    const log = (msg: string) => setSmokeLog(prev => [...prev, msg]);
-    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
+    const allLines: string[] = [];
+    const log = (msg: string) => { allLines.push(msg); setSmokeLog(prev => [...prev, msg]); };
+    let hasError = false;
 
-    log('═══════════════════════════════════════════════════════════');
-    log(`烟雾测试 1 启动… [${new Date().toLocaleString('zh-CN')}]`);
-    log('═══════════════════════════════════════════════════════════');
-    log('');
-
-    function formatJobError(err: unknown, maxLen = 8000): string {
-      const text = String(err ?? '任务失败或超时').replace(/\r\n/g, '\n').trim();
-      return text.length > maxLen ? `${text.slice(0, maxLen)}\n...(已截断)` : text;
-    }
-
-    async function postForm(url: string, fd: FormData): Promise<{ ok: true; data: any } | { ok: false; errMsg: string }> {
-      const r = await fetch(url, { method: 'POST', body: fd });
-      let body: any;
-      try { body = await r.json(); } catch { body = null; }
-      if (!r.ok) {
-        const detail = body?.detail ?? body?.error ?? (body ? JSON.stringify(body) : '');
-        return { ok: false, errMsg: `HTTP ${r.status}${detail ? ': ' + formatJobError(detail, 2000) : ''}` };
-      }
-      return { ok: true, data: body };
-    }
-
-    async function fetchJob(jobId: string): Promise<Job | null> {
-      try {
-        const r = await fetch(`${backendBaseUrl}/jobs`);
-        if (!r.ok) return null;
-        const data = await r.json();
-        const items: Job[] = Array.isArray(data) ? data : (data.jobs ?? []);
-        return items.find(j => j.id === jobId) ?? null;
-      } catch {
-        return null;
-      }
-    }
-
-    async function waitForJob(jobId: string, name: string, timeoutMs = 180000): Promise<Job | null> {
-      const started = Date.now();
-      while (Date.now() - started < timeoutMs) {
-        const job = await fetchJob(jobId);
-        if (job && (job.status === 'completed' || job.status === 'failed')) return job;
-        await new Promise(r => setTimeout(r, 1500));
-      }
-      log(`✗ ${name} 超时：任务 ${jobId.slice(0, 8)} 在 ${Math.round(timeoutMs / 1000)}s 内未完成`);
-      return null;
-    }
-
-    function expectedFacefusionFailure(err: string): boolean {
-      const text = err.toLowerCase();
-      return text.includes('no face') || text.includes('未检测到') || text.includes('无人脸') || text.includes('face');
-    }
-
-    const testWav = createTestWav();
-    let rvcVoiceId: string | null = null;
     try {
-      const r = await fetch(`${backendBaseUrl}/voices`);
-      if (r.ok) {
-        const data = await r.json();
-        const voices: Array<{ voice_id: string; engine?: string }> = Array.isArray(data) ? data : (data.voices ?? []);
-        rvcVoiceId = voices.find(v => v.engine === 'rvc')?.voice_id ?? null;
+      log('═══════════════════════════════════════════════════════════');
+      log(`烟雾测试 1 启动… [${new Date().toLocaleString('zh-CN')}]`);
+      log('═══════════════════════════════════════════════════════════');
+      log('');
+
+      const response = await fetch(`${backendBaseUrl}/smoketest/run`, {
+        method: 'POST',
+        headers: { 'Accept': 'text/event-stream' },
+      });
+
+      if (!response.ok) {
+        log(`✗ 请求失败: HTTP ${response.status}`);
+        const err = await response.text();
+        if (err) log(err);
+        hasError = true;
+        setSmokeSummary([{ name: '烟雾测试 1', status: 'failed' }]);
+        setSmokeRunning(false);
+        return;
       }
-    } catch { /**/ }
 
-    // 1. Fish Speech TTS
-    try {
-      const fd = new FormData();
-      fd.append('text', '烟雾测试文本合成');
-      fd.append('provider', 'fish_speech');
-
-      const res = await postForm(`${backendBaseUrl}/tasks/tts`, fd);
-      if (res.ok === false) { log(`✗ Fish Speech TTS 失败: ${res.errMsg}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
-      else if (res.data?.job_id) {
-        const jobId = String(res.data.job_id);
-        log(`… Fish Speech TTS 已排队 [${jobId.slice(0, 8)}]，等待结果`);
-        const job = await waitForJob(jobId, 'Fish Speech TTS');
-        if (job?.status === 'completed') results.push({ name: 'Fish Speech TTS', status: 'passed' });
-        else results.push({ name: 'Fish Speech TTS', status: 'failed' });
+      const reader = response.body?.getReader();
+      if (!reader) {
+        log('✗ 无法读取响应流');
+        setSmokeSummary([{ name: '烟雾测试 1', status: 'failed' }]);
+        setSmokeRunning(false);
+        return;
       }
-      else { log(`✗ Fish Speech TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
-    } catch (e: any) { log(`✗ Fish Speech TTS 异常: ${e.message}`); results.push({ name: 'Fish Speech TTS', status: 'failed' }); }
 
-    // 1b. GPT-SoVITS 创建音色（不依赖引擎，/voices/create 始终可用）
-    try {
-      const fd = new FormData();
-      fd.append('voice_name', 'smoke_test_gpt_sovits');
-      fd.append('engine', 'gpt_sovits');
-      fd.append('ref_text', '这是参考音频的文本');
-      // 创建虚拟 GPT / SoVITS 模型文件
-      const fakeModel = new Blob([new Uint8Array(1024)], { type: 'application/octet-stream' });
-      fd.append('gpt_model_file', fakeModel, 'test_gpt.ckpt');
-      fd.append('sovits_model_file', fakeModel, 'test_sovits.pth');
-      fd.append('reference_audio', testWav, 'ref.wav');
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      const res = await postForm(`${backendBaseUrl}/voices/create`, fd);
-      if (res.ok === false) {
-        log(`✗ GPT-SoVITS 创建音色失败: ${res.errMsg}`);
-        results.push({ name: 'GPT-SoVITS 创建音色', status: 'failed' });
-      } else {
-        const vid = res.data?.voice_id ?? '';
-        log(`✓ GPT-SoVITS 创建音色成功 [voice_id: ${vid}]`);
-        results.push({ name: 'GPT-SoVITS 创建音色', status: 'passed' });
-        // 清理
-        if (vid) {
-          try { await fetch(`${backendBaseUrl}/voices/${vid}`, { method: 'DELETE' }); log(`  🧹 已清理测试音色 ${vid}`); } catch { /**/ }
-        }
-      }
-    } catch (e: any) { log(`✗ GPT-SoVITS 创建音色异常: ${e.message}`); results.push({ name: 'GPT-SoVITS 创建音色', status: 'failed' }); }
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    // 1c. GPT-SoVITS TTS
-    try {
-      const fd = new FormData();
-      fd.append('text', '烟雾测试文本合成');
-      fd.append('provider', 'gpt_sovits');
-      fd.append('text_lang', 'zh');
-      fd.append('top_k', '15');
-      fd.append('temperature', '1.0');
-      fd.append('speed', '1.0');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines[lines.length - 1];
 
-      const res = await postForm(`${backendBaseUrl}/tasks/tts`, fd);
-      if (res.ok === false) { log(`✗ GPT-SoVITS TTS 失败: ${res.errMsg}`); results.push({ name: 'GPT-SoVITS TTS', status: 'failed' }); }
-      else if (res.data?.job_id) {
-        const jobId = String(res.data.job_id);
-        log(`… GPT-SoVITS TTS 已排队 [${jobId.slice(0, 8)}]，等待结果`);
-        const job = await waitForJob(jobId, 'GPT-SoVITS TTS');
-        if (job?.status === 'completed') results.push({ name: 'GPT-SoVITS TTS', status: 'passed' });
-        else {
-          log(`✗ GPT-SoVITS TTS 失败:\n${formatJobError(job?.error)}`);
-          results.push({ name: 'GPT-SoVITS TTS', status: 'failed' });
-        }
-      }
-      else { log(`✗ GPT-SoVITS TTS 响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'GPT-SoVITS TTS', status: 'failed' }); }
-    } catch (e: any) { log(`✗ GPT-SoVITS TTS 异常: ${e.message}`); results.push({ name: 'GPT-SoVITS TTS', status: 'failed' }); }
-
-    // 2. Faster Whisper STT
-    try {
-      const fd = new FormData();
-      fd.append('file', testWav, 'test.wav');
-      fd.append('provider', 'faster_whisper');
-      fd.append('model', 'base');
-
-      const res = await postForm(`${backendBaseUrl}/tasks/stt`, fd);
-      if (res.ok === false) {
-        log(`✗ Faster Whisper STT 失败: ${res.errMsg}`); results.push({ name: 'Faster Whisper STT', status: 'failed' });
-      } else if (res.data?.job_id) {
-        const jobId = String(res.data.job_id);
-        log(`… Faster Whisper STT 已排队 [${jobId.slice(0, 8)}]，等待结果`);
-        const job = await waitForJob(jobId, 'Faster Whisper STT');
-        if (job?.status === 'completed') {
-          log(`✓ Faster Whisper STT 完成，识别文本: "${job.result_text ?? '(空)'}"`);
-          results.push({ name: 'Faster Whisper STT', status: 'passed' });
-        } else {
-          log(`✗ Faster Whisper STT 失败:\n${formatJobError(job?.error)}`);
-          results.push({ name: 'Faster Whisper STT', status: 'failed' });
-        }
-      } else {
-        const d = res.data ?? {};
-        const status: 'completed' | 'failed' = (d.status === 'completed' || d.status === 'success') ? 'completed' : 'failed';
-        addInstantJobResult('stt', 'STT', 'faster_whisper', true, { status, result_text: d.text ?? d.result_text, error: d.error });
-        if (status === 'completed') { log(`✓ Faster Whisper STT 完成，识别文本: "${d.text ?? d.result_text ?? '(空)'}"`); results.push({ name: 'Faster Whisper STT', status: 'passed' }); }
-        else { log(`✗ Faster Whisper STT 失败: ${d.error ?? d.detail ?? JSON.stringify(d)}`); results.push({ name: 'Faster Whisper STT', status: 'failed' }); }
-      }
-    } catch (e: any) { log(`✗ Faster Whisper STT 异常: ${e.message}`); results.push({ name: 'Faster Whisper STT', status: 'failed' }); }
-
-    // 3. Seed-VC 换声（provider=seed_vc + reference_audio，无需专属模型）
-    try {
-      const fd = new FormData();
-      fd.append('file', testWav, 'test.wav');
-      fd.append('provider', 'seed_vc');
-      fd.append('mode', 'local');
-      fd.append('reference_audio', testWav, 'ref.wav');
-      if (downloadDir) fd.append('output_dir', downloadDir);
-
-      const res = await postForm(`${backendBaseUrl}/convert`, fd);
-      if (res.ok === false) { log(`✗ Seed-VC 换声失败: ${res.errMsg}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
-      else if (res.data?.job_id) {
-        const jobId = String(res.data.job_id);
-        log(`… Seed-VC 换声已排队 [${jobId.slice(0, 8)}]，等待结果`);
-        const job = await waitForJob(jobId, 'Seed-VC 换声');
-        if (job?.status === 'completed') results.push({ name: 'Seed-VC 换声', status: 'passed' });
-        else {
-          log(`✗ Seed-VC 换声失败:\n${formatJobError(job?.error)}`);
-          results.push({ name: 'Seed-VC 换声', status: 'failed' });
-        }
-      }
-      else { log(`✗ Seed-VC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
-    } catch (e: any) { log(`✗ Seed-VC 换声异常: ${e.message}`); results.push({ name: 'Seed-VC 换声', status: 'failed' }); }
-
-    // 4. RVC 换声
-    if (rvcVoiceId) {
-      try {
-        const fd = new FormData();
-        fd.append('file', testWav, 'test.wav');
-        fd.append('voice_id', rvcVoiceId);
-        fd.append('provider', 'local_rvc');
-        fd.append('mode', 'local');
-        if (downloadDir) fd.append('output_dir', downloadDir);
-
-        const res = await postForm(`${backendBaseUrl}/convert`, fd);
-        if (res.ok === false) { log(`✗ RVC 换声失败: ${res.errMsg}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
-        else if (res.data?.job_id) {
-          const jobId = String(res.data.job_id);
-          log(`… RVC 换声已排队 [${jobId.slice(0, 8)}]，等待结果`);
-          const job = await waitForJob(jobId, 'RVC 换声');
-          if (job?.status === 'completed') results.push({ name: 'RVC 换声', status: 'passed' });
-          else {
-            log(`✗ RVC 换声失败:\n${formatJobError(job?.error)}`);
-            results.push({ name: 'RVC 换声', status: 'failed' });
+        for (let i = 0; i < lines.length - 1; i++) {
+          const line = lines[i];
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.log) {
+                log(data.log);
+                if (data.log.includes('执行失败')) hasError = true;
+              }
+            } catch { /**/ }
           }
         }
-        else { log(`✗ RVC 换声响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
-      } catch (e: any) { log(`✗ RVC 换声异常: ${e.message}`); results.push({ name: 'RVC 换声', status: 'failed' }); }
-    } else {
-      log(`⚠ RVC 换声 — 未找到 rvc 引擎音色，跳过`);
-      results.push({ name: 'RVC 换声', status: 'skipped' });
+      }
+
+      if (buffer.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(buffer.slice(6));
+          if (data.log) {
+            log(data.log);
+            if (data.log.includes('执行失败')) hasError = true;
+          }
+        } catch { /**/ }
+      }
+
+    } catch (e: any) {
+      log(`✗ 执行异常: ${e.message}`);
+      hasError = true;
     }
 
-    // 5. RVC 训练
-    try {
-      const wavBytes = new Uint8Array(await testWav.arrayBuffer() as ArrayBuffer);
-      const zipBlob = new Blob([createTestZip('smoke_test.wav', wavBytes)], { type: 'application/zip' });
-      const fd = new FormData();
-      fd.append('dataset', zipBlob, 'smoke_dataset.zip');
-      fd.append('voice_id', 'smoke_test_voice');
-      fd.append('voice_name', '烟雾测试音色');
-      fd.append('voice_subdir', 'user');
-      fd.append('epochs', '1');
-      const res = await postForm(`${backendBaseUrl}/train`, fd);
-      if (res.ok === false) { log(`✗ RVC 训练失败: ${res.errMsg}`); results.push({ name: 'RVC 训练', status: 'failed' }); }
-      else if (res.data?.job_id) {
-        const jobId = String(res.data.job_id);
-        log(`… RVC 训练音色已排队 [${jobId.slice(0, 8)}]，等待结果`);
-        const job = await waitForJob(jobId, 'RVC 训练音色', 300000);
-        if (job?.status === 'completed') results.push({ name: 'RVC 训练音色', status: 'passed' });
-        else {
-          log(`✗ RVC 训练音色失败:\n${formatJobError(job?.error)}`);
-          results.push({ name: 'RVC 训练音色', status: 'failed' });
-        }
-      }
-      else { log(`✗ RVC 训练音色响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
-    } catch (e: any) { log(`✗ RVC 训练音色异常: ${e.message}`); results.push({ name: 'RVC 训练音色', status: 'failed' }); }
+    // 从日志解析 ✅/❌ 结果
+    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
+    for (const line of allLines) {
+      const passMatch = line.match(/[✅✓]\s*(?:通过\s*—?\s*)?(.+)/);
+      const failMatch = line.match(/[❌✗]\s*(?:失败\s*—?\s*)?(.+)/);
+      if (passMatch) results.push({ name: passMatch[1].trim().split('：')[0].split(' [')[0], status: 'passed' });
+      else if (failMatch && !line.includes('总计')) results.push({ name: failMatch[1].trim().split('：')[0].split(' [')[0], status: 'failed' });
+    }
 
-    // 6. FaceFusion（合成图无人脸，任务预期失败，但验证接口/引擎可达）
-    try {
-      const imgBlob = createTestImage();
-      const fd = new FormData();
-      fd.append('source_image', imgBlob, 'source.jpg');
-      fd.append('reference_image', imgBlob, 'reference.jpg');
-      fd.append('provider', 'facefusion');
+    if (results.length === 0) {
+      results.push({ name: '烟雾测试 1', status: hasError ? 'failed' : 'passed' });
+    }
 
-      const res = await postForm(`${backendBaseUrl}/tasks/image-i2i`, fd);
-      if (res.ok === false) { log(`✗ FaceFusion 换脸接口失败: ${res.errMsg}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
-      else if (res.data?.job_id) {
-        const jobId = String(res.data.job_id);
-        log(`… FaceFusion 换脸已排队 [${jobId.slice(0, 8)}]，等待结果`);
-        const job = await waitForJob(jobId, 'FaceFusion 换脸');
-        if (job?.status === 'completed') {
-          results.push({ name: 'FaceFusion 换脸', status: 'passed' });
-        } else if (job?.error && expectedFacefusionFailure(job.error)) {
-          log(`⚠ FaceFusion 换脸按预期失败：\n${formatJobError(job.error)}`);
-          results.push({ name: 'FaceFusion 换脸', status: 'passed' });
-        } else {
-          log(`✗ FaceFusion 换脸失败:\n${formatJobError(job?.error)}`);
-          results.push({ name: 'FaceFusion 换脸', status: 'failed' });
-        }
-      }
-      else { log(`✗ FaceFusion 换脸响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
-    } catch (e: any) { log(`✗ FaceFusion 换脸异常: ${e.message}`); results.push({ name: 'FaceFusion 换脸', status: 'failed' }); }
-
-    // 7. FFmpeg 音频转换（同步直接返回）
-    try {
-      const fd = new FormData();
-      fd.append('file', testWav, 'test.wav');
-      fd.append('action', 'convert');
-      fd.append('output_format', 'mp3');
-
-      const res = await postForm(`${backendBaseUrl}/tasks/media-convert`, fd);
-      if (res.ok === false) {
-        log(`✗ FFmpeg 音视频转换失败: ${res.errMsg}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' });
-      } else if (res.data?.job_id) {
-        log(`✓ FFmpeg 音视频转换已排队 [${String(res.data.job_id).slice(0, 8)}]`); results.push({ name: 'FFmpeg 音视频转换', status: 'passed' });
-      } else if (res.data?.status === 'success' || res.data?.result_url) {
-        addInstantJobResult('media_convert', 'FFmpeg 音视频转换', 'ffmpeg', true, { status: 'completed', result_url: res.data.result_url });
-        log(`✓ FFmpeg 音视频转换完成 → ${res.data.result_url}`); results.push({ name: 'FFmpeg 音视频转换', status: 'passed' });
-      } else {
-        log(`✗ FFmpeg 音视频转换响应异常: ${JSON.stringify(res.data)}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' });
-      }
-    } catch (e: any) { log(`✗ FFmpeg 音视频转换异常: ${e.message}`); results.push({ name: 'FFmpeg 音视频转换', status: 'failed' }); }
-
-    const passed = results.filter(r => r.status === 'passed').length;
-    const failed = results.filter(r => r.status === 'failed').length;
-    const skipped = results.filter(r => r.status === 'skipped').length;
-    log(`─── 全部测试完成  ✓ ${passed} 通过  ✗ ${failed} 失败${skipped ? `  ⚠ ${skipped} 跳过` : ''}`);
     setSmokeSummary(results);
     onFetchJobs();
     setSmokeRunning(false);

@@ -100,7 +100,7 @@ async def update_settings(
 
 @router.post("/smoketest/run")
 async def run_smoketest():
-    """运行基础功能烟雾测试（smoke_test.py）。"""
+    """运行基础功能烟雾测试（smoke_test.py），SSE 流式输出。"""
     import sys
     import os
 
@@ -109,7 +109,6 @@ async def run_smoketest():
     if not test_file.exists():
         return {"ok": False, "error": f"测试文件不存在：{test_file}"}
 
-    # 嵌入式 Python（RUNTIME_ROOT 来自 config.py，已正确处理 dev/prod 路径）
     from utils.engine import get_embedded_python as _get_py
     try:
         py_cmd = _get_py()
@@ -117,10 +116,8 @@ async def run_smoketest():
         py_cmd = sys.executable
 
     def generate():
-        """流式输出测试结果。"""
         try:
             env = os.environ.copy()
-            # 确保 backend/ 和 runtime/ml/ 在 PYTHONPATH 中
             paths_to_add = [str(APP_ROOT), str(RUNTIME_ROOT / "ml")]
             existing = env.get("PYTHONPATH", "")
             for p in paths_to_add:
@@ -152,9 +149,9 @@ async def run_smoketest():
                     yield f"data: {json.dumps({'log': f'[ERROR] {line.rstrip()}'})}\n\n"
 
             if returncode == 0:
-                yield f"data: {json.dumps({'log': '─── 烟雾测试执行完成 ✅'})}\n\n"
+                yield f"data: {json.dumps({'log': '─── 烟雾测试 1 执行完成 ✅'})}\n\n"
             else:
-                yield f"data: {json.dumps({'log': f'─── 烟雾测试执行失败（退出码：{returncode}）'})}\n\n"
+                yield f"data: {json.dumps({'log': f'─── 烟雾测试 1 执行失败（退出码：{returncode}）'})}\n\n"
 
         except Exception as e:
             logger.error(f"运行 smoke_test 失败: {e}", exc_info=True)

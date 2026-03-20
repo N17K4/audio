@@ -586,6 +586,13 @@ def main():
     # 清理 transitive dependency 中与嵌入式 Python 冲突的包
     _cleanup_protected_packages(args.target, args.json_progress)
 
+    # macOS: 移除 quarantine 属性，防止 .so 文件被系统策略拒绝加载
+    if platform.system() == "Darwin" and args.target:
+        subprocess.run(
+            ["xattr", "-dr", "com.apple.quarantine", args.target],
+            capture_output=True, timeout=60,
+        )
+
     if ok:
         _emit({"type": "log", "message": "✓ 运行库安装完成"}, args.json_progress)
         return 0
