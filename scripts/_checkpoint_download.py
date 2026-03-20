@@ -1057,49 +1057,6 @@ def main() -> int:
         save_sha256_to_manifest(manifest, manifest_path, sha256_updates)
         print()
 
-    # 强制升级 huggingface_hub 到 >=1.3.0，覆盖 gradio 等包引入的旧版本约束。
-    # transformers / diffusers / seed_vc / wan / flux / got_ocr 等引擎均需要 >=1.3.0。
-    # 必须在所有引擎 pip 安装完成后执行，确保最终版本满足要求。
-    if not args.check_only:
-        py = sys.executable
-        print("── 修复 huggingface_hub 版本（强制升级至 >=1.3.0）──")
-        # 先检查当前版本是否已满足要求
-        ver_check = subprocess.run(
-            [py, "-c",
-             "import huggingface_hub; v=huggingface_hub.__version__; "
-             "parts=[int(x) for x in v.split('.')[:2]]; "
-             "print(v); exit(0 if (parts[0]>1 or (parts[0]==1 and parts[1]>=3)) else 1)"],
-            capture_output=True, text=True,
-        )
-        if ver_check.returncode == 0:
-            print(f"  ✓ huggingface_hub=={ver_check.stdout.strip()}（已满足 >=1.3.0）")
-        else:
-            # 需要升级：先尝试普通 upgrade，失败后再 force-reinstall
-            r = subprocess.run(
-                [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
-                 "--upgrade", "--quiet"],
-                capture_output=True, text=True, timeout=120,
-            )
-            if r.returncode != 0:
-                # Windows 常因文件锁定失败，用 --force-reinstall --target 到临时目录再复制
-                r = subprocess.run(
-                    [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
-                     "--force-reinstall", "--quiet"],
-                    capture_output=True, text=True, timeout=120,
-                )
-            if r.returncode == 0:
-                ver2 = subprocess.run(
-                    [py, "-c",
-                     "import huggingface_hub; print(huggingface_hub.__version__)"],
-                    capture_output=True, text=True,
-                )
-                print(f"  ✓ huggingface_hub=={ver2.stdout.strip()}")
-            else:
-                # 升级失败不阻塞整体流程，仅警告
-                print(f"  ⚠ 升级失败（不影响安装流程）: {r.stderr.strip()[:200]}")
-                print(f"  ⚠ 如遇到 huggingface_hub 版本问题，请关闭应用后手动运行此步骤")
-                print()
-
     if all_ready:
         print("✓ 所有必填 checkpoint 文件就绪")
         emit("all_done", ok=True)
