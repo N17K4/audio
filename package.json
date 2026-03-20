@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "electron/main.js",
   "scripts": {
-    "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
+    "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; pkill -f 'uvicorn main:app' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
     "setup": "bash scripts/setup.sh",
     "runtime": "bash scripts/runtime.sh",

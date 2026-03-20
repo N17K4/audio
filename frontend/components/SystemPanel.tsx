@@ -717,14 +717,22 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                   try {
                     const r = await fetch(`${backendBaseUrl}/system/reset`, { method: 'POST' });
                     const res = await r.json();
-                    setRedownloadMsg(res?.ok
-                      ? { ok: true, text: '已清除，请通过「补充安装」按钮重新下载' }
-                      : { ok: false, text: `操作失败：${res?.error ?? '未知错误'}` });
+                    if (!res?.ok) {
+                      setRedownloadMsg({ ok: false, text: `操作失败：${res?.error ?? '未知错误'}` });
+                      setRedownloading(false); setRedownloadStep(0);
+                      return;
+                    }
                   } catch (e: any) {
                     setRedownloadMsg({ ok: false, text: `操作失败：${e.message}` });
+                    setRedownloading(false); setRedownloadStep(0);
+                    return;
                   }
                   setRedownloading(false); setRedownloadStep(0);
+                  setRedownloadMsg({ ok: true, text: '已清除，正在重新下载…' });
                   await doRefreshDisk();
+                  // 自动触发 ml_base 和 checkpoints_base 并行安装
+                  doSupplementInstall('ml_base');
+                  doSupplementInstall('checkpoints_base');
                 }}>
                 {redownloading ? '处理中…' : '确认执行'}
               </button>

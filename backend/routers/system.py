@@ -334,7 +334,20 @@ async def install_stage(stage: str):
     pip_mirror = settings.get("pip_mirror", "").strip()
     hf_endpoint = settings.get("hf_endpoint", "").strip().rstrip("/")
 
+    # ログファイル：logs/download-{stage}.log（毎回クリアして新規作成）
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    log_file_path = LOGS_DIR / f"download-{stage}.log"
+
     def generate():
+        # 每次下载前清空旧日志
+        log_fp = open(log_file_path, "w", encoding="utf-8")
+
+        def _emit(msg: str):
+            """同时写入 SSE 和日志文件。"""
+            log_fp.write(msg + "\n")
+            log_fp.flush()
+            return f"data: {json.dumps({'log': msg})}\n\n"
+
         env = os.environ.copy()
         env["PYTHONPATH"] = str(APP_ROOT)
         env["PYTHONUNBUFFERED"] = "1"
@@ -349,10 +362,10 @@ async def install_stage(stage: str):
         for script_rel in scripts:
             script_path = APP_ROOT / script_rel
             if not script_path.exists():
-                yield f"data: {json.dumps({'log': f'✗ 脚本不存在：{script_rel}'})}\n\n"
+                yield _emit(f"✗ 脚本不存在：{script_rel}")
                 continue
 
-            yield f"data: {json.dumps({'log': f'▶ 运行脚本: {script_rel}'})}\n\n"
+            yield _emit(f"▶ 运行脚本: {script_rel}")
 
             # 构建命令行参数：传递镜像源（各脚本支持的参数不同）
             extra_args: list[str] = []
@@ -376,23 +389,24 @@ async def install_stage(stage: str):
 
                 for line in iter(proc.stdout.readline, ""):
                     if line:
-                        yield f"data: {json.dumps({'log': line.rstrip()})}\n\n"
+                        yield _emit(line.rstrip())
 
                 returncode = proc.wait()
 
                 for line in iter(proc.stderr.readline, ""):
                     if line:
-                        yield f"data: {json.dumps({'log': f'[STDERR] {line.rstrip()}'})}\n\n"
+                        yield _emit(f"[STDERR] {line.rstrip()}")
 
                 if returncode == 0:
-                    yield f"data: {json.dumps({'log': f'✓ {script_rel} 执行完成'})}\n\n"
+                    yield _emit(f"✓ {script_rel} 执行完成")
                 else:
-                    yield f"data: {json.dumps({'log': f'✗ {script_rel} 失败（退出码：{returncode}）'})}\n\n"
+                    yield _emit(f"✗ {script_rel} 失败（退出码：{returncode}）")
 
             except Exception as e:
-                yield f"data: {json.dumps({'log': f'✗ 异常：{e}'})}\n\n"
+                yield _emit(f"✗ 异常：{e}")
 
         yield f"data: {json.dumps({'done': True})}\n\n"
+        log_fp.close()
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

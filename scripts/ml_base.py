@@ -76,6 +76,9 @@ def _dedup_packages(packages: list[str]) -> list[str]:
     seen: dict[str, str] = {}
     for pkg in packages:
         name = re.split(r"[>=<!\[;\s]", pkg)[0].lower().replace("-", "_")
+        # 嵌入式 Python 自带的包不需要装到 --target，跳过
+        if name in _EMBEDDED_PROTECTED_PACKAGES:
+            continue
         existing = seen.get(name)
         if existing is None:
             seen[name] = pkg
@@ -209,6 +212,7 @@ _EMBEDDED_PROTECTED_PACKAGES = {
     "anyio", "sniffio",
     "typing_extensions",
     "annotated_types",
+    "numpy",
 }
 
 
