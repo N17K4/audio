@@ -6,8 +6,7 @@ const { spawn } = require('child_process');
 const { PROJECT_ROOT, LOGS_DIR, CACHE_DIR, getCheckpointsDir, getUserPackagesDir, getResRoot } = require('./paths');
 const { electronLog, frontendLog } = require('./logger');
 const state = require('./state');
-const { getAvailablePort, waitBackendReady, waitFrontendReady, fetchRuntimeInfo } = require('./utils');
-const { openHealthCheckWindow, openSetupGuideWindow } = require('./windows');
+const { getAvailablePort, waitBackendReady, waitFrontendReady } = require('./utils');
 const { registerSetupIpc } = require('./ipc-setup');
 const { registerAppIpc } = require('./ipc-app');
 
@@ -254,22 +253,6 @@ async function createWindow() {
     await win.loadFile(path.join(PROJECT_ROOT, 'frontend', 'out', 'index.html'));
   }
 
-  // 生産モード：backend 就緒後にモデル検出 → 不足時は引導ウィンドウ
-  if (!isDev) {
-    waitBackendReady(state.backendBaseUrl, 90000)
-      .then(() => fetchRuntimeInfo(state.backendBaseUrl))
-      .then((runtimeInfo) => {
-        const missingEngines = Object.entries(runtimeInfo.engines || {})
-          .filter(([, v]) => !v.ready)
-          .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
-        if (missingEngines.length > 0) {
-          openSetupGuideWindow(missingEngines);
-        }
-      })
-      .catch((err) => {
-        console.error('[Setup] 检测模型状态失败:', err.message);
-      });
-  }
 }
 
 // ─── 残りの IPC ハンドラ ─────────────────────────────────────────────────────

@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import traceback
 import uuid
 from pathlib import Path
 from typing import Dict
@@ -93,7 +92,7 @@ async def _run_vc_job(job_id: str, fn, *fn_args) -> None:
             job["error"] = "已中断"
             raise
         except Exception as exc:
-            logger.error("VC job %s 失败: %s", job_id, traceback.format_exc())
+            logger.error("VC job %s 失败: %s", job_id, str(exc)[:500])
             job["status"] = "failed"
             job["error"] = getattr(exc, "detail", None) or str(exc) or repr(exc)
         finally:
@@ -141,7 +140,7 @@ async def _run_tts_job(job_id: str, fn, *fn_args) -> None:
             job["error"] = "已中断"
             raise
         except Exception as exc:
-            logger.error("TTS job %s 失败: %s", job_id, traceback.format_exc())
+            logger.error("TTS job %s 失败: %s", job_id, str(exc)[:500])
             job["status"] = "failed"
             job["error"] = getattr(exc, "detail", None) or str(exc) or repr(exc)
         finally:

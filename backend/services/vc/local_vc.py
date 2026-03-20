@@ -228,10 +228,10 @@ def run_seed_vc_cmd(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Seed-VC command failed: {exc}") from exc
     if completed.returncode != 0:
-        stdout = (completed.stdout or "").strip()
-        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()[-3000:]
+        stderr = (completed.stderr or "").strip()[-3000:]
         log_ai_error("seed_vc", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
-        raise HTTPException(status_code=500, detail=f"Seed-VC failed (code={completed.returncode}): {stderr}")
+        raise HTTPException(status_code=500, detail=f"Seed-VC failed (code={completed.returncode}): {stderr[-500:]}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
         logger.error("[Seed-VC] 完成但输出文件缺失: %s", output_path)
         raise HTTPException(status_code=500, detail="Seed-VC finished but output file is missing/empty")

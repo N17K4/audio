@@ -91,7 +91,7 @@ ipcMain.handle('setup:startDownload', (_event, opts) => {
 
     async function runStageScripts() {
       for (const info of scripts) {
-        const scriptPath = path.join(resRoot, info.script);
+        const scriptPath = path.join(PROJECT_ROOT, info.script);
         const pyPath = info.useSystemPython ? systemPyPath : embeddedPyPath;
 
         const isSetupScript = info.script.includes('runtime.py');
@@ -321,7 +321,7 @@ ipcMain.handle('setup:startAutoDownload', (_event, opts) => {
   sendProgress({ type: 'log', message: `详细日志：${setupLog.path}` });
 
   if (mode === 'ml_only') {
-    const scriptPath = path.join(resRoot, 'scripts', 'ml_base.py');
+    const scriptPath = path.join(PROJECT_ROOT, 'scripts', 'ml_base.py');
     const args = ['--target', userPkgDir, '--json-progress'];
     if (pypiMirror) args.push('--pypi-mirror', pypiMirror);
 
@@ -337,7 +337,7 @@ ipcMain.handle('setup:startAutoDownload', (_event, opts) => {
       }
     });
   } else {
-    const scriptPath = path.join(resRoot, 'scripts', 'checkpoints_base.py');
+    const scriptPath = path.join(PROJECT_ROOT, 'scripts', 'checkpoints_base.py');
     const args = ['--json-progress'];
     if (hfEndpoint) args.push('--hf-endpoint', hfEndpoint);
     if (pypiMirror) args.push('--pypi-mirror', pypiMirror);

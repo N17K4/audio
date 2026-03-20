@@ -287,7 +287,7 @@ class TestBasicFeatures:
             files = {"file": ("test.wav", BytesIO(wav_data), "audio/wav")}
             data = {
                 "provider": "faster_whisper",
-                "model": "base",
+                "model": "large-v3",
             }
 
             print(f"  📤 POST /tasks/stt")

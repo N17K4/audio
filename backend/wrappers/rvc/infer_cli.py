@@ -148,12 +148,8 @@ def main() -> int:
 
     cmd_template = load_cmd_template()
     if not cmd_template:
-        print(
-            "[infer_cli] no real RVC engine command configured.\n"
-            "Set env RVC_ENGINE_CMD_TEMPLATE or edit backend/wrappers/rvc/engine.json (cmd_template).",
-            file=sys.stderr,
-        )
-        return 3
+        # cmd_template 未配置时，直接使用 rvc-python API 推理
+        return _run_via_rvc_python(input_path, output_path, model_path, index_path)
 
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
 
@@ -174,9 +170,9 @@ def main() -> int:
     if completed.returncode != 0:
         print(f"[infer_cli] engine failed with code {completed.returncode}", file=sys.stderr)
         if completed.stdout:
-            print(f"[infer_cli][stdout]\n{completed.stdout}", file=sys.stderr)
+            print(f"[infer_cli][stdout]\n{completed.stdout[-3000:]}", file=sys.stderr)
         if completed.stderr:
-            print(f"[infer_cli][stderr]\n{completed.stderr}", file=sys.stderr)
+            print(f"[infer_cli][stderr]\n{completed.stderr[-3000:]}", file=sys.stderr)
         return completed.returncode
 
     if not output_path.exists() or output_path.stat().st_size <= 0:
@@ -184,6 +180,36 @@ def main() -> int:
         return 4
 
     print(f"[infer_cli] ok -> {output_path}")
+    return 0
+
+
+def _run_via_rvc_python(input_path: Path, output_path: Path, model_path: Path, index_path: Path) -> int:
+    """cmd_template 未配置时，直接调用 rvc-python API 进行推理。"""
+    try:
+        from rvc_python.infer import RVCInference
+    except ImportError:
+        print(
+            "[infer_cli] rvc-python 未安装且无 cmd_template。\n"
+            "请运行 pnpm run setup 安装 rvc-python，或配置 engine.json cmd_template。",
+            file=sys.stderr,
+        )
+        return 3
+
+    try:
+        rvc = RVCInference(device="cpu:0")
+        rvc.load_model(str(model_path))
+        if index_path and index_path.exists():
+            rvc.set_params(index_path=str(index_path))
+        rvc.infer_file(str(input_path), str(output_path))
+    except Exception as exc:
+        print(f"[infer_cli] rvc-python 推理失败: {exc}", file=sys.stderr)
+        return 1
+
+    if not output_path.exists() or output_path.stat().st_size <= 0:
+        print("[infer_cli] rvc-python 完成但输出文件缺失", file=sys.stderr)
+        return 4
+
+    print(f"[infer_cli] ok (rvc-python) -> {output_path}")
     return 0
 
 

@@ -94,6 +94,7 @@ declare global {
       reinstallStage: (stage: string) => Promise<{ ok: boolean; exitCode?: number; error?: string }>;
       clearStage: (stage: string) => Promise<{ ok: boolean; error?: string }>;
       clearStageAndOpenSetup: (stage: string) => Promise<{ ok: boolean; error?: string }>;
+      supplementInstall: (stage: string) => Promise<{ ok: boolean; error?: string }>;
     };
   }
 }

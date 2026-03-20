@@ -182,8 +182,37 @@ def preprocess_audio(audio_files: list[Path], out_dir: Path, target_sr: int) -> 
     return processed
 
 
+def _patch_fairseq_dataclass():
+    """Python 3.12 以降、fairseq 0.12.2 の dataclass mutable default エラーを回避するパッチ。"""
+    import sys as _sys
+    if _sys.version_info < (3, 12):
+        return
+    import dataclasses
+    _original_field = dataclasses.field
+    _original_dc = dataclasses.dataclass
+
+    def _patched_dataclass(cls=None, **kwargs):
+        try:
+            return _original_dc(cls, **kwargs)
+        except ValueError as e:
+            if "mutable default" not in str(e):
+                raise
+            # mutable default を default_factory に自動変換
+            new_fields = {}
+            for name, annotation in getattr(cls, '__annotations__', {}).items():
+                val = getattr(cls, name, dataclasses.MISSING)
+                if val is not dataclasses.MISSING and not isinstance(val, (int, float, str, bool, type(None), dataclasses.Field)):
+                    default_val = val
+                    new_fields[name] = dataclasses.field(default_factory=lambda v=default_val: v)
+                    setattr(cls, name, new_fields[name])
+            return _original_dc(cls, **kwargs)
+
+    dataclasses.dataclass = _patched_dataclass
+
+
 def load_contentvec(hubert_path: Path, device: str):
     """使用 fairseq 加载 ContentVec/HuBERT 模型。"""
+    _patch_fairseq_dataclass()
     try:
         import fairseq
     except ImportError:

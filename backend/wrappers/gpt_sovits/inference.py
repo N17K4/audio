@@ -98,9 +98,13 @@ def main() -> int:
         return 3
 
     # 将 engine 目录加入 sys.path，使 GPT-SoVITS 模块可被 import
+    # GPT_SoVITS/ 子目录也需加入，AR 等模块在其中以顶层包形式被引用
     engine_dir_str = str(engine_dir)
+    gpt_sovits_subdir = str(engine_dir / "GPT_SoVITS")
     if engine_dir_str not in sys.path:
         sys.path.insert(0, engine_dir_str)
+    if os.path.isdir(gpt_sovits_subdir) and gpt_sovits_subdir not in sys.path:
+        sys.path.insert(0, gpt_sovits_subdir)
 
     # GPT-SoVITS 内部使用 os.getcwd() 的相对路径定位 pretrained_models
     original_cwd = os.getcwd()

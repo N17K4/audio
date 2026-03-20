@@ -133,21 +133,10 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     setDiskLoading(false);
   }
 
-  // ── 重新安装确认弹窗 ──────────────────────────────────────────────────────
-  const [reinstallConfirmStage, setReinstallConfirmStage] = useState<string | null>(null);
-
-  function confirmReinstallStage(stage: string) {
-    setReinstallConfirmStage(stage);
-  }
-
-  async function doConfirmedReinstall() {
-    const stage = reinstallConfirmStage;
-    if (!stage) return;
-    setReinstallConfirmStage(null);
-
-    // 清除该阶段数据后打开引导页（用户可在引导页选择镜像源）
+  // ── 补充安装 ────────────────────────────────────────────────────────────────
+  async function doSupplementInstall(stage: string) {
     setStageStatus(s => ({ ...s, [stage]: 'reinstalling' }));
-    const res = await window.electronAPI?.clearStageAndOpenSetup?.(stage);
+    const res = await window.electronAPI?.supplementInstall?.(stage);
     if (res && !res.ok) {
       setInstallLog(prev => [...prev, `✗ 操作失败：${res.error ?? '未知错误'}`]);
     }
@@ -353,8 +342,8 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                     className="shrink-0 rounded border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1"
                     style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
                     disabled={isBusy || anyBusy}
-                    onClick={() => confirmReinstallStage(stage)}>
-                    {isBusy && stageStatus[stage] === 'reinstalling' ? <><Spinner />重新安装中</> : '重新安装'}
+                    onClick={() => doSupplementInstall(stage)}>
+                    {isBusy && stageStatus[stage] === 'reinstalling' ? <><Spinner />安装中</> : '补充安装'}
                   </button>
                 )}
               </div>
@@ -548,40 +537,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   // ── render ────────────────────────────────────────────────────────────────────
   return (
     <div className={isEmbedded ? '' : 'flex flex-col h-full overflow-hidden'}>
-
-      {/* 确认弹窗 */}
-      {/* 重新安装确认弹窗 */}
-      {reinstallConfirmStage && (() => {
-        const meta: Record<string, string> = {
-          setup: '运行环境', ml_base: 'ML 基础依赖', ml_extra: 'ML 扩展依赖',
-          checkpoints_base: '基础模型权重', checkpoints_extra: '扩展模型权重',
-        };
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-[400px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                  确认重新安装「{meta[reinstallConfirmStage] ?? reinstallConfirmStage}」？
-                </h3>
-              </div>
-              <div className="px-6 py-4 space-y-3">
-                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  将清除该阶段的已有数据，并打开下载引导窗口。你可以在引导页中选择 PyPI / HuggingFace 镜像源后再开始下载。
-                </p>
-              </div>
-              <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
-                <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
-                  onClick={() => setReinstallConfirmStage(null)}>取消</button>
-                <button className="rounded px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
-                  style={{ backgroundColor: SPRING_GREEN }}
-                  onClick={doConfirmedReinstall}>
-                  确认继续
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {showClearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

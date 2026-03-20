@@ -70,9 +70,19 @@ async def run_facefusion_i2i(
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
         stdout = (completed.stdout or "").strip()
-        logger.error("[facefusion] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, stdout, stderr)
-        log_ai_error("facefusion", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=stdout, stderr=stderr)
-        tail = (stderr or stdout)[-3000:]
+        # 过滤下载进度条等冗余行，只保留有意义的日志
+        def _filter_noise(text: str, max_len: int = 3000) -> str:
+            lines = text.splitlines()
+            filtered = [
+                ln for ln in lines
+                if not any(kw in ln for kw in ("%|", "B/s", "Downloading", "━", "██", "it/s"))
+            ]
+            return "\n".join(filtered)[-max_len:]
+        filtered_stderr = _filter_noise(stderr)
+        filtered_stdout = _filter_noise(stdout)
+        logger.error("[facefusion] 失败 code=%s\nstdout: %s\nstderr: %s", completed.returncode, filtered_stdout, filtered_stderr)
+        log_ai_error("facefusion", RuntimeError("non-zero exit"), returncode=completed.returncode, stdout=filtered_stdout, stderr=filtered_stderr)
+        tail = (filtered_stderr or filtered_stdout)[-3000:]
         raise HTTPException(status_code=500, detail=f"FaceFusion 失败 (code={completed.returncode}): {tail}")
 
     if not Path(output_path).exists():
