@@ -167,8 +167,8 @@ export default function RagPanel({
           <span className="text-[11px] font-normal text-slate-400 ml-2">RAG</span>
         </h3>
 
-        <TabBar
-          tabs={[{ value: 'select' as const, label: '选择知识库' }, { value: 'create' as const, label: '创建知识库' }]}
+        <TabBar<KnowledgeBaseTab>
+          tabs={[{ value: 'select', label: '选择知识库' }, { value: 'create', label: '创建知识库' }]}
           value={kbTab}
           onChange={setKbTab}
         />
