@@ -783,44 +783,10 @@ def setup_facefusion_engine(
 
 
 def prefetch_rvc_base_models(project_root: Path, resources_root: Path) -> None:
-    """触发 rvc-python 的 base_model 预下载（hubert_base.pt / rmvpe.pt / rmvpe.onnx）。"""
-    py = get_embedded_python(resources_root) or get_embedded_python(project_root)
-    if not py:
-        print("  [rvc] 嵌入式 Python 未找到，跳过 RVC base model 预下载")
-        return
-
-    runtime_env = dict(os.environ)
-
-    # 检查 rvc-python 是否已安装（setup-engines.py 负责安装）
-    check = subprocess.run([py, "-c", "from rvc_python.infer import RVCInference"],
-                           capture_output=True, env=runtime_env)
-    if check.returncode != 0:
-        print("  [rvc] rvc-python 未安装，跳过 base model 预下载（请先运行 pnpm run setup）")
-        return
-
-    rvc_pkg = subprocess.run(
-        [py, "-c", "import rvc_python, os; print(os.path.dirname(rvc_python.__file__))"],
-        capture_output=True, text=True, env=runtime_env,
-    )
-    if rvc_pkg.returncode != 0:
-        return
-
-    base_model_dir = Path(rvc_pkg.stdout.strip()) / "base_model"
-    models_needed = ["hubert_base.pt", "rmvpe.pt", "rmvpe.onnx"]
-    missing = [f for f in models_needed if not (base_model_dir / f).exists()]
-    if not missing:
-        print("  ✓ RVC base_model 文件已就绪")
-        return
-
-    print(f"  [rvc] 预下载 {', '.join(missing)} ...")
-    r = subprocess.run(
-        [py, "-c", "from rvc_python.infer import RVCInference; RVCInference()"],
-        capture_output=True, text=True, timeout=600, env=runtime_env,
-    )
-    if r.returncode == 0:
-        print("    ✓ RVC 基础模型已就绪")
-    else:
-        print(f"    ✗ 预下载失败（可能需要联网）: {r.stderr.strip()[:200]}")
+    """RVC checkpoint 文件已在 manifest 中完整声明（hubert_base.pt、f0G40k.pth），无需额外 prefetch。"""
+    # 本函数保留但不执行任何操作。RVC 基础模型已通过 manifest checkpoint_files 下载。
+    # 若来自 setup 或 ml 阶段的 rvc-python 内蔵缓存，会在首次 rvc 推理时自动初始化。
+    pass
 
 
 def prefetch_faster_whisper_model(

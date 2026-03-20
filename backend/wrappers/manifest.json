@@ -511,7 +511,8 @@
           "filename": "yoloface_8n.onnx",
           "size_mb": 5,
           "required": true,
-          "_note": "人脸检测器（YOLOFace 8n）— face_swapper 默认检测后端"
+          "_note": "人脸检测器（YOLOFace 8n）— face_swapper 默认检测后端",
+          "sha256": "821cdbb1e65fbbabdde7dd0933f754797a343e56fd962729c61ffcefcd135929"
         },
         {
           "path": "fan_68_5.onnx",
@@ -519,7 +520,8 @@
           "filename": "fan_68_5.onnx",
           "size_mb": 1,
           "required": true,
-          "_note": "人脸关键点检测器（FAN 68-5）"
+          "_note": "人脸关键点检测器（FAN 68-5）",
+          "sha256": "ea05f7d9d014ae1d9cdc6e9c72643d8f00d198b5db3fdd384148ddff499a613e"
         },
         {
           "path": "fairface.onnx",
@@ -527,7 +529,8 @@
           "filename": "fairface.onnx",
           "size_mb": 81,
           "required": true,
-          "_note": "人脸属性分类器（FairFace）— 年龄/性别判定"
+          "_note": "人脸属性分类器（FairFace）— 年龄/性别判定",
+          "sha256": "b176b1e4b0739496e7943af7ba4ff306271fecf837bca5ec5d9a48201959db37"
         },
         {
           "path": "xseg_1.onnx",
@@ -535,7 +538,8 @@
           "filename": "xseg_1.onnx",
           "size_mb": 67,
           "required": true,
-          "_note": "人脸遮挡分割（XSeg）"
+          "_note": "人脸遮挡分割（XSeg）",
+          "sha256": "c4d1498b8a03b5fe2a3a5d2ef2a0402ab03bd51edaf5b2d8d5fb764702a97dd3"
         },
         {
           "path": "bisenet_resnet_34.onnx",
@@ -543,7 +547,8 @@
           "filename": "bisenet_resnet_34.onnx",
           "size_mb": 89,
           "required": true,
-          "_note": "人脸语义分割（BiSeNet ResNet-34）"
+          "_note": "人脸语义分割（BiSeNet ResNet-34）",
+          "sha256": "4a0b8c958a3c938913bd06a8365dbb3c8761afba6ecbf0d14b3b1f77eb230c96"
         },
         {
           "path": "nsfw_1.onnx",
@@ -551,7 +556,8 @@
           "filename": "nsfw_1.onnx",
           "size_mb": 77,
           "required": false,
-          "_note": "NSFW 检测器 v1 — FaceFusion 默认加载"
+          "_note": "NSFW 检测器 v1 — FaceFusion 默认加载",
+          "sha256": "3debfd72763bc931dd308f57d1e9299ae13bb309d14ddbdc17ce8f1fd42f96af"
         },
         {
           "path": "nsfw_2.onnx",
@@ -559,7 +565,8 @@
           "filename": "nsfw_2.onnx",
           "size_mb": 22,
           "required": false,
-          "_note": "NSFW 检测器 v2"
+          "_note": "NSFW 检测器 v2",
+          "sha256": "5aae1806ce44e3c27fab0a7d44eed581dd25ca71a4387ff809a191c98239c1be"
         },
         {
           "path": "nsfw_3.onnx",
@@ -567,7 +574,8 @@
           "filename": "nsfw_3.onnx",
           "size_mb": 342,
           "required": false,
-          "_note": "NSFW 检测器 v3"
+          "_note": "NSFW 检测器 v3",
+          "sha256": "778139fb930240ac39812a1480295bfc5dc2cec8a8e46ee6b453481d600c0fa2"
         },
         {
           "path": "kim_vocal_2.onnx",
@@ -575,7 +583,8 @@
           "filename": "kim_vocal_2.onnx",
           "size_mb": 64,
           "required": false,
-          "_note": "音声分离モデル（Kim Vocal 2）"
+          "_note": "音声分离モデル（Kim Vocal 2）",
+          "sha256": "fbde1fd7d35a6b1785add2225ce03255a01ccef6c8a5fb7b2ccd4e0c1e9097f7"
         }
       ]
     },
