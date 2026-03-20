@@ -1,10 +1,9 @@
 import subprocess
 import os
 from pathlib import Path
-from config import MODEL_ROOT
+from config import AGENT_DIR
 
-WORKSPACE = MODEL_ROOT / "agent_workspace"
-WORKSPACE.mkdir(parents=True, exist_ok=True)
+WORKSPACE = AGENT_DIR
 
 
 def web_search_tool(query: str) -> str:

@@ -2,7 +2,7 @@
 """
 下载额外 checkpoint — 可选引擎的模型文件。
 
-Extra 引擎：Agent、FineTune、Flux、Got OCR、LivePortrait、RAG、SD、WAN、Whisper
+Extra 引擎：Flux、Got OCR、LivePortrait、SD、WAN、Whisper
 
 运行模式（本地开发 — 下载全部）：
     python scripts/checkpoints_extra.py
@@ -19,12 +19,9 @@ import sys
 from pathlib import Path
 
 EXTRA_ENGINES = {
-    "agent_engine",
-    "finetune_engine",
     "flux",
     "got_ocr",
     "liveportrait",
-    "rag_engine",
     "sd",
     "wan",
     "whisper",

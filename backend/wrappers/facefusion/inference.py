@@ -64,11 +64,6 @@ def main():
         "--execution-providers", execution_provider,
     ]
 
-    # FaceFusion checkpoint 目录
-    checkpoint_dir = os.environ.get("FACEFUSION_CHECKPOINT_DIR", "").strip()
-    if checkpoint_dir:
-        cmd += ["--models-dir", checkpoint_dir]
-
     print(f"[facefusion] 执行换脸: provider={execution_provider}", file=sys.stderr)
     print(f"[facefusion] source={args.source}", file=sys.stderr)
     print(f"[facefusion] target={args.target}", file=sys.stderr)

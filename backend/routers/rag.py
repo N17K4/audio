@@ -114,9 +114,9 @@ async def init_sample_kb():
     if any(c['name'] == sample_name for c in collections):
         return {"status": "already_exists", "name": sample_name}
 
-    # 获取样例文档路径（从 models/rag/sample/ 目录）
-    from config import MODEL_ROOT
-    sample_doc = MODEL_ROOT / "rag" / "sample" / "documents" / "sample.txt"
+    # 获取样例文档路径（从 user_data/rag/sample/ 目录）
+    from config import RAG_ROOT
+    sample_doc = RAG_ROOT / "sample" / "documents" / "sample.txt"
 
     if not sample_doc.exists():
         raise HTTPException(status_code=404, detail=f"样例文档不存在: {sample_doc}")

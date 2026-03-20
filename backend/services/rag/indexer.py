@@ -5,11 +5,11 @@ from pathlib import Path
 from datetime import datetime
 
 import logging
-from config import MODEL_ROOT
+from config import RAG_USER_ROOT
 
 logger = logging.getLogger(__name__)
 
-RAG_ROOT = MODEL_ROOT / "rag" / "user"
+RAG_ROOT = RAG_USER_ROOT
 
 
 def _collection_dir(name: str) -> Path:

@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 import subprocess
 import json
 
-from config import BACKEND_HOST, BACKEND_PORT, MODEL_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings
+from config import BACKEND_HOST, BACKEND_PORT, USER_DATA_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings
 from utils.engine import get_checkpoint_dir, detect_ffmpeg_hwaccel
 from utils.voices import list_voices
 from logging_setup import logger
@@ -19,7 +19,7 @@ async def health():
         "status": "ok",
         "host": BACKEND_HOST,
         "port": BACKEND_PORT,
-        "model_root": str(MODEL_ROOT),
+        "user_data_root": str(USER_DATA_ROOT),
         "download_dir": str(DOWNLOAD_DIR),
         "voices_count": len(list_voices()),
     }

@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from fastapi import HTTPException
 
-from config import VOICES_DIR, USER_VOICES_DIR
+from config import RVC_VOICES_DIR, RVC_USER_VOICES_DIR, SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR
 from logging_setup import logger
 
 
@@ -73,18 +73,19 @@ def read_voice_meta(voice_dir: Path, is_builtin: bool = False) -> Dict:
 
 def list_voices() -> List[Dict]:
     voices = []
-    dirs = []
-    # 内置音色（标记为 is_builtin=True）
-    if VOICES_DIR.exists():
-        for p in VOICES_DIR.iterdir():
-            if p.is_dir() and p.name != "user":
-                voices.append(read_voice_meta(p, is_builtin=True))
-    # 用户导入的音色（标记为 is_builtin=False）
-    if USER_VOICES_DIR.exists():
-        for p in USER_VOICES_DIR.iterdir():
-            if p.is_dir():
-                voices.append(read_voice_meta(p, is_builtin=False))
-    # 按名称排序
+    # 各エンジンの内蔵音色 + ユーザー音色をスキャン
+    for builtin_dir, user_dir in [
+        (RVC_VOICES_DIR, RVC_USER_VOICES_DIR),
+        (SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR),
+    ]:
+        if builtin_dir.exists():
+            for p in builtin_dir.iterdir():
+                if p.is_dir() and p.name != "user":
+                    voices.append(read_voice_meta(p, is_builtin=True))
+        if user_dir.exists():
+            for p in user_dir.iterdir():
+                if p.is_dir():
+                    voices.append(read_voice_meta(p, is_builtin=False))
     voices.sort(key=lambda x: x["name"])
     return voices
 

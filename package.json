@@ -53,7 +53,7 @@
       "scripts/ml_extra.py",
       "frontend/out/**/*",
       "backend/**/*",
-      "models/**/*",
+      "user_data/**/*",
       "assets/**/*"
     ],
     "extraResources": [

@@ -11,8 +11,8 @@
  * 可用工具：
  *   web_search   — DuckDuckGo 搜索，返回前 5 条结果
  *   python_exec  — 在沙箱里执行 Python 代码，限时 10 秒
- *   file_read    — 读取 models/agent_workspace/ 下的文件
- *   file_write   — 把内容写入 models/agent_workspace/
+ *   file_read    — 读取 user_data/agent/ 下的文件
+ *   file_write   — 把内容写入 user_data/agent/
  *   rag_retrieval — 从本地知识库检索信息（需先在知识库页建库）
  */
 
@@ -62,8 +62,8 @@ const TOOL_LABELS: Record<string, string> = {
 const TOOL_TIPS: Record<string, string> = {
   web_search:    '使用 DuckDuckGo 搜索互联网，返回前 5 条结果（标题 + 摘要 + 链接）',
   python_exec:   '让 AI 写 Python 代码并在本机运行，限时 10 秒，适合计算、文本处理',
-  file_read:     '读取 models/agent_workspace/ 目录下的文件',
-  file_write:    '把内容写入 models/agent_workspace/ 目录，可供后续步骤读取',
+  file_read:     '读取 user_data/agent/ 目录下的文件',
+  file_write:    '把内容写入 user_data/agent/ 目录，可供后续步骤读取',
   rag_retrieval: '从已建好的知识库中语义检索，需先在「知识库」页面上传文档建库',
 };
 

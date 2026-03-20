@@ -7,14 +7,13 @@ import time as _time
 from pathlib import Path
 from datetime import datetime
 import logging
-from config import MODEL_ROOT, APP_ROOT
+from config import FISH_SPEECH_DIR, APP_ROOT
 from utils.engine import get_embedded_python
 from job_queue import JOBS
 
 logger = logging.getLogger(__name__)
 
-FINETUNE_ROOT = MODEL_ROOT / "finetune"
-FINETUNE_ROOT.mkdir(parents=True, exist_ok=True)
+FINETUNE_ROOT = FISH_SPEECH_DIR
 
 _jobs: dict[str, dict] = {}
 

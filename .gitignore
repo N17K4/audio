@@ -15,25 +15,33 @@ __pycache__/
 *.pyo
 .venv/
 
-# ─── 模型权重（models/ 目录下） ────────────────────────────────────────────────
-models/**/*.pth
-models/**/*.onnx
-models/**/*.pt
-models/**/*.ckpt
-models/**/*.safetensors
-models/**/*.index
+# ─── 模型权重（user_data/ 目录下） ────────────────────────────────────────────
+user_data/**/*.pth
+user_data/**/*.onnx
+user_data/**/*.pt
+user_data/**/*.ckpt
+user_data/**/*.safetensors
+user_data/**/*.index
 
-# ─── 用户创建的音色（运行时数据，不跟踪） ──────────────────────────────────────
-models/voices/user/*
-!models/voices/user/.gitkeep
+# ─── 用户创建的 RVC 音色（运行时数据，不跟踪） ──────────────────────────────────
+user_data/rvc/user/*
+!user_data/rvc/user/.gitkeep
 
-# ─── 微调输出（运行时数据，不跟踪） ──────────────────────────────────────────
-models/finetune/*
-!models/finetune/.gitkeep
+# ─── 用户创建的 Seed-VC 音色（运行时数据，不跟踪） ──────────────────────────────
+user_data/seed_vc/user/*
+!user_data/seed_vc/user/.gitkeep
+
+# ─── Fish Speech 微调输出（运行时数据，不跟踪） ──────────────────────────────────
+user_data/fish_speech/*
+!user_data/fish_speech/.gitkeep
 
 # ─── 用户创建的知识库（RAG，运行时数据，不跟踪） ─────────────────────────────────
-models/rag/user/*
-!models/rag/user/.gitkeep
+user_data/rag/user/*
+!user_data/rag/user/.gitkeep
+
+# ─── Agent 工作区（運行時数据，不跟踪） ──────────────────────────────────────────
+user_data/agent/*
+!user_data/agent/.gitkeep
 
 # ─── runtime 目录 ─────────────────────────────────────────────────────────────
 # 忽略 runtime/ 下的非引擎内容（嵌入式 Python、bin、checkpoints、ML 包）

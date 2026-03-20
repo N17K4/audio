@@ -6,11 +6,25 @@ from typing import Dict, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from config import VOICES_DIR, USER_VOICES_DIR
+from config import get_voices_dir, get_user_voices_dir, RVC_VOICES_DIR, RVC_USER_VOICES_DIR, SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR
 from logging_setup import logger
 from utils.voices import list_voices, read_voice_meta
 
 router = APIRouter()
+
+# 全エンジンの音色ディレクトリを走査して voice_id にマッチするディレクトリを返す
+_ALL_VOICE_DIRS = [
+    RVC_USER_VOICES_DIR, RVC_VOICES_DIR,
+    SEED_VC_USER_VOICES_DIR, SEED_VC_VOICES_DIR,
+]
+
+
+def _find_voice_dir(voice_id: str) -> Path | None:
+    for parent in _ALL_VOICE_DIRS:
+        candidate = parent / voice_id
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    return None
 
 
 @router.get("/voices")
@@ -35,8 +49,9 @@ async def create_voice(
         raise HTTPException(status_code=400, detail="voice_name 包含无效字符")
 
     voice_id = f"{safe}_{int(datetime.utcnow().timestamp())}"
-    USER_VOICES_DIR.mkdir(parents=True, exist_ok=True)
-    voice_dir = USER_VOICES_DIR / voice_id
+    user_dir = get_user_voices_dir(engine)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    voice_dir = user_dir / voice_id
     voice_dir.mkdir(parents=True, exist_ok=True)
 
     meta: Dict = {
@@ -93,10 +108,8 @@ async def create_voice(
 @router.patch("/voices/{voice_id}")
 async def rename_voice(voice_id: str, voice_name: str = Form(...)):
     """重命名音色（更新 meta.json 中的 name 字段）。"""
-    voice_dir = USER_VOICES_DIR / voice_id
-    if not voice_dir.exists():
-        voice_dir = VOICES_DIR / voice_id
-    if not voice_dir.exists() or not voice_dir.is_dir():
+    voice_dir = _find_voice_dir(voice_id)
+    if not voice_dir:
         raise HTTPException(status_code=404, detail=f"音色不存在: {voice_id}")
     new_name = voice_name.strip()
     if not new_name:
@@ -117,10 +130,8 @@ async def rename_voice(voice_id: str, voice_name: str = Form(...)):
 @router.delete("/voices/{voice_id}")
 async def delete_voice(voice_id: str):
     """删除音色目录及其所有文件。"""
-    voice_dir = USER_VOICES_DIR / voice_id
-    if not voice_dir.exists():
-        voice_dir = VOICES_DIR / voice_id
-    if not voice_dir.exists() or not voice_dir.is_dir():
+    voice_dir = _find_voice_dir(voice_id)
+    if not voice_dir:
         raise HTTPException(status_code=404, detail=f"音色不存在: {voice_id}")
     shutil.rmtree(voice_dir)
     logger.info("删除音色: voice_id=%s", voice_id)

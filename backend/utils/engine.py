@@ -9,7 +9,7 @@ from config import (
     RESOURCES_ROOT,
     RUNTIME_ROOT,
     WRAPPERS_ROOT,
-    RVC_RUNTIME_CONFIG_PATH,
+    RVC_ENGINE_JSON,
     FISH_SPEECH_ENGINE_JSON,
     GPT_SOVITS_ENGINE_JSON,
     COSYVOICE_ENGINE_JSON,
@@ -315,36 +315,20 @@ def get_faster_whisper_command_template() -> str:
 
 def get_default_rvc_command_template() -> str:
     """
-    Optional global default command template from models/rvc_runtime.json.
-    Example:
-    {
-      "python": "python",
-      "infer_script": "C:\\\\rvc\\\\infer_cli.py",
-      "args_template": "--input {input} --output {output} --model {model} --index {index}"
-    }
+    Optional command template from wrappers/rvc/engine.json.
+    Uses the same ``cmd_template`` field as other engines.
     """
-    logger.debug("[rvc-cmd] rvc_runtime.json=%s exists=%s", RVC_RUNTIME_CONFIG_PATH, RVC_RUNTIME_CONFIG_PATH.exists())
-    # 1) User config takes priority.
-    if RVC_RUNTIME_CONFIG_PATH.exists():
+    logger.debug("[rvc-cmd] engine.json=%s exists=%s", RVC_ENGINE_JSON, RVC_ENGINE_JSON.exists())
+    if RVC_ENGINE_JSON.exists():
         try:
-            data = json.loads(RVC_RUNTIME_CONFIG_PATH.read_text(encoding="utf-8-sig"))
+            data = json.loads(RVC_ENGINE_JSON.read_text(encoding="utf-8"))
+            cmd = (data.get("cmd_template") or "").strip()
+            if cmd:
+                logger.debug("[rvc-cmd] engine.json cmd_template: %s", cmd)
+                return cmd
+            logger.debug("[rvc-cmd] engine.json cmd_template 为空，转入自动探测")
         except Exception as e:
-            logger.warning("[rvc-cmd] rvc_runtime.json 读取失败: %s", e)
-            data = {}
-        infer_script = (data.get("infer_script") or "").strip()
-        args_template = (data.get("args_template") or "").strip()
-        if infer_script and args_template:
-            if not Path(infer_script).exists():
-                logger.debug("[rvc-cmd] rvc_runtime.json infer_script 不存在: %s，转入自动探测", infer_script)
-            else:
-                try:
-                    python_cmd = (data.get("python") or "").strip() or get_embedded_python()
-                except RuntimeError:
-                    python_cmd = (data.get("python") or "python").strip()
-                tpl = f'"{python_cmd}" "{infer_script}" {args_template}'
-                logger.debug("[rvc-cmd] rvc_runtime.json 命令模板: %s", tpl)
-                return tpl
-        logger.debug("[rvc-cmd] rvc_runtime.json infer_script/args_template 为空或脚本不存在，转入自动探测")
+            logger.warning("[rvc-cmd] engine.json 读取失败: %s", e)
 
     # 2) Auto-detect common local paths (no manual config needed).
     auto_script = detect_rvc_infer_script()

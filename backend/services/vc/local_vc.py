@@ -43,7 +43,7 @@ def run_local_inference_or_raise(voice: Dict, input_path: Path, output_path: Pat
             detail=(
                 "No inference command available. "
                 "Put RVC infer script at runtime/engine/rvc/infer_cli.py "
-                "or configure models/rvc_runtime.json."
+                "or configure wrappers/rvc/engine.json."
             ),
         )
 

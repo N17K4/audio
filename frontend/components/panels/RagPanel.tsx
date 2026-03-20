@@ -190,7 +190,7 @@ export default function RagPanel({
   };
 
   // ── 删除知识库 ────────────────────────────────────────────────────────────
-  // DELETE /rag/collections/{name}，删除后端 models/rag/{name}/ 目录
+  // DELETE /rag/collections/{name}，删除后端 user_data/rag/{name}/ 目录
   const handleDelete = async (name: string) => {
     if (!confirm(`确认删除知识库「${name}」？此操作不可撤销。`)) return;
     await fetch(

@@ -985,7 +985,7 @@ ipcMain.handle('app:getDiskUsage', () => {
       desc: `来源: HuggingFace｜文件: retinaface_10g.onnx (~16 MB), arcface_w600k_r50.onnx (~166 MB), 2dfan4.onnx (~93 MB), inswapper_128_fp16.onnx (~265 MB)` },
     { key: 'seed_vc_hf_root', label: 'Seed-VC 附属模型（bigvgan · whisper · rmvpe · campplus）', sub: ckptRoot, size: (() => { let t = 0; for (const n of ['models--lj1995--VoiceConversionWebUI', 'models--funasr--campplus']) { const d = path.join(ckptRoot, n); if (dirExists(d)) t += getDirSize(d); } t += measureHfCache('nvidia/bigvgan_v2_22khz_80band_256x', 'openai/whisper-small'); return t; })(), estimatedSizeMb: 2500, stage: 'checkpoints_base',
       desc: `来源: HuggingFace｜nvidia/bigvgan_v2_22khz_80band_256x 声码器 (~1.3 GB), openai/whisper-small 语义编码器 (~950 MB), funasr/campplus 说话人特征 (~25 MB), lj1995/VoiceConversionWebUI rmvpe F0 提取 (~200 MB)｜全部为 Seed-VC 离线推理必须，不可单独删除` },
-    { key: 'voices', label: '内置音色（hutao-jp · Ayayaka · tsukuyomi 等）', sub: path.join(__dirname, 'models', 'voices'), size: measureApp('models/voices'), estimatedSizeMb: 325, stage: 'checkpoints_base',
+    { key: 'voices', label: '内置音色（hutao-jp · Ayayaka · tsukuyomi 等）', sub: path.join(__dirname, 'user_data', 'rvc'), size: measureApp('user_data/rvc'), estimatedSizeMb: 325, stage: 'checkpoints_base',
       desc: `来源: HuggingFace｜RVC 格式音色: hutao-jp (.pth ~53 MB + .index ~65 MB), Ayayaka (.pth ~53 MB + .index ~101 MB), tsukuyomi (.pth ~53 MB)` },
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1224,7 +1224,7 @@ const CLEARABLE_DIRS = () => {
     liveportrait_ckpt: path.join(ckptRoot, 'hf_cache', 'models--KwaiVGI--LivePortrait'),
     whisper_ckpt:      path.join(ckptRoot, 'whisper'),
     // 用户数据
-    voices:           path.join(__dirname, 'models', 'voices', 'user'),
+    voices:           path.join(__dirname, 'user_data', 'rvc', 'user'),
     cache:            CACHE_DIR,
     // 日志
     logs:             LOGS_DIR,

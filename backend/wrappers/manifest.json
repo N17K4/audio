@@ -513,7 +513,7 @@
         "size_display": "~1.1 GB",
         "default_install": true
       },
-      "checkpoint_dir": "models/voices",
+      "checkpoint_dir": "user_data/rvc",
       "checkpoint_files": [
         {
           "path": "hutao-jp/model.pth",

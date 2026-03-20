@@ -304,8 +304,8 @@ const STAGE_META = {
   setup:             { label: '运行环境',     desc: '嵌入式 Python + 后端依赖 + 引擎 pip 包与源码 + FFmpeg + Pandoc', size: '~600 MB' },
   ml_base:           { label: 'ML 基础依赖',  desc: 'torch · torchaudio · transformers 等基础 ML 运行库',            size: '~2–4 GB' },
   ml_extra:          { label: 'ML 扩展依赖',  desc: 'RAG（llama-index · faiss）· Agent · LoRA（peft · trl）',         size: '~500 MB–1 GB' },
-  checkpoints_base:  { label: '基础模型权重', desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · Whisper · FaceFusion + 内置音色', size: '~8–10 GB' },
-  checkpoints_extra: { label: '扩展模型权重', desc: 'Flux · SD-Turbo · Wan · GOT-OCR · LivePortrait 模型',            size: '~20–40 GB' },
+  checkpoints_base:  { label: '基础模型权重', desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · FaceFusion 模型 + 内置音色',          size: '~8–10 GB' },
+  checkpoints_extra: { label: '扩展模型权重', desc: 'Whisper · Flux · SD-Turbo · Wan · GOT-OCR · LivePortrait 模型',               size: '~20–40 GB' },
 };
 
 // ─── 源列表 ──────────────────────────────────────────────────────────────────
@@ -478,14 +478,8 @@ window.setupAPI.onInfo(({ missingEngines, manifest, stage }) => {
     document.getElementById('btn-start').disabled = false;
   });
 
-  // 读取已保存配置
-  window.setupAPI.loadConfig().then(cfg => {
-    const isIntl = cfg.international === true;
-    toggleInternational(isIntl);
-    // 如果用户之前手动改过源，优先使用保存的值
-    if (cfg.hfEndpoint) document.getElementById('hf-endpoint').value = cfg.hfEndpoint;
-    if (cfg.pypiMirror) document.getElementById('pypi-mirror').value = cfg.pypiMirror;
-  });
+  // 始终默认国内（不读取缓存的 international 设置）
+  toggleInternational(false);
 });
 
 // ─── 开始下载 ──────────────────────────────────────────────────────────────

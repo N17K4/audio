@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from config import TRAIN_DATA_DIR, VOICES_DIR, WRAPPERS_ROOT
+from config import TRAIN_DATA_DIR, get_user_voices_dir, WRAPPERS_ROOT
 from job_queue import TRAIN_JOBS, JOBS
 from logging_setup import logger
 from utils.engine import get_embedded_python, build_engine_env
@@ -42,7 +42,7 @@ async def run_rvc_training(
     TRAIN_JOBS[job_id]["started_at"] = datetime.utcnow().isoformat()
     _sync_jobs_status(job_id, "running", started_at=_time.time())
 
-    voice_dir = VOICES_DIR / (voice_subdir or "user") / voice_id
+    voice_dir = get_user_voices_dir("rvc") / voice_id
 
     if not _TRAIN_SCRIPT.exists():
         err = f"训练脚本不存在: {_TRAIN_SCRIPT}"
@@ -168,7 +168,7 @@ async def run_rvc_training(
     TRAIN_JOBS[job_id]["voice_id"] = voice_id
     TRAIN_JOBS[job_id]["result"] = {
         "message": "训练完成",
-        "voice_dir": str(VOICES_DIR / voice_id),
+        "voice_dir": str(get_user_voices_dir("rvc") / voice_id),
     }
     _sync_jobs_status(job_id, "completed", completed_at=_time.time(), result_text=f"训练完成，音色 ID：{voice_id}")
     logger.info("[train] 训练完成 job_id=%s voice_id=%s", job_id, voice_id)

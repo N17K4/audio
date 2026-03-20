@@ -219,8 +219,8 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
       setup:             { label: '运行环境',         cmd: 'pnpm run runtime',           desc: '嵌入式 Python + 后端依赖 + 全部引擎 pip 包与源码 + FFmpeg + Pandoc',                estimatedSize: '~600 MB' },
       ml_base:           { label: 'ML 基础依赖',      cmd: 'pnpm run ml',                desc: 'torch · torchaudio · transformers 等基础引擎 ML 运行库',                           estimatedSize: '~2–4 GB' },
       ml_extra:          { label: 'ML 扩展依赖',      cmd: 'pnpm run ml:extra',          desc: 'RAG（llama-index · faiss）· Agent（langgraph）· LoRA（peft · trl）',                estimatedSize: '~500 MB–1 GB' },
-      checkpoints_base:  { label: '基础模型权重',     cmd: 'pnpm run checkpoints',       desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · Whisper · FaceFusion 模型 + 内置音色',   estimatedSize: '~8–10 GB' },
-      checkpoints_extra: { label: '扩展模型权重',     cmd: 'pnpm run checkpoints:extra', desc: 'Flux · SD-Turbo · Wan · GOT-OCR · LivePortrait 模型（按需安装，体积较大）',          estimatedSize: '~20–40 GB' },
+      checkpoints_base:  { label: '基础模型权重',     cmd: 'pnpm run checkpoints',       desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · FaceFusion 模型 + 内置音色',             estimatedSize: '~8–10 GB' },
+      checkpoints_extra: { label: '扩展模型权重',     cmd: 'pnpm run checkpoints:extra', desc: 'Whisper · Flux · SD-Turbo · Wan · GOT-OCR · LivePortrait 模型（按需安装，体积较大）', estimatedSize: '~20–40 GB' },
     };
     const STAGE_ORDER = ['setup', 'ml_base', 'ml_extra', 'checkpoints_base', 'checkpoints_extra'] as const;
 

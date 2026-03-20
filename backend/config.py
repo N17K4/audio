@@ -19,11 +19,17 @@ CHECKPOINTS_ROOT = (
     else RUNTIME_ROOT / "checkpoints"
 )
 
-MODEL_ROOT = Path(os.getenv("MODEL_ROOT", str(APP_ROOT / "models"))).resolve()
-VOICES_DIR = MODEL_ROOT / "voices"
-USER_VOICES_DIR = VOICES_DIR / "user"
-UPLOADS_DIR = MODEL_ROOT / "uploads"
-RVC_RUNTIME_CONFIG_PATH = MODEL_ROOT / "rvc_runtime.json"
+USER_DATA_ROOT = Path(os.getenv("USER_DATA_ROOT", str(APP_ROOT / "user_data"))).resolve()
+RVC_VOICES_DIR = USER_DATA_ROOT / "rvc"
+RVC_USER_VOICES_DIR = RVC_VOICES_DIR / "user"
+SEED_VC_VOICES_DIR = USER_DATA_ROOT / "seed_vc"
+SEED_VC_USER_VOICES_DIR = SEED_VC_VOICES_DIR / "user"
+FISH_SPEECH_DIR = USER_DATA_ROOT / "fish_speech"
+RAG_ROOT = USER_DATA_ROOT / "rag"
+RAG_USER_ROOT = RAG_ROOT / "user"
+AGENT_DIR = USER_DATA_ROOT / "agent"
+UPLOADS_DIR = USER_DATA_ROOT / "uploads"
+RVC_ENGINE_JSON = WRAPPERS_ROOT / "rvc" / "engine.json"
 FISH_SPEECH_ENGINE_JSON = WRAPPERS_ROOT / "fish_speech" / "engine.json"
 GPT_SOVITS_ENGINE_JSON = WRAPPERS_ROOT / "gpt_sovits" / "engine.json"
 COSYVOICE_ENGINE_JSON = WRAPPERS_ROOT / "cosyvoice" / "engine.json"
@@ -50,8 +56,8 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
 # 本地任务队列上限（queued+running）
 MAX_LOCAL_QUEUE = 5
 
-# ─── 用户设置（持久化到 MODEL_ROOT/settings.json）────────────────────────────
-SETTINGS_PATH = MODEL_ROOT / "settings.json"
+# ─── 用户设置（持久化到 user_data/settings.json）────────────────────────────
+SETTINGS_PATH = USER_DATA_ROOT / "settings.json"
 
 
 def load_settings() -> Dict:
@@ -105,8 +111,27 @@ def _load_manifest() -> Dict:
 _MANIFEST: Dict = _load_manifest()
 
 
+_ENGINE_VOICES = {
+    "rvc": (RVC_VOICES_DIR, RVC_USER_VOICES_DIR),
+    "seed_vc": (SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR),
+}
+
+
+def get_voices_dir(engine: str) -> Path:
+    return _ENGINE_VOICES.get(engine, _ENGINE_VOICES["rvc"])[0]
+
+
+def get_user_voices_dir(engine: str) -> Path:
+    return _ENGINE_VOICES.get(engine, _ENGINE_VOICES["rvc"])[1]
+
+
 def setup_dirs():
-    for d in [VOICES_DIR, UPLOADS_DIR, DOWNLOAD_DIR, TRAIN_DATA_DIR, LOGS_DIR, CHECKPOINTS_ROOT]:
+    for d in [
+        RVC_VOICES_DIR, RVC_USER_VOICES_DIR,
+        SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR,
+        FISH_SPEECH_DIR, RAG_USER_ROOT, AGENT_DIR,
+        UPLOADS_DIR, DOWNLOAD_DIR, TRAIN_DATA_DIR, LOGS_DIR, CHECKPOINTS_ROOT,
+    ]:
         d.mkdir(parents=True, exist_ok=True)
 
 
