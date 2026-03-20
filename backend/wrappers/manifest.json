@@ -265,7 +265,7 @@
           "repo_id": "nvidia/bigvgan_v2_22khz_80band_256x",
           "revision": "633ff708ed5b74903e86ff1298cf4a98e921c513",
           "cache_dir_rel": "runtime/checkpoints/hf_cache",
-          "size_mb": 1300,
+          "size_mb": 450,
           "note": "BigVGAN 声码器（仅 generator，跳过 discriminator/3msteps）",
           "ignore_patterns": [
             "bigvgan_generator_3msteps.pt",
@@ -277,7 +277,7 @@
           "repo_id": "openai/whisper-small",
           "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
           "cache_dir_rel": "runtime/checkpoints/hf_cache",
-          "size_mb": 950,
+          "size_mb": 265,
           "note": "Whisper-small 语义特征编码器（仅 safetensors，跳过 pytorch/flax/tf 格式）",
           "ignore_patterns": [
             "pytorch_model.bin",
