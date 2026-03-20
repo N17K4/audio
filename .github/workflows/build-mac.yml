@@ -60,14 +60,14 @@ jobs:
           fi
 
       # ── 直接上传到 GitHub Release（不经 artifact 中转）──────────────
-      - name: 📋 macOS → GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: bash scripts/upload.sh --mac --release-only --no-compress
-
       - name: 📋 Windows → GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: bash scripts/upload.sh --win --release-only --no-compress
+
+      - name: 📋 macOS → GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: bash scripts/upload.sh --mac --release-only --no-compress
