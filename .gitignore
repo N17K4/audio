@@ -49,8 +49,10 @@ runtime/*
 # engine 源码已 git 跟踪（含各引擎 LICENSE）
 !runtime/engine/
 
-# ─── 引擎运行时模型权重（ONNX 等，由 checkpoints 脚本下载，不进版本库）────────
-runtime/engine/facefusion/.assets/
+# ─── 无独立源码的引擎（rvc 通过 rvc-python pip 包推理，无需引擎目录）────────
+runtime/engine/rvc/
+# ─── 不可再分发的引擎（OpenRAIL-AS 许可证，setup 时 git clone）──────────────
+runtime/engine/facefusion/
 
 # ─── checkpoints / 大模型（已整合至 runtime/checkpoints/，保留以防旧目录残留）──
 checkpoints/

@@ -68,8 +68,14 @@ def _next_file_index() -> int:
         return _file_counter
 
 
-def emit(msg_type: str, **kwargs) -> None:
-    """输出结构化进度消息。--json-progress 时输出 JSON Lines，否则普通打印。"""
+def _fmt_tag(idx, total=None) -> str:
+    total = total or _file_total
+    return f"[{idx}/{total}]" if total else f"[{idx}]"
+
+
+def emit(msg_type: str, **kwargs) -> int:
+    """输出结构化进度消息。返回 file_start 的序号 idx（其余返回 0）。"""
+    idx = 0
     if msg_type == "file_start":
         idx = _next_file_index()
         kwargs["idx"] = idx
@@ -77,8 +83,19 @@ def emit(msg_type: str, **kwargs) -> None:
     if _JSON_MODE:
         _REAL_STDOUT.write(json.dumps({"type": msg_type, **kwargs}, ensure_ascii=False) + "\n")
         _REAL_STDOUT.flush()
-    elif msg_type == "log":
-        print(kwargs.get("message", ""), flush=True)
+    else:
+        if msg_type == "log":
+            print(kwargs.get("message", ""), flush=True)
+        elif msg_type == "file_start":
+            size = f"  ~{kwargs['size_mb']:.0f} MB" if kwargs.get("size_mb") else ""
+            print(f"  {_fmt_tag(idx)} ↓ {kwargs.get('file', '')}{size}", flush=True)
+        elif msg_type == "file_done":
+            tag = _fmt_tag(kwargs.get("idx", "?"))
+            if kwargs.get("ok"):
+                print(f"  {tag} ✓ {kwargs.get('file', '')} 完成", flush=True)
+            else:
+                print(f"  {tag} ✗ {kwargs.get('file', '')} 失败: {kwargs.get('error', '')}", flush=True)
+    return idx
 
 
 
@@ -252,7 +269,7 @@ def check_and_download(
             print(f"    跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）")
             continue
 
-        emit("file_start", engine=engine_name, file=rel_path, size_mb=size_mb)
+        _idx = emit("file_start", engine=engine_name, file=rel_path, size_mb=size_mb)
 
         if check_only:
             all_ok = False
@@ -290,13 +307,11 @@ def check_and_download(
                 if dest.exists() and dest.stat().st_size > 0:
                     actual = sha256_file(dest)
                     sha256_updates.setdefault(engine_name, {})[rel_path] = actual
-                    print(f"    ✓ 下载完成  {dest.stat().st_size // 1024 // 1024} MB")
-                    emit("file_done", engine=engine_name, file=rel_path, ok=True)
+                    emit("file_done", engine=engine_name, file=rel_path, ok=True, idx=_idx)
                     if expected_sha256 and actual != expected_sha256:
                         print(f"    ⚠ SHA256 与 manifest 预期不符，已记录新哈希")
                 else:
-                    print(f"    ✗ 下载后文件异常")
-                    emit("file_done", engine=engine_name, file=rel_path, ok=False, error="下载后文件异常")
+                    emit("file_done", engine=engine_name, file=rel_path, ok=False, error="下载后文件异常", idx=_idx)
                     if required:
                         all_ok = False
                 continue
@@ -343,22 +358,18 @@ def check_and_download(
             if dest.exists() and dest.stat().st_size > 0:
                 actual = sha256_file(dest)
                 sha256_updates.setdefault(engine_name, {})[rel_path] = actual
-                print(f"    ✓ 下载完成  {dest.stat().st_size // 1024 // 1024} MB  sha256={actual[:12]}…")
-                emit("file_done", engine=engine_name, file=rel_path, ok=True)
+                emit("file_done", engine=engine_name, file=rel_path, ok=True, idx=_idx)
                 if expected_sha256 and actual != expected_sha256:
                     print(f"    ⚠ SHA256 与 manifest 预期不符，文件可能已更新，已记录新哈希")
             else:
-                print(f"    ✗ 下载后文件异常")
-                emit("file_done", engine=engine_name, file=rel_path, ok=False, error="下载后文件异常")
+                emit("file_done", engine=engine_name, file=rel_path, ok=False, error="下载后文件异常", idx=_idx)
                 if required:
                     all_ok = False
         except Exception as e:
             err_str = str(e)
-            print(f"    ✗ 下载失败: {err_str}")
             emit("log", message=f"    ✗ 下载失败: {err_str[:300]}")
-            emit("file_done", engine=engine_name, file=rel_path, ok=False, error=err_str)
+            emit("file_done", engine=engine_name, file=rel_path, ok=False, error=err_str, idx=_idx)
             if "401" in err_str or "403" in err_str:
-                print(f"    提示：可设置环境变量 HF_TOKEN=xxx 后重试")
                 emit("log", message=f"    提示：可设置环境变量 HF_TOKEN=xxx 后重试")
             if required:
                 all_ok = False
@@ -500,7 +511,7 @@ def download_hf_cache(
             print(msg_clean)
             emit("log", message=msg_clean)
 
-        emit("file_start", engine=engine_name, file=label, size_mb=size_mb)
+        _idx = emit("file_start", engine=engine_name, file=label, size_mb=size_mb)
 
         try:
             if filename:
@@ -547,7 +558,7 @@ def download_hf_cache(
 
             done_msg = f"    ✓ 下载完成: {label}"
             emit("log", message=done_msg)
-            emit("file_done", engine=engine_name, file=label, ok=True)
+            emit("file_done", engine=engine_name, file=label, ok=True, idx=_idx)
             # 创建 refs/main（若不存在），使 hf_hub_download 离线模式可在不指定
             # revision 参数时找到已缓存的文件（refs/main 是 HF 缓存格式的入口指针）。
             if revision:
@@ -583,7 +594,7 @@ def download_hf_cache(
                 hint = f"    提示：{repo_id} 需要 HF token，请设置 HF_TOKEN 环境变量后重试"
                 print(hint)
                 emit("log", message=hint)
-            emit("file_done", engine=engine_name, file=label, ok=False, error=err_str[:200])
+            emit("file_done", engine=engine_name, file=label, ok=False, error=err_str[:200], idx=_idx)
             if required:
                 all_ok = False
 
@@ -842,7 +853,7 @@ def prefetch_faster_whisper_model(
     size_hint = {"tiny": 40, "base": 150, "small": 490, "medium": 1500,
                  "large-v2": 3100, "large-v3": 3100, "large-v3-turbo": 1600}.get(model, 0)
     size_str = f"~{size_hint} MB" if size_hint else "未知大小"
-    emit("file_start", engine="faster_whisper", file=f"{model}/model.bin", size_mb=size_hint)
+    _idx = emit("file_start", engine="faster_whisper", file=f"{model}/model.bin", size_mb=size_hint)
 
     if check_only:
         return False
@@ -894,13 +905,11 @@ except Exception as e1:
     )
     if r.returncode == 0 and model_bin.exists() and model_bin.stat().st_size > 0:
         size_mb = model_bin.stat().st_size // 1024 // 1024
-        print(f"    ✓ faster-whisper/{model} 下载完成 ({size_mb} MB)")
-        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=True)
+        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=True, idx=_idx)
         return True
     else:
         err = ((r.stderr or "") + (r.stdout or "")).strip()[:300]
-        print(f"    ✗ 下载失败: {err}")
-        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=False, error=err)
+        emit("file_done", engine="faster_whisper", file=f"{model}/model.bin", ok=False, error=err, idx=_idx)
         return False
 
 

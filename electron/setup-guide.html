@@ -564,6 +564,7 @@ let _logLines = [];  // 收集所有日志，失败时展示
 let _failedItems = [];
 let _pendingFiles = new Map();
 let _fileSeq = 0;    // 下载序号计数器
+let _fileTotal = 0;  // 下载总数
 
 function resetFailureState() {
   _currentFile = '';
@@ -571,6 +572,7 @@ function resetFailureState() {
   _failedItems = [];
   _pendingFiles = new Map();
   _fileSeq = 0;
+  _fileTotal = 0;
   document.getElementById('log-area').innerHTML = '';
   document.getElementById('error-detail').style.display = 'none';
   document.getElementById('error-detail').textContent = '';
@@ -599,23 +601,28 @@ window.setupAPI.onProgress((msg) => {
       break;
     case 'file_start':
       _currentFile = msg.file || '';
-      _fileSeq++;
+      _fileSeq = msg.idx || ++_fileSeq;
+      _fileTotal = msg.total || _fileTotal;
       _pendingFiles.set(
         fileKey(msg.engine, msg.file || _currentFile),
         `${msg.engine || 'unknown'} / ${msg.file || _currentFile}`
       );
-      appendLog(`  [${_fileSeq}] ↓ ${_currentFile}${msg.size_mb ? '（' + fmtSize(msg.size_mb) + '）' : ''}`);
-      document.getElementById('progress-subtitle').textContent = `[${_fileSeq}] 正在下载：${_currentFile}`;
+      { const tag = _fileTotal ? `[${_fileSeq}/${_fileTotal}]` : `[${_fileSeq}]`;
+        appendLog(`  ${tag} ↓ ${_currentFile}${msg.size_mb ? '（' + fmtSize(msg.size_mb) + '）' : ''}`);
+        document.getElementById('progress-subtitle').textContent = `${tag} 正在下载：${_currentFile}`;
+      }
       break;
     case 'progress':
       break;
     case 'file_done':
       _pendingFiles.delete(fileKey(msg.engine, msg.file || _currentFile));
-      if (msg.ok) {
-        appendLog(`  [${_fileSeq}] ✓ ${msg.file || _currentFile} 完成`);
-      } else {
-        rememberFailure(`${msg.engine || 'unknown'} / ${msg.file || _currentFile}`);
-        appendLog(`  [${_fileSeq}] ✗ ${msg.file || _currentFile} 失败：${msg.error || '未知错误'}`, 'err');
+      { const tag = _fileTotal ? `[${_fileSeq}/${_fileTotal}]` : `[${_fileSeq}]`;
+        if (msg.ok) {
+          appendLog(`  ${tag} ✓ ${msg.file || _currentFile} 完成`);
+        } else {
+          rememberFailure(`${msg.engine || 'unknown'} / ${msg.file || _currentFile}`);
+          appendLog(`  ${tag} ✗ ${msg.file || _currentFile} 失败：${msg.error || '未知错误'}`, 'err');
+        }
       }
       break;
     case 'log':

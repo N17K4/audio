@@ -49,9 +49,6 @@ BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper",
 # 额外引擎集合（step 4 安装，需嵌入式 Python 已就绪）
 EXTRA_ENGINES = {"whisper", "got_ocr", "liveportrait", "wan", "flux", "sd"}
 
-# HuggingFace 资产仓库
-HF_ASSETS_REPO = "N17K4/ai-workshop-assets"
-
 # PyPI 镜像源（通过 --pypi-mirror 设置）
 PYPI_MIRROR = ""
 
@@ -89,37 +86,6 @@ def get_embedded_python(root: Path) -> str:
         p = root / "runtime" / "python" / "mac" / "bin" / "python3"
     return str(p) if p.exists() else ""
 
-
-def _download_engine_zip_from_hf(filename: str, engine_dir: Path) -> bool:
-    """从 HF dataset 仓库下载引擎 zip 并解压到 engine_dir。"""
-    try:
-        # 构造 HuggingFace CDN URL（不需要 huggingface_hub 包）
-        url = f"https://huggingface.co/datasets/{HF_ASSETS_REPO}/resolve/main/{filename}"
-        print(f"  [HF] 尝试从 {url} 下载 ...")
-
-        engine_dir.parent.mkdir(parents=True, exist_ok=True)
-        tmp_zip = engine_dir.parent / f"_{filename}"
-        urllib.request.urlretrieve(url, str(tmp_zip), _reporthook)
-        if _IS_TTY:
-            print()
-
-        tmp = engine_dir.parent / "_engine_hf_tmp"
-        if tmp.exists():
-            shutil.rmtree(tmp)
-        with zipfile.ZipFile(tmp_zip) as zf:
-            zf.extractall(tmp)
-        tmp_zip.unlink()
-
-        extracted = list(tmp.iterdir())
-        src = extracted[0] if len(extracted) == 1 and extracted[0].is_dir() else tmp
-        if engine_dir.exists():
-            shutil.rmtree(engine_dir)
-        shutil.move(str(src), str(engine_dir))
-        shutil.rmtree(tmp, ignore_errors=True)
-        return True
-    except Exception as e:
-        print(f"  HF 下载失败 ({e})，回退到 git clone ...")
-        return False
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -446,10 +412,7 @@ def _install_rvc_python(py: str) -> bool:
 
 
 def setup_rvc_engine(project_root: Path) -> bool:
-    """安装 rvc-python 并生成推理脚本 runtime/engine/rvc/infer.py。"""
-    engine_dir = project_root / "runtime" / "engine" / "rvc"
-    infer_script = engine_dir / "infer.py"
-
+    """安装 rvc-python。"""
     py = get_embedded_python(project_root)
     if not py:
         print("  [rvc] 嵌入式 Python 未找到，跳过 RVC 安装")
@@ -469,95 +432,6 @@ def setup_rvc_engine(project_root: Path) -> bool:
             print("    ✓ rvc-python 安装完成")
         else:
             print("    ✗ rvc-python 安装失败，RVC 功能不可用")
-
-    if infer_script.exists():
-        print(f"  ✓ runtime/engine/rvc/infer.py  (已存在)")
-    else:
-        print(f"  ✗ runtime/engine/rvc/infer.py  (缺失，生成中…)")
-        engine_dir.mkdir(parents=True, exist_ok=True)
-        infer_script.write_text(
-            '''#!/usr/bin/env python3
-"""RVC 推理脚本（使用 rvc-python 库）
-由 runtime.py 自动生成，请勿手動修改。
-"""
-import argparse
-import os
-import sys
-from pathlib import Path
-
-if not os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK"):
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
-import torch as _torch
-_orig_torch_load = _torch.load
-def _patched_torch_load(f, map_location=None, pickle_module=None, *, weights_only=False, mmap=None, **kwargs):
-    return _orig_torch_load(f, map_location=map_location, pickle_module=pickle_module,
-                            weights_only=weights_only, mmap=mmap, **kwargs)
-_torch.load = _patched_torch_load
-
-if _torch.backends.mps.is_available():
-    _torch.backends.mps.is_available = lambda: False
-
-
-def detect_version(model_path: str) -> str:
-    try:
-        import torch
-        cpt = torch.load(model_path, map_location="cpu", weights_only=False)
-        version = cpt.get("version", "")
-        if version in ("v1", "v2"):
-            return version
-        emb = cpt.get("weight", {}).get("enc_p.emb_phone.weight")
-        if emb is not None:
-            return "v2" if emb.shape[1] == 768 else "v1"
-    except Exception:
-        pass
-    return "v2"
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="RVC 语音转换")
-    parser.add_argument("--input",  required=True, help="输入音频路径")
-    parser.add_argument("--output", required=True, help="输出音频路径")
-    parser.add_argument("--model",  required=True, help="模型 .pth 路径")
-    parser.add_argument("--index",  default="",    help="索引文件路径（可选）")
-    args = parser.parse_args()
-
-    try:
-        from rvc_python.infer import RVCInference
-    except ImportError:
-        print("[rvc] 缺少 rvc-python 包，请重新运行 pnpm run setup。", file=sys.stderr)
-        return 1
-
-    index_path = str(Path(args.index).resolve()) if args.index else ""
-    import platform
-    if index_path and sys.platform == "darwin" and platform.machine() == "arm64":
-        print(f"[rvc] macOS ARM 跳过 index 文件（faiss-cpu SIGSEGV 规避）: {index_path}", file=sys.stderr)
-        index_path = ""
-
-    version = detect_version(args.model)
-    try:
-        rvc = RVCInference(device="cpu")
-        rvc.load_model(args.model, version=version, index_path=index_path)
-        rvc.infer_file(str(Path(args.input).resolve()),
-                       str(Path(args.output).resolve()))
-    except Exception as e:
-        print(f"[rvc] 推理失败: {e}", file=sys.stderr)
-        return 1
-
-    if not Path(args.output).exists() or Path(args.output).stat().st_size == 0:
-        print("[rvc] 输出文件缺失或为空", file=sys.stderr)
-        return 1
-
-    print(f"[rvc] ok -> {args.output}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-''',
-            encoding="utf-8",
-        )
-        print(f"    ✓ 已创建 runtime/engine/rvc/infer.py")
 
     return rvc_ok
 
@@ -700,13 +574,6 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
         print(f"  ✓ fish_speech engine 已存在（{sentinel}）")
         return True
 
-    if _download_engine_zip_from_hf("fish_speech_v1.5.0.zip", engine_dir):
-        _patch_fish_speech_generate(engine_dir)
-        _patch_fish_speech_reference_loader(engine_dir)
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ fish_speech engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
     print(f"  [fish_speech] 克隆 {_FISH_SPEECH_REPO} @ {_FISH_SPEECH_TAG} ...")
     tmp_dir = project_root / "runtime" / "engine" / "fish_speech_tmp"
     if tmp_dir.exists():
@@ -840,12 +707,6 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
         print(f"  ✓ seed_vc engine 已存在（{sentinel}）")
         return True
 
-    if _download_engine_zip_from_hf("seed_vc_51383efd.zip", engine_dir):
-        _patch_seed_vc_inference(engine_dir)
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ seed_vc engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
     print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
     tmp_dir = project_root / "runtime" / "engine" / "seed_vc_tmp"
     if tmp_dir.exists():
@@ -929,11 +790,6 @@ def setup_gpt_sovits_engine(project_root: Path) -> bool:
         print(f"  ✓ gpt_sovits engine 已存在（{sentinel}）")
         return True
 
-    if _download_engine_zip_from_hf("gpt_sovits_v2.zip", engine_dir):
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ gpt_sovits engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
     print(f"  [gpt_sovits] 克隆 {_GPT_SOVITS_REPO} @ {_GPT_SOVITS_TAG} ...")
     tmp_dir = project_root / "runtime" / "engine" / "gpt_sovits_tmp"
     if tmp_dir.exists():
@@ -994,11 +850,6 @@ def setup_facefusion_engine(project_root: Path) -> bool:
         print(f"  ✓ facefusion engine 已存在（{sentinel}）")
         return True
 
-    if _download_engine_zip_from_hf("facefusion_3.5.4.zip", engine_dir):
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ facefusion engine 就绪（{n} 个文件，HF 下载）")
-        return True
-
     print(f"  [facefusion] 克隆 {_FACEFUSION_REPO} @ {_FACEFUSION_TAG} ...")
     tmp_dir = project_root / "runtime" / "engine" / "facefusion_tmp"
     if tmp_dir.exists():
@@ -1056,11 +907,6 @@ def setup_liveportrait_engine(project_root: Path) -> bool:
 
     if sentinel.exists():
         print(f"  ✓ liveportrait engine 已存在（{sentinel}）")
-        return True
-
-    if _download_engine_zip_from_hf("liveportrait_49784e87.zip", engine_dir):
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ liveportrait engine 就绪（{n} 个文件，HF 下载）")
         return True
 
     print(f"  [liveportrait] 克隆 {_LIVEPORTRAIT_REPO} @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
