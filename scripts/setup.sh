@@ -95,11 +95,8 @@ log_done "pnpm 依赖安装完成"
 # ─── 4. poetry install — 安装后端依赖 ───────────────────────────────────────
 log_step "4/4 安装 Poetry 依赖（后端）"
 cd "$PROJECT_ROOT/backend"
-if ! $MISE_CMD exec -- poetry install; then
-    echo "⚠ poetry install 首次失败，尝试 poetry lock..."
-    $MISE_CMD exec -- poetry lock
-    $MISE_CMD exec -- poetry install
-fi
+$MISE_CMD exec -- poetry lock
+$MISE_CMD exec -- poetry install
 cd "$PROJECT_ROOT"
 log_done "Poetry 依赖安装完成"
 
