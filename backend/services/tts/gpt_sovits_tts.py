@@ -131,6 +131,12 @@ async def run_gpt_sovits_tts(
         task_id = str(uuid.uuid4())
         output_path = DOWNLOAD_DIR / f"{task_id}_tts_gpt_sovits.wav"
         effective_refs = voice_refs if voice_refs else ([voice] if voice else [])
+        # GPT-SoVITS v2 需要参考音频，没有自定义模型时必须提供
+        if not any(r.strip() for r in effective_refs if r) and not (voice_meta and voice_meta.get("sovits_model")):
+            raise HTTPException(
+                status_code=400,
+                detail="GPT-SoVITS 需要至少一个参考音频（voice_ref）。请上传参考音频或选择已有音色。",
+            )
         await asyncio.to_thread(
             run_local_gpt_sovits_tts_cmd, text, output_path, effective_refs, voice_meta,
             text_lang, prompt_lang, ref_text,

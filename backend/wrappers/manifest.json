@@ -210,7 +210,8 @@
       "runtime_pip_packages": [
         "torch",
         "torchaudio",
-        "numpy",
+        "torchcodec",
+        "numpy>=2.2,<2.3",
         "scipy",
         "librosa==0.10.2",
         "soundfile",

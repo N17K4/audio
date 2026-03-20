@@ -67,6 +67,21 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
     return str((root / "runtime" / "checkpoints" / "gpt_sovits").resolve())
 
 
+def _ensure_fast_langdetect(pretrained_dir: Path) -> None:
+    """fast_langdetect のモデルファイルを pretrained_models/fast_langdetect/ にコピー。"""
+    target = pretrained_dir / "fast_langdetect"
+    if target.exists():
+        return
+    try:
+        import fast_langdetect
+        src = Path(fast_langdetect.__file__).parent / "resources"
+        if src.exists():
+            import shutil
+            shutil.copytree(str(src), str(target))
+    except Exception:
+        pass
+
+
 def _detect_engine_dir() -> Path | None:
     """检测 GPT-SoVITS 引擎目录。"""
     engine_dir = get_engine_dir("gpt_sovits")
@@ -115,6 +130,9 @@ def main() -> int:
             pretrained_link.symlink_to(checkpoint_dir)
         except OSError:
             pass
+
+    # fast_langdetect 需要模型文件在 pretrained_models/fast_langdetect/ 下
+    _ensure_fast_langdetect(pretrained_link)
 
     try:
         return _run_inference(args, output_path, checkpoint_dir)
@@ -215,9 +233,12 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
         "fragment_interval": args.fragment_interval,
         "sample_steps": args.sample_steps,
     }
-    # ref_audio_path が空なら inputs に含めない（GPT-SoVITS が ValueError を投げるため）
+    # GPT-SoVITS v2 は参考音声（ref_audio_path）が必須
     if ref_audio:
         inputs["ref_audio_path"] = ref_audio
+    else:
+        print("[gpt_sovits] 未指定参考音频（voice_ref），GPT-SoVITS 需要至少一个参考音频才能合成", file=sys.stderr)
+        return 5
 
     # 辅助参考音频
     if len(args.voice_ref) > 1:

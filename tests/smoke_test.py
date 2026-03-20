@@ -28,10 +28,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 # 工具函数：WAV 文件生成
 # ──────────────────────────────────────────────────────────────────────────────
 
-def create_test_wav() -> bytes:
-    """创建一个简单的 8kHz 8 位单声道 WAV 文件（1 秒）"""
+def create_test_wav(duration_sec: int = 1) -> bytes:
+    """创建一个简单的 8kHz 16 位单声道 WAV 文件"""
     sample_rate = 8000
-    num_samples = 8000
+    num_samples = 8000 * duration_sec
     num_channels = 1
     bits_per_sample = 16
 
@@ -125,6 +125,7 @@ def test_gpt_sovits_tts():
 
     print("🎙️  测试 GPT-SoVITS TTS")
 
+    wav_data = create_test_wav(duration_sec=5)
     with httpx.Client(timeout=30) as client:
         data = {
             "text": "烟雾测试文本合成",
@@ -137,6 +138,7 @@ def test_gpt_sovits_tts():
         resp = client.post(
             f"{_BASE_URL}/tasks/tts",
             data=data,
+            files={"reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav")},
         )
 
         print(f"     HTTP {resp.status_code}")
@@ -224,6 +226,7 @@ def test_gpt_sovits_tts_advanced():
 
     print("🎛️  测试 GPT-SoVITS TTS 高级参数")
 
+    wav_data = create_test_wav(duration_sec=5)
     with httpx.Client(timeout=60) as client:
         data = {
             "text": "高级参数烟雾测试",
@@ -251,6 +254,7 @@ def test_gpt_sovits_tts_advanced():
         resp = client.post(
             f"{_BASE_URL}/tasks/tts",
             data=data,
+            files={"reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav")},
         )
 
         print(f"     HTTP {resp.status_code}")
