@@ -44,6 +44,7 @@ log_info() {
 # ─── 参数解析 ──────────────────────────────────────────────────────────────
 TARGET=""
 PUBLISH_FLAG=""
+FULL_FLAG=""
 
 for arg in "$@"; do
     case $arg in
@@ -59,9 +60,12 @@ for arg in "$@"; do
         --publish)
             PUBLISH_FLAG="--publish"
             ;;
+        --full)
+            FULL_FLAG="--config scripts/builder-full.js"
+            ;;
         *)
             echo "未知参数: $arg"
-            echo "用法: dist.sh [--mac|--win|--both] [--publish]"
+            echo "用法: dist.sh [--mac|--win|--both] [--full] [--publish]"
             exit 1
             ;;
     esac
@@ -90,15 +94,19 @@ log_done "前端构建完成"
 
 # ─── 2. 打包 Electron ──────────────────────────────────────────────────────
 log_step "2/2 打包 Electron"
+if [ -n "$FULL_FLAG" ]; then
+    log_info "完整打包模式：包含 runtime/ml/ + runtime/checkpoints/"
+fi
+
 if [ "$TARGET" = "mac" ] || [ "$TARGET" = "both" ]; then
     log_info "构建 macOS..."
-    npx electron-builder --mac $PUBLISH_FLAG
+    npx electron-builder --mac $FULL_FLAG $PUBLISH_FLAG
     log_done "macOS 打包完成"
 fi
 
 if [ "$TARGET" = "win" ] || [ "$TARGET" = "both" ]; then
     log_info "构建 Windows (x64)..."
-    npx electron-builder --win --x64 $PUBLISH_FLAG
+    npx electron-builder --win --x64 $FULL_FLAG $PUBLISH_FLAG
     log_done "Windows 打包完成"
 fi
 

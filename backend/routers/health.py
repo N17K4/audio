@@ -2,6 +2,8 @@ from fastapi import APIRouter, Body
 from fastapi.responses import StreamingResponse
 import subprocess
 import json
+import threading
+import queue as _queue
 
 from config import BACKEND_HOST, BACKEND_PORT, USER_DATA_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings, APP_ROOT, RESOURCES_ROOT, RUNTIME_ROOT
 from utils.engine import get_checkpoint_dir, detect_ffmpeg_hwaccel
@@ -9,6 +11,37 @@ from utils.voices import list_voices
 from logging_setup import logger
 from pathlib import Path
 import job_queue
+
+
+def _stream_subprocess(proc):
+    """并发读取 stdout/stderr，避免 Windows 4KB 管道缓冲区死锁。
+
+    用一个后台线程收集 stderr，主线程流式输出 stdout，
+    进程结束后再输出 stderr 缓冲内容。
+    """
+    stderr_lines: list[str] = []
+
+    def _drain_stderr():
+        for line in iter(proc.stderr.readline, ''):
+            if line:
+                stderr_lines.append(line.rstrip())
+        proc.stderr.close()
+
+    t = threading.Thread(target=_drain_stderr, daemon=True)
+    t.start()
+
+    for line in iter(proc.stdout.readline, ''):
+        if line:
+            yield json.dumps({"log": line.rstrip()})
+    proc.stdout.close()
+
+    t.join(timeout=10)
+    returncode = proc.wait()
+
+    for sl in stderr_lines:
+        yield json.dumps({"log": f"[ERROR] {sl}"})
+
+    yield returncode
 
 router = APIRouter()
 
@@ -138,15 +171,12 @@ async def run_smoketest():
                 encoding="utf-8", errors="replace",
             )
 
-            for line in iter(proc.stdout.readline, ''):
-                if line:
-                    yield f"data: {json.dumps({'log': line.rstrip()})}\n\n"
-
-            returncode = proc.wait()
-
-            for line in iter(proc.stderr.readline, ''):
-                if line:
-                    yield f"data: {json.dumps({'log': f'[ERROR] {line.rstrip()}'})}\n\n"
+            returncode = None
+            for item in _stream_subprocess(proc):
+                if isinstance(item, int):
+                    returncode = item
+                else:
+                    yield f"data: {item}\n\n"
 
             if returncode == 0:
                 yield f"data: {json.dumps({'log': '─── 烟雾测试 1 执行完成 ✅'})}\n\n"
@@ -201,18 +231,12 @@ async def run_smoketest2():
                 encoding="utf-8", errors="replace",
             )
 
-            # 流式输出 stdout
-            for line in iter(proc.stdout.readline, ''):
-                if line:
-                    yield f"data: {json.dumps({'log': line.rstrip()})}\n\n"
-
-            # 等待进程完成
-            returncode = proc.wait()
-
-            # 输出 stderr 如果有错误
-            for line in iter(proc.stderr.readline, ''):
-                if line:
-                    yield f"data: {json.dumps({'log': f'[ERROR] {line.rstrip()}'})}\n\n"
+            returncode = None
+            for item in _stream_subprocess(proc):
+                if isinstance(item, int):
+                    returncode = item
+                else:
+                    yield f"data: {item}\n\n"
 
             if returncode == 0:
                 yield f"data: {json.dumps({'log': '─── 烟雾测试 2 执行完成 ✅'})}\n\n"

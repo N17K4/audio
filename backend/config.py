@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Dict
 
 APP_ROOT = Path(__file__).resolve().parent.parent
-# 打包后 Electron 传入 RESOURCES_ROOT=process.resourcesPath（Contents/Resources/）
-# dev 模式下默认为项目根目录（runtime/、checkpoints/ 均在此处）
+# dev: APP_ROOT = プロジェクトルート、prod: APP_ROOT = Resources/
+# backend/ が extraResources に移動したため、parent.parent はどちらも正しいルートを指す
 RESOURCES_ROOT = Path(os.getenv("RESOURCES_ROOT", str(APP_ROOT))).resolve()
 RUNTIME_ROOT = RESOURCES_ROOT / "runtime"
 WRAPPERS_ROOT = Path(__file__).resolve().parent / "wrappers"

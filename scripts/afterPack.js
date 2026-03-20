@@ -77,8 +77,8 @@ function patchWindowsPythonPath(context) {
 
   // backend 相对于 python.exe 所在目录的路径
   // python.exe: resources/runtime/python/win/
-  // backend:    resources/app/backend/
-  const backendRelPath = path.join('..', '..', '..', 'app', 'backend');
+  // backend:    resources/backend/
+  const backendRelPath = path.join('..', '..', '..', 'backend');
 
   for (const pthFile of pthFiles) {
     const pthPath = path.join(pythonDir, pthFile);

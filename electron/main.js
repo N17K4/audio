@@ -112,10 +112,10 @@ async function createWindow() {
   }
 
   const iconPath = process.platform === 'win32'
-    ? path.join(PROJECT_ROOT, 'assets', 'icon.png')
-    : path.join(PROJECT_ROOT, 'assets', 'icon.icns');
+    ? path.join(resRoot(), 'assets', 'icon.png')
+    : path.join(resRoot(), 'assets', 'icon.icns');
   if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(path.join(PROJECT_ROOT, 'assets', 'icon.png'));
+    app.dock.setIcon(path.join(resRoot(), 'assets', 'icon.png'));
   }
   const win = new BrowserWindow({
     width: 1100, height: 800, title: 'AI Workshop', icon: iconPath,
@@ -153,11 +153,12 @@ async function createWindow() {
     cwd = path.join(PROJECT_ROOT, 'backend');
   } else {
     const isMac = process.platform === 'darwin';
+    const res = resRoot();
     pyCmd = isMac
-      ? path.join(process.resourcesPath, 'runtime', 'python', 'mac', 'bin', 'python3')
-      : path.join(process.resourcesPath, 'runtime', 'python', 'win', 'python.exe');
-    pyArgs = [path.join(PROJECT_ROOT, 'backend', 'main.py')];
-    cwd = PROJECT_ROOT;
+      ? path.join(res, 'runtime', 'python', 'mac', 'bin', 'python3')
+      : path.join(res, 'runtime', 'python', 'win', 'python.exe');
+    pyArgs = [path.join(res, 'backend', 'main.py')];
+    cwd = res;
   }
 
   // BACKEND_PORT: Electron が動的に割り当てたポート

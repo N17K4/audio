@@ -663,25 +663,64 @@ def setup_facefusion_engine(
     engine_dir = runtime_root / "runtime" / "engine" / "facefusion"
     sentinel = engine_dir / "facefusion" / "__init__.py"
 
-    # ── Step 1: git clone ───────────────────────────────────────────────────
+    # ── Step 1: git clone（优先）或 zip 下载（git 不可用时回退）────────────
     if sentinel.exists():
         emit("log", message="  ✓ FaceFusion 引擎目录已存在，跳过 clone")
         print(f"  ✓ FaceFusion 引擎已存在（{sentinel}）")
     else:
-        emit("log", message="  正在克隆 FaceFusion 3.5.4（仅 HEAD，约 10 MB）...")
-        print(f"  [facefusion] git clone --depth 1 --branch 3.5.4 → {engine_dir}")
         if engine_dir.exists():
             shutil.rmtree(engine_dir)
-        r = subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", "3.5.4",
-             "https://github.com/facefusion/facefusion.git", str(engine_dir)],
-            capture_output=True, text=True,
-        )
-        if r.returncode != 0:
-            msg = r.stderr.strip()[:300]
-            print(f"  ✗ clone 失败: {msg}")
-            emit("log", message=f"  ✗ clone 失败: {msg}")
-            return False
+
+        # 检测 git 是否可用
+        has_git = shutil.which("git") is not None
+        clone_ok = False
+
+        if has_git:
+            emit("log", message="  正在克隆 FaceFusion 3.5.4（仅 HEAD，约 10 MB）...")
+            print(f"  [facefusion] git clone --depth 1 --branch 3.5.4 → {engine_dir}")
+            r = subprocess.run(
+                ["git", "clone", "--depth", "1", "--branch", "3.5.4",
+                 "https://github.com/facefusion/facefusion.git", str(engine_dir)],
+                capture_output=True, text=True,
+            )
+            clone_ok = r.returncode == 0
+            if not clone_ok:
+                msg = r.stderr.strip()[:300]
+                print(f"  ⚠ git clone 失败，回退到 zip 下载: {msg}")
+                emit("log", message="  ⚠ git clone 失败，回退到 zip 下载")
+
+        if not clone_ok:
+            # Fallback: 下载 GitHub zip 归档（无需 git）
+            import io
+            import zipfile
+            import urllib.request
+
+            zip_url = "https://github.com/facefusion/facefusion/archive/refs/tags/3.5.4.zip"
+            emit("log", message="  正在下载 FaceFusion 3.5.4 zip 归档（约 10 MB）...")
+            print(f"  [facefusion] 下载 zip: {zip_url}")
+            try:
+                req = urllib.request.Request(zip_url, headers={"User-Agent": "AI-Workshop"})
+                with urllib.request.urlopen(req, timeout=300) as resp:
+                    zip_data = resp.read()
+                with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+                    # zip 内顶层目录为 facefusion-3.5.4/，解压后重命名
+                    tmp_extract = engine_dir.parent / "_facefusion_tmp"
+                    if tmp_extract.exists():
+                        shutil.rmtree(tmp_extract)
+                    zf.extractall(tmp_extract)
+                    # 找到解压后的顶层目录
+                    extracted = list(tmp_extract.iterdir())
+                    if len(extracted) == 1 and extracted[0].is_dir():
+                        extracted[0].rename(engine_dir)
+                    else:
+                        tmp_extract.rename(engine_dir)
+                    if tmp_extract.exists():
+                        shutil.rmtree(tmp_extract, ignore_errors=True)
+                clone_ok = True
+            except Exception as exc:
+                print(f"  ✗ zip 下载失败: {exc}")
+                emit("log", message=f"  ✗ zip 下载失败: {str(exc)[:200]}")
+                return False
 
         # 删除开发专用目录和文件
         for name in _FACEFUSION_RM:
@@ -1105,23 +1144,42 @@ def main() -> int:
     if not args.check_only:
         py = sys.executable
         print("── 修复 huggingface_hub 版本（强制升级至 >=1.3.0）──")
-        r = subprocess.run(
-            [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
-             "--force-reinstall", "--quiet"],
-            capture_output=True, text=True, timeout=120,
+        # 先检查当前版本是否已满足要求
+        ver_check = subprocess.run(
+            [py, "-c",
+             "import huggingface_hub; v=huggingface_hub.__version__; "
+             "parts=[int(x) for x in v.split('.')[:2]]; "
+             "print(v); exit(0 if (parts[0]>1 or (parts[0]==1 and parts[1]>=3)) else 1)"],
+            capture_output=True, text=True,
         )
-        if r.returncode == 0:
-            # 验证安装版本
-            ver_check = subprocess.run(
-                [py, "-c",
-                 "import huggingface_hub; print(huggingface_hub.__version__)"],
-                capture_output=True, text=True,
-            )
-            ver = ver_check.stdout.strip()
-            print(f"  ✓ huggingface_hub=={ver}")
+        if ver_check.returncode == 0:
+            print(f"  ✓ huggingface_hub=={ver_check.stdout.strip()}（已满足 >=1.3.0）")
         else:
-            print(f"  ✗ 升级失败: {r.stderr.strip()[:200]}")
-            print()
+            # 需要升级：先尝试普通 upgrade，失败后再 force-reinstall
+            r = subprocess.run(
+                [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
+                 "--upgrade", "--quiet"],
+                capture_output=True, text=True, timeout=120,
+            )
+            if r.returncode != 0:
+                # Windows 常因文件锁定失败，用 --force-reinstall --target 到临时目录再复制
+                r = subprocess.run(
+                    [py, "-m", "pip", "install", "huggingface_hub>=1.3.0,<2.0",
+                     "--force-reinstall", "--quiet"],
+                    capture_output=True, text=True, timeout=120,
+                )
+            if r.returncode == 0:
+                ver2 = subprocess.run(
+                    [py, "-c",
+                     "import huggingface_hub; print(huggingface_hub.__version__)"],
+                    capture_output=True, text=True,
+                )
+                print(f"  ✓ huggingface_hub=={ver2.stdout.strip()}")
+            else:
+                # 升级失败不阻塞整体流程，仅警告
+                print(f"  ⚠ 升级失败（不影响安装流程）: {r.stderr.strip()[:200]}")
+                print(f"  ⚠ 如遇到 huggingface_hub 版本问题，请关闭应用后手动运行此步骤")
+                print()
 
     if all_ready:
         print("✓ 所有必填 checkpoint 文件就绪")
