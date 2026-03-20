@@ -1045,20 +1045,21 @@ function _clearAllUserData() {
     } catch (err) { errors.push(`${d}: ${err.message}`); }
   };
 
-  // 1) 清除所有 CLEARABLE_DIRS（引擎源码、缓存、用户数据等）
-  for (const [key, dir] of Object.entries(clearable)) {
+  // 只清除 STAGE_CLEAR_KEYS 中定义的目录（不含运行环境）
+  const keysToDelete = Object.values(STAGE_CLEAR_KEYS).flat();
+  for (const key of keysToDelete) {
     if (key === 'seed_vc_hf_root') {
-      // 特殊处理：多个散落子目录
       const ckptRoot = getCheckpointsDir();
       for (const name of ['models--lj1995--VoiceConversionWebUI', 'models--funasr--campplus']) {
         rmDir(path.join(ckptRoot, name));
       }
-    } else if (dir) {
-      rmDir(dir);
+    } else {
+      const dir = clearable[key];
+      if (dir) rmDir(dir);
     }
   }
 
-  // 2) 清除 checkpoints 整个目录（含各引擎模型权重）
+  // 清除 checkpoints 整个目录
   rmDir(getCheckpointsDir());
 
   return errors.length > 0 ? { ok: false, error: errors.join('\n') } : { ok: true };
@@ -1273,7 +1274,6 @@ ipcMain.handle('app:clearDiskRow', (_event, key) => {
 // ─── IPC：按安装阶段重新安装 ─────────────────────────────────────────────────
 // 每个 stage 对应 CLEARABLE_DIRS 中的一组 key + 重装脚本
 const STAGE_CLEAR_KEYS = {
-  setup:             ['python', 'fish_speech_engine', 'seed_vc_engine', 'gpt_sovits_engine', 'liveportrait_engine', 'flux_pip', 'got_ocr_pip', 'sd_pip', 'wan_pip'],
   ml_base:           ['python_packages'],
   ml_extra:          ['python_packages'],      // 与 ml_base 共享目录，清除时会一起清
   checkpoints_base:  ['fish_speech_ckpt', 'gpt_sovits_ckpt', 'seed_vc_ckpt', 'rvc_ckpt', 'faster_whisper_ckpt', 'facefusion_ckpt', 'seed_vc_hf_root', 'voices'],

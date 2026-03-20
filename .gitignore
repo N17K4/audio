@@ -35,8 +35,11 @@ models/finetune/*
 models/rag/user/*
 !models/rag/user/.gitkeep
 
-# ─── runtime 目录（引擎二进制/克隆，不跟踪）─────────────────────────────────────
-runtime/
+# ─── runtime 目录 ─────────────────────────────────────────────────────────────
+# 忽略 runtime/ 下的非引擎内容（嵌入式 Python、bin、checkpoints、ML 包）
+runtime/*
+# engine 源码已 git 跟踪（含各引擎 LICENSE）
+!runtime/engine/
 
 # ─── checkpoints / 大模型（已整合至 runtime/checkpoints/，保留以防旧目录残留）──
 checkpoints/

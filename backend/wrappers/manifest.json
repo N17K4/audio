@@ -470,42 +470,38 @@
       "checkpoint_files": [
         {
           "path": "retinaface_10g.onnx",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
+          "repo_id": "facefusion/models-3.0.0",
           "filename": "retinaface_10g.onnx",
           "size_mb": 16,
           "required": true,
-          "_note": "人脸检测器（RetinaFace）",
+          "_note": "人脸检测器（RetinaFace）— 来源: FaceFusion 官方 HF 仓库",
           "sha256": "808399c3d0b40ed340634ed590ae564a7caa09e5659916923a95d4470b54ff5a"
         },
         {
           "path": "arcface_w600k_r50.onnx",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
+          "repo_id": "facefusion/models-3.0.0",
           "filename": "arcface_w600k_r50.onnx",
           "size_mb": 166,
           "required": true,
-          "_note": "人脸识别器（ArcFace ResNet-50）",
+          "_note": "人脸识别器（ArcFace ResNet-50）— 来源: FaceFusion 官方 HF 仓库",
           "sha256": "f1f79dc3b0b79a69f94799af1fffebff09fbd78fd96a275fd8f0cbbea23270d1"
         },
         {
           "path": "2dfan4.onnx",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
+          "repo_id": "facefusion/models-3.0.0",
           "filename": "2dfan4.onnx",
           "size_mb": 93,
           "required": true,
-          "_note": "人脸关键点（2D-FAN-4）",
+          "_note": "人脸关键点（2D-FAN-4）— 来源: FaceFusion 官方 HF 仓库",
           "sha256": "678c6fa539d52335a31c980feefdf4a6e02d781d83dce00af8a894f114557285"
         },
         {
           "path": "inswapper_128_fp16.onnx",
-          "repo_id": "N17K4/ai-workshop-assets",
-          "repo_type": "dataset",
+          "repo_id": "facefusion/models-3.0.0",
           "filename": "inswapper_128_fp16.onnx",
           "size_mb": 265,
           "required": true,
-          "_note": "换脸模型（InSwapper 128 FP16）",
+          "_note": "换脸模型（InSwapper 128 FP16）— 来源: FaceFusion 官方 HF 仓库",
           "sha256": "c4eccca86ad177586c85c28bf1a64a9d9ed237e283a15818d831f7facfd3f420"
         }
       ]
@@ -652,23 +648,35 @@
     "rag_engine": {
       "pip_packages": [],
       "runtime_pip_packages": [
-        "llama-index-core", "llama-index-embeddings-ollama",
-        "llama-index-vector-stores-faiss", "faiss-cpu",
-        "llama-index-llms-ollama", "llama-index-llms-openai", "llama-index-llms-gemini",
-        "pypdf", "docx2txt", "openpyxl"
+        "llama-index-core",
+        "llama-index-embeddings-ollama",
+        "llama-index-vector-stores-faiss",
+        "faiss-cpu",
+        "llama-index-llms-ollama",
+        "llama-index-llms-openai",
+        "llama-index-llms-gemini",
+        "pypdf",
+        "docx2txt",
+        "openpyxl"
       ]
     },
     "agent_engine": {
       "pip_packages": [],
       "runtime_pip_packages": [
-        "langgraph", "langchain-core", "langchain-community",
+        "langgraph",
+        "langchain-core",
+        "langchain-community",
         "duckduckgo-search"
       ]
     },
     "finetune_engine": {
       "pip_packages": [],
       "runtime_pip_packages": [
-        "peft", "trl", "datasets", "bitsandbytes", "accelerate"
+        "peft",
+        "trl",
+        "datasets",
+        "bitsandbytes",
+        "accelerate"
       ]
     },
     "sd": {
@@ -739,52 +747,60 @@
           "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/preprocessor_config.json",
           "size_mb": 1,
           "required": true,
-          "note": "Chinese HuBERT 基础模型（音素提取）"
+          "note": "Chinese HuBERT 基础模型（音素提取）",
+          "sha256": "dcd684124d06722947939d41ea6ae58dbf10968c60a11a29f23ddc602c64a29b"
         },
         {
           "path": "chinese-hubert-base/config.json",
           "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/config.json",
           "size_mb": 1,
-          "required": true
+          "required": true,
+          "sha256": "f6bd1bdef239518d022edcef31243acf344a2afa33d5428e16f221cac09cbcd0"
         },
         {
           "path": "chinese-hubert-base/pytorch_model.bin",
           "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/pytorch_model.bin",
           "size_mb": 380,
-          "required": true
+          "required": true,
+          "sha256": "2fefccd26c2794a583b80f6f7210c721873cb7ebae2c1cde3baf9b27855e24d8"
         },
         {
           "path": "chinese-roberta-wwm-ext-large/config.json",
           "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/config.json",
           "size_mb": 1,
           "required": true,
-          "note": "Chinese RoBERTa 大模型（文本编码）"
+          "note": "Chinese RoBERTa 大模型（文本编码）",
+          "sha256": "53d086daf0ccdddbeb78f8798f34c685a3c48089fa21ec61300527f083fa2563"
         },
         {
           "path": "chinese-roberta-wwm-ext-large/tokenizer.json",
           "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/tokenizer.json",
           "size_mb": 1,
-          "required": true
+          "required": true,
+          "sha256": "53ff61207898738bbdc000f38abebef01041c8d23b6270c11855fc692d0a3ad6"
         },
         {
           "path": "chinese-roberta-wwm-ext-large/pytorch_model.bin",
           "url": "https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/resolve/main/pytorch_model.bin",
           "size_mb": 1300,
-          "required": true
+          "required": true,
+          "sha256": "4ac62d49144d770c5ca9a5d1d3039c4995665a080febe63198189857c6bd11cd"
         },
         {
           "path": "gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
           "url": "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
           "size_mb": 600,
           "required": true,
-          "note": "GPT v2 预训练模型（Text-to-Semantic）"
+          "note": "GPT v2 预训练模型（Text-to-Semantic）",
+          "sha256": "732f94e63b148066e24c7f9d2637f3374083e637635f07fbdb695dee20ddbe1f"
         },
         {
           "path": "gsv-v2final-pretrained/s2G2333k.pth",
           "url": "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main/gsv-v2final-pretrained/s2G2333k.pth",
           "size_mb": 800,
           "required": true,
-          "note": "SoVITS v2 预训练模型（Semantic-to-Audio）"
+          "note": "SoVITS v2 预训练模型（Semantic-to-Audio）",
+          "sha256": "924fdccaa3c574bf139c25c9759aa1ed3b3f99e19a7c529ee996c2bc17663695"
         }
       ],
       "env_key": "GPT_SOVITS_CHECKPOINT_DIR"

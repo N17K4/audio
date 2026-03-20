@@ -6,7 +6,7 @@
     "predev": "pkill -f 'next dev' 2>/dev/null; pkill -f 'next-server' 2>/dev/null; pkill -f 'AI Workshop' 2>/dev/null; pkill -f 'electron-builder' 2>/dev/null; true",
     "dev": "concurrently -n 前端,Electron -c cyan,yellow \"cd frontend && pnpm dev\" \"wait-on http://localhost:3000 && npx electron .\"",
     "setup": "bash scripts/setup.sh",
-    "runtime": "mise exec -- python3 scripts/runtime.py",
+    "runtime": "bash scripts/runtime.sh",
     "ml": "runtime/python/mac/bin/python3 scripts/ml_base.py",
     "ml:extra": "runtime/python/mac/bin/python3 scripts/ml_extra.py",
     "ml:rag": "runtime/python/mac/bin/python3 scripts/ml_extra.py --group rag",

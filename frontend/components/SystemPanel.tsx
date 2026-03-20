@@ -272,7 +272,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 <div className="flex items-start justify-between px-5 py-4 gap-4">
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">清除全部数据</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">删除全部模型、引擎、缓存和运行库，下次启动重新引导下载</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">删除 ML 依赖、模型权重和缓存（保留运行环境），下次启动重新引导下载</p>
                     {clearMsg && (
                       <p className={`text-xs mt-1 ${clearMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>{clearMsg.text}</p>
                     )}
@@ -287,7 +287,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 <div className="flex items-start justify-between px-5 py-4 gap-4">
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">重新下载全部</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">清除全部数据后立即打开下载引导重新安装</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">清除 ML 依赖与模型权重后立即打开下载引导重新安装（保留运行环境）</p>
                     {redownloadMsg && (
                       <p className={`text-xs mt-1 ${redownloadMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>{redownloadMsg.text}</p>
                     )}
@@ -348,13 +348,15 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                   </div>
                 </button>
                 <span className="text-sm font-bold text-slate-600 dark:text-slate-300 tabular-nums shrink-0">{fmtSize(stageSize)}</span>
-                <button
-                  className="shrink-0 rounded border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1"
-                  style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
-                  disabled={isBusy || anyBusy}
-                  onClick={() => confirmReinstallStage(stage)}>
-                  {isBusy && stageStatus[stage] === 'reinstalling' ? <><Spinner />重新安装中</> : '重新安装'}
-                </button>
+                {stage !== 'setup' && (
+                  <button
+                    className="shrink-0 rounded border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1"
+                    style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
+                    disabled={isBusy || anyBusy}
+                    onClick={() => confirmReinstallStage(stage)}>
+                    {isBusy && stageStatus[stage] === 'reinstalling' ? <><Spinner />重新安装中</> : '重新安装'}
+                  </button>
+                )}
               </div>
 
               {/* 展开内容：子项列表 */}
@@ -563,11 +565,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 </h3>
               </div>
               <div className="px-6 py-4 space-y-3">
-                {reinstallConfirmStage === 'setup' && (
-                  <div className="rounded border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-700 dark:text-amber-300 leading-relaxed">
-                    运行环境中的 Python、FFmpeg、Pandoc 从 GitHub 下载，国内网络可能较慢。PyPI 依赖支持在引导页中选择镜像源。
-                  </div>
-                )}
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   将清除该阶段的已有数据，并打开下载引导窗口。你可以在引导页中选择 PyPI / HuggingFace 镜像源后再开始下载。
                 </p>
@@ -593,7 +590,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">确认清除用户数据？</h3>
             </div>
             <div className="px-6 py-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">将删除已下载的全部模型文件和运行库，下次启动时需要重新下载。此操作不可撤销。</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">将删除 ML 依赖、模型权重和缓存（保留运行环境），下次启动时需要重新下载。此操作不可撤销。</p>
             </div>
             <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
               <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
@@ -622,7 +619,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">重新下载全部模型？</h3>
             </div>
             <div className="px-6 py-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">将清除已下载的所有模型文件和运行库，并立即打开下载引导窗口重新安装。</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">将清除 ML 依赖与模型权重（保留运行环境），并立即打开下载引导窗口重新安装。</p>
             </div>
             <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
               <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
@@ -641,7 +638,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
               <h3 className="text-base font-bold text-red-700 dark:text-red-400">再次确认</h3>
             </div>
             <div className="px-6 py-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">此操作将<span className="font-bold text-red-600 dark:text-red-400">删除全部已下载的模型与运行库</span>，不可撤销。确认后立即打开下载引导。</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">此操作将<span className="font-bold text-red-600 dark:text-red-400">删除 ML 依赖与全部模型权重</span>（运行环境保留），不可撤销。确认后立即打开下载引导。</p>
             </div>
             <div className="flex gap-2 justify-end px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
               <button className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors"
