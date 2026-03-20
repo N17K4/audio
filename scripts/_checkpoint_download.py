@@ -614,20 +614,6 @@ def download_hf_cache(
 
 
 
-# clone 后删除的开发专用目录和文件（不影响运行时）
-_FACEFUSION_RM = [
-    ".github",
-    "tests",
-    ".coveragerc",
-    ".editorconfig",
-    ".flake8",
-    ".gitignore",
-    "mypy.ini",
-    "README.md",
-    "LICENSE.md",
-]
-
-
 def get_facefusion_packages_dir(project_root: Path, checkpoints_base: "Path | None" = None) -> Path:
     """返回 FaceFusion 独立 site-packages 目录。
 
@@ -651,93 +637,26 @@ def setup_facefusion_engine(
     checkpoints_base: "Path | None" = None,
     pypi_mirror: str = "",
 ) -> bool:
-    """克隆 FaceFusion 3.5.4 并精简到运行时所需文件，再运行 install.py。
+    """为 FaceFusion 安装 pip 依赖到独立 .packages 目录。
 
-    与 setup-engines.py 里 fish_speech / seed_vc 的模式一致：
-    git clone --depth 1 --branch 3.5.4 → 删除开发目录 → python install.py
+    引擎源码由 runtime 阶段（pnpm run runtime）clone，打包时通过
+    extraResources 同梱，此处仅负责安装 Python 依赖。
     """
-    import shutil
-
     # 优先用 resources_root（打包后指向 app.asar 旁的资源目录）
     runtime_root = resources_root if (resources_root / "runtime").exists() else project_root
     engine_dir = runtime_root / "runtime" / "engine" / "facefusion"
     sentinel = engine_dir / "facefusion" / "__init__.py"
 
-    # ── Step 1: git clone（优先）或 zip 下载（git 不可用时回退）────────────
-    if sentinel.exists():
-        emit("log", message="  ✓ FaceFusion 引擎目录已存在，跳过 clone")
-        print(f"  ✓ FaceFusion 引擎已存在（{sentinel}）")
-    else:
-        if engine_dir.exists():
-            shutil.rmtree(engine_dir)
+    if not sentinel.exists():
+        print(f"  ✗ FaceFusion 引擎未找到（{sentinel}），请先运行 pnpm run runtime")
+        emit("log", message="  ✗ FaceFusion 引擎未找到，请先运行 pnpm run runtime")
+        return False
 
-        # 检测 git 是否可用
-        has_git = shutil.which("git") is not None
-        clone_ok = False
+    print(f"  ✓ FaceFusion 引擎已存在（{sentinel}）")
 
-        if has_git:
-            emit("log", message="  正在克隆 FaceFusion 3.5.4（仅 HEAD，约 10 MB）...")
-            print(f"  [facefusion] git clone --depth 1 --branch 3.5.4 → {engine_dir}")
-            r = subprocess.run(
-                ["git", "clone", "--depth", "1", "--branch", "3.5.4",
-                 "https://github.com/facefusion/facefusion.git", str(engine_dir)],
-                capture_output=True, text=True,
-            )
-            clone_ok = r.returncode == 0
-            if not clone_ok:
-                msg = r.stderr.strip()[:300]
-                print(f"  ⚠ git clone 失败，回退到 zip 下载: {msg}")
-                emit("log", message="  ⚠ git clone 失败，回退到 zip 下载")
-
-        if not clone_ok:
-            # Fallback: 下载 GitHub zip 归档（无需 git）
-            import io
-            import zipfile
-            import urllib.request
-
-            zip_url = "https://github.com/facefusion/facefusion/archive/refs/tags/3.5.4.zip"
-            emit("log", message="  正在下载 FaceFusion 3.5.4 zip 归档（约 10 MB）...")
-            print(f"  [facefusion] 下载 zip: {zip_url}")
-            try:
-                req = urllib.request.Request(zip_url, headers={"User-Agent": "AI-Workshop"})
-                with urllib.request.urlopen(req, timeout=300) as resp:
-                    zip_data = resp.read()
-                with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-                    # zip 内顶层目录为 facefusion-3.5.4/，解压后重命名
-                    tmp_extract = engine_dir.parent / "_facefusion_tmp"
-                    if tmp_extract.exists():
-                        shutil.rmtree(tmp_extract)
-                    zf.extractall(tmp_extract)
-                    # 找到解压后的顶层目录
-                    extracted = list(tmp_extract.iterdir())
-                    if len(extracted) == 1 and extracted[0].is_dir():
-                        extracted[0].rename(engine_dir)
-                    else:
-                        tmp_extract.rename(engine_dir)
-                    if tmp_extract.exists():
-                        shutil.rmtree(tmp_extract, ignore_errors=True)
-                clone_ok = True
-            except Exception as exc:
-                print(f"  ✗ zip 下载失败: {exc}")
-                emit("log", message=f"  ✗ zip 下载失败: {str(exc)[:200]}")
-                return False
-
-        # 删除开发专用目录和文件
-        for name in _FACEFUSION_RM:
-            p = engine_dir / name
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-            elif p.is_file():
-                p.unlink(missing_ok=True)
-
-        n = sum(1 for _ in engine_dir.rglob("*") if _.is_file())
-        print(f"  ✓ clone 完成，已精简（{n} 个文件）")
-        emit("log", message="  ✓ 克隆完成，开发文件已清理")
-
-    # ── Step 2: 当前脚本已由嵌入式 Python 执行，直接复用 ─────────────────
     py = sys.executable
 
-    # ── Step 3: 直接用嵌入式 pip 安装依赖（绕过 install.py 的 conda 检查）──────
+    # ── 直接用嵌入式 pip 安装依赖（绕过 install.py 的 conda 检查）──────
     # FaceFusion 的 install.py 需要 conda，但我们用的是嵌入式 Python，直接读 requirements.txt
     req_file = engine_dir / "requirements.txt"
     if not req_file.exists():
