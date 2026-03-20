@@ -20,7 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-from wrappers._common import get_root, get_engine_dir
+from _common import get_root, get_engine_dir
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,6 +106,15 @@ def main() -> int:
     # GPT-SoVITS 内部使用 os.getcwd() 的相对路径定位 pretrained_models
     original_cwd = os.getcwd()
     os.chdir(engine_dir_str)
+
+    # GPT-SoVITS engine 初始化失败时会 fall back 到相对路径
+    # GPT_SoVITS/pretrained_models/ → 需要指向 checkpoint_dir
+    pretrained_link = engine_dir / "GPT_SoVITS" / "pretrained_models"
+    if not pretrained_link.exists() and checkpoint_dir:
+        try:
+            pretrained_link.symlink_to(checkpoint_dir)
+        except OSError:
+            pass
 
     try:
         return _run_inference(args, output_path, checkpoint_dir)

@@ -24,7 +24,7 @@ import sys
 import time
 from pathlib import Path
 
-from wrappers._common import get_root, get_embedded_python
+from _common import get_root, get_embedded_python
 
 
 def parse_args() -> argparse.Namespace:

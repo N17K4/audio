@@ -149,21 +149,7 @@
       },
       "code_dir": "runtime/engine/fish_speech",
       "checkpoint_dir": "runtime/checkpoints/fish_speech",
-      "pip_packages": [
-        "huggingface_hub>=1.3.0,<2.0",
-        "setuptools",
-        "wheel",
-        "loguru",
-        "natsort",
-        "soundfile",
-        "loralib",
-        "pyrootutils",
-        "pydantic",
-        "rich",
-        "click",
-        "tqdm",
-        "tiktoken"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchaudio",
@@ -220,12 +206,7 @@
       },
       "code_dir": "runtime/engine/seed_vc",
       "checkpoint_dir": "runtime/checkpoints/seed_vc",
-      "pip_packages": [
-        "huggingface_hub>=1.3.0,<2.0",
-        "setuptools",
-        "wheel",
-        "munch"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchaudio",
@@ -352,9 +333,7 @@
       },
       "code_dir": "runtime/engine/faster_whisper",
       "checkpoint_dir": "runtime/checkpoints/faster_whisper",
-      "pip_packages": [
-        "faster-whisper==1.2.1"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [],
       "readiness_check_file": "large-v3/model.bin",
       "_note": "模型由 prefetch_faster_whisper_model() 下载到 checkpoint_dir/large-v3/，readiness_check_file 供 health.py 判断就绪状态",
@@ -393,13 +372,7 @@
       },
       "code_dir": "runtime/engine/got_ocr",
       "checkpoint_dir": "runtime/checkpoints/got_ocr",
-      "pip_packages": [
-        "huggingface_hub>=1.3.0,<2.0",
-        "transformers>=4.48,<6",
-        "tiktoken",
-        "verovio",
-        "pymupdf"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchvision",
@@ -426,18 +399,7 @@
       },
       "code_dir": "runtime/engine/liveportrait",
       "checkpoint_dir": "runtime/checkpoints/liveportrait",
-      "pip_packages": [
-        "imageio",
-        "imageio-ffmpeg",
-        "av",
-        "omegaconf",
-        "einops",
-        "safetensors",
-        "onnx",
-        "onnxruntime",
-        "scikit-image",
-        "pykalman"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchvision",
@@ -654,13 +616,7 @@
       },
       "code_dir": "runtime/engine/wan",
       "checkpoint_dir": "runtime/checkpoints/wan",
-      "pip_packages": [
-        "huggingface_hub>=1.3.0,<2.0",
-        "diffusers>=0.30",
-        "accelerate",
-        "imageio",
-        "imageio-ffmpeg"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchvision",
@@ -689,14 +645,7 @@
       },
       "code_dir": "runtime/engine/flux",
       "checkpoint_dir": "runtime/checkpoints/flux",
-      "pip_packages": [
-        "huggingface_hub>=1.3.0,<2.0",
-        "gguf",
-        "diffusers>=0.32",
-        "accelerate",
-        "sentencepiece",
-        "protobuf"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchvision",
@@ -772,11 +721,7 @@
       "description": "Stable Diffusion Turbo 本地图像生成（~2.3 GB，无需 HF 账号，1-4 步，512px）",
       "code_dir": "runtime/engine/sd",
       "checkpoint_dir": "runtime/checkpoints/sd",
-      "pip_packages": [
-        "diffusers>=0.21",
-        "accelerate",
-        "safetensors"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchvision",
@@ -805,26 +750,27 @@
       "description": "GPT-SoVITS v2 角色声音克隆 TTS（少量数据训练或加载社区模型）",
       "code_dir": "runtime/engine/gpt_sovits",
       "checkpoint_dir": "runtime/checkpoints/gpt_sovits",
-      "pip_packages": [
-        "huggingface_hub>=1.3.0,<2.0",
-        "setuptools",
-        "wheel",
-        "cn2an",
-        "pypinyin",
-        "jieba",
-        "wordsegment",
-        "g2p_en",
-        "LangSegment"
-      ],
+      "pip_packages": [],
       "runtime_pip_packages": [
         "torch",
         "torchaudio",
-        "transformers",
+        "transformers>=4.43,<=4.50",
         "einops",
         "soundfile",
-        "librosa",
-        "pytorch_lightning",
-        "x_transformers"
+        "librosa==0.10.2",
+        "pytorch_lightning>=2.4",
+        "x_transformers",
+        "peft<0.18.0",
+        "sentencepiece",
+        "modelscope",
+        "funasr==1.0.27",
+        "rotary_embedding_torch",
+        "torchmetrics<=1.5",
+        "ctranslate2>=4.0,<5",
+        "av>=11",
+        "scipy",
+        "numba",
+        "tensorboard"
       ],
       "checkpoint_files": [
         {

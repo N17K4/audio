@@ -25,7 +25,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from wrappers._common import get_root
+from _common import get_root
 
 # macOS ARM：PYTORCH_ENABLE_MPS_FALLBACK 允许不支持的算子自动降级到 CPU
 if not os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK"):

@@ -20,34 +20,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── backend Python 依赖（poetry → pip） ──────────────────────────────────────
-COPY backend/pyproject.toml backend/poetry.lock* ./backend/
+# ── backend Python 依赖 + 引擎 pip_packages（requirements.txt 統合済み） ────
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
-RUN pip install --no-cache-dir poetry \
-    && cd backend \
-    && poetry config virtualenvs.create false \
-    && poetry install --no-root --no-interaction \
-    && pip uninstall -y poetry \
-    && rm -rf /root/.cache/pip /root/.cache/pypoetry
-
-# ── 引擎 pip_packages（轻量依赖，manifest.json 中定义） ──────────────────────
+# ── 引擎 runtime_pip_packages（ML 重型包、manifest.json 中定義） ─────────────
 # 先拷贝 manifest + 安装脚本，利用 Docker 缓存
 COPY backend/wrappers/manifest.json ./backend/wrappers/manifest.json
 COPY scripts/runtime.py scripts/_checkpoint_download.py ./scripts/
 
-# 从 manifest.json 提取所有 pip_packages + runtime_pip_packages 并安装
-# 使用 Python 解析 JSON，避免引入 jq 等额外依赖
+# 从 manifest.json 提取 runtime_pip_packages 并安装
 RUN python -c "\
-import json, subprocess, sys; \
+import json; \
 m = json.load(open('backend/wrappers/manifest.json')); \
 engines = m.get('engines', {}); \
 pkgs = set(); \
-skip = {'rvc-python==0.1.5'};  # rvc-python 需要特殊安装流程 \
 for e in engines.values(): \
-    for p in e.get('pip_packages', []) + e.get('runtime_pip_packages', []): \
-        if p not in skip: pkgs.add(p); \
+    for p in e.get('runtime_pip_packages', []): \
+        pkgs.add(p); \
 pkgs = sorted(pkgs); \
-print(f'安装 {len(pkgs)} 个引擎依赖...'); \
+print(f'安装 {len(pkgs)} 个运行时 ML 依赖...'); \
 open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs)); \
 " && pip install --no-cache-dir -r /tmp/engine_reqs.txt && rm /tmp/engine_reqs.txt
 

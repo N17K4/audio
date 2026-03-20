@@ -7,7 +7,6 @@ const { PROJECT_ROOT, LOGS_DIR, CACHE_DIR, getCheckpointsDir, getUserPackagesDir
 const { electronLog, frontendLog } = require('./logger');
 const state = require('./state');
 const { getAvailablePort, waitBackendReady, waitFrontendReady } = require('./utils');
-const { registerSetupIpc } = require('./ipc-setup');
 const { registerAppIpc } = require('./ipc-app');
 
 // 开発モード：main.js / preload.js 変動で自動再起動
@@ -63,7 +62,6 @@ app.commandLine.appendSwitch('lang', 'zh-CN');
 }());
 
 // ─── IPC ハンドラ登録 ─────────────────────────────────────────────────────────
-registerSetupIpc();
 registerAppIpc();
 
 // ─── メインウィンドウ作成 ─────────────────────────────────────────────────────
@@ -273,7 +271,6 @@ ipcMain.handle('dialog:selectDir', async () => {
 });
 
 app.on('before-quit', () => {
-  if (state.downloadProc) { state.downloadProc.kill(); state.downloadProc = null; }
   try {
     const { execSync } = require('child_process');
     if (process.platform === 'win32') {

@@ -209,13 +209,49 @@ for name, spec in deps.items():
 
 
 def install_backend_deps(project_root: Path, py: str) -> bool:
-    """用嵌入式 Python 的 pip 安装 backend/pyproject.toml 的依赖。"""
+    """用嵌入式 Python 的 pip 安装 backend 依赖。
+
+    优先使用预生成的 requirements.txt（由 poetry export 生成），
+    找不到时回退到解析 pyproject.toml。
+    """
+    req_file = project_root / "backend" / "requirements.txt"
+
+    if req_file.exists():
+        # 优先使用预生成的 requirements.txt
+        reqs = [line.strip() for line in req_file.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+        if not reqs:
+            print("  ⚠ requirements.txt 为空")
+            return True
+        print(f"  使用 requirements.txt（{len(reqs)} 个依赖）")
+        r = subprocess.run(
+            [py, "-m", "pip", "install", "-r", str(req_file), *_pip_mirror_args(), "--quiet"],
+            text=True, timeout=600,
+        )
+        if r.returncode != 0:
+            print("  ✗ backend 依赖安装失败")
+            return False
+        print("  ✓ backend 依赖安装完成")
+        return True
+
+    # 回退：尝试用 poetry export 生成 requirements.txt
     pyproject = project_root / "backend" / "pyproject.toml"
     if not pyproject.exists():
         print(f"  ⚠ {pyproject} 不存在，跳过 backend 依赖安装")
         return True
 
-    # 用嵌入式 Python 解析 pyproject.toml（它有 tomli/tomllib）
+    print("  requirements.txt 不存在，尝试 poetry export 生成...")
+    export_result = subprocess.run(
+        ["poetry", "export", "-f", "requirements.txt", "--without-hashes",
+         "-o", str(req_file)],
+        capture_output=True, text=True, cwd=str(project_root / "backend"),
+    )
+    if export_result.returncode == 0 and req_file.exists():
+        print("  ✓ 已通过 poetry export 生成 requirements.txt")
+        return install_backend_deps(project_root, py)  # 递归调用，走 req_file 分支
+
+    # 最终回退：直接解析 pyproject.toml
+    print("  poetry export 不可用，回退到解析 pyproject.toml")
     result = subprocess.run(
         [py, "-c", _PARSE_PYPROJECT_SCRIPT, str(pyproject)],
         capture_output=True, text=True,
@@ -230,11 +266,11 @@ def install_backend_deps(project_root: Path, py: str) -> bool:
         return True
 
     print(f"  共 {len(reqs)} 个 backend 依赖")
-    req_file = project_root / "backend" / "_requirements_tmp.txt"
-    req_file.write_text("\n".join(reqs), encoding="utf-8")
+    tmp_req_file = project_root / "backend" / "_requirements_tmp.txt"
+    tmp_req_file.write_text("\n".join(reqs), encoding="utf-8")
     try:
         r = subprocess.run(
-            [py, "-m", "pip", "install", "-r", str(req_file), *_pip_mirror_args(), "--quiet"],
+            [py, "-m", "pip", "install", "-r", str(tmp_req_file), *_pip_mirror_args(), "--quiet"],
             text=True, timeout=600,
         )
         if r.returncode != 0:
@@ -243,7 +279,7 @@ def install_backend_deps(project_root: Path, py: str) -> bool:
         print("  ✓ backend 依赖安装完成")
         return True
     finally:
-        req_file.unlink(missing_ok=True)
+        tmp_req_file.unlink(missing_ok=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1195,19 +1231,22 @@ def download_pandoc(project_root: Path) -> bool:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _install_engine(engine_name: str, engines: dict, py: str, project_root: Path) -> bool:
-    """安装单个引擎的 pip_packages + 源码。返回是否成功。"""
+    """安装单个引擎的 pip_packages + 源码。返回是否成功。
+
+    注意：大部分引擎的 pip_packages 已统一到 pyproject.toml，
+    由 install_backend_deps() 通过 requirements.txt 安装。
+    此处只处理 rvc-python 特殊安装流程。
+    """
     cfg = engines.get(engine_name, {})
     packages: list[str] = cfg.get("pip_packages", [])
     ok = True
 
-    # pip_packages
+    # pip_packages — 只有 rvc 需要特殊流程（fairseq + --no-deps）
     if engine_name == "rvc":
         if not setup_rvc_engine(project_root):
             ok = False
-    elif engine_name == "flux":
-        if not setup_flux_engine(project_root, packages, py):
-            ok = False
     elif packages:
+        # manifest 中仍有残留 pip_packages 的引擎（正常应为空）
         if not setup_pip_packages(engine_name, packages, py):
             ok = False
 
@@ -1252,20 +1291,23 @@ def main_full_setup(project_root: Path) -> int:
     if not install_backend_deps(project_root, py):
         all_ok = False
 
-    # 3. 安装基础引擎 pip_packages + 源码
+    # 3. 安装基础引擎（rvc-python 特殊流程 + 源码 clone）
     print("\n=== 3/5 安装基础引擎 ===")
     for engine_name in sorted(BASE_ENGINES):
         print(f"\n▶ {engine_name}")
         if not _install_engine(engine_name, engines, py, project_root):
             all_ok = False
 
-    # 4. 安装额外引擎 pip_packages + 源码
+    # 4. 安装额外引擎（源码 clone）
+    # 注意：pip_packages 已统一到 pyproject.toml，此处只处理源码 clone
     print("\n=== 4/5 安装额外引擎 ===")
+    # 需要源码 clone 的额外引擎
+    _EXTRA_ENGINES_WITH_SOURCE = {"liveportrait"}
     for engine_name in sorted(EXTRA_ENGINES):
         cfg = engines.get(engine_name, {})
         packages = cfg.get("pip_packages", [])
         # 跳过无 pip_packages 且无源码的引擎
-        if not packages and engine_name not in ("liveportrait",):
+        if not packages and engine_name not in _EXTRA_ENGINES_WITH_SOURCE:
             continue
         print(f"\n▶ {engine_name}")
         if not _install_engine(engine_name, engines, py, project_root):

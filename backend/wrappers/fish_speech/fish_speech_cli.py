@@ -26,7 +26,7 @@ import sys
 import time
 from pathlib import Path
 
-from wrappers._common import get_engine_dir
+from _common import get_engine_dir
 
 
 def _ts() -> str:

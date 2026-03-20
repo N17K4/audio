@@ -603,15 +603,14 @@ export default function TtsPanel({
               {ttsRefRecordedObjectUrl && (
                 <div className="space-y-2">
                   <audio controls src={ttsRefRecordedObjectUrl} className="w-full h-9" />
-                  {ttsRecordingDir && window.electronAPI?.openDir && (
-                    <button
-                      onClick={() => window.electronAPI!.openDir!(ttsRecordingDir)}
+                  {ttsRecordingDir && (
+                    <a href={ttsRefRecordedObjectUrl} download={`tts_ref_recording.webm`}
                       className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
-                      打开录音目录
-                    </button>
+                      下载录音
+                    </a>
                   )}
                 </div>
               )}

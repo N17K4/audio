@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-from wrappers._common import get_root, get_engine_dir
+from _common import get_root, get_engine_dir
 
 
 def _find_engine_dir() -> str:

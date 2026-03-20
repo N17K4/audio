@@ -547,7 +547,7 @@ export default function Home() {
               const TASKS_TABS = [
                 { id: 'tasks',  label: '任务列表' },
                 { id: 'about',  label: '功能说明' },
-                ...(isElectron ? [{ id: 'models', label: '模型管理' }] : []),
+                { id: 'models', label: '模型管理' },
               ] as const;
               return (
                 <>

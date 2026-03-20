@@ -7,7 +7,7 @@ const { createAppendLogger, downloadLogFilename } = require('./logger');
 const state = require('./state');
 const { getDirSize, dirExists, readManifest, findRvcBaseModelDirs } = require('./utils');
 const { ENGINE_EXTRA_PATHS, STAGE_CLEAR_KEYS, STAGE_SCRIPTS, ALL_ENGINES, ML_INSTALL_GROUPS, CLEARABLE_DIRS } = require('./constants');
-const { openSetupGuideWindow, openDualSetupConfigWindow } = require('./windows');
+// setup-guide 相关窗口已移除，补充安装通过 Web API /system/install 实现
 const { fetchRuntimeInfo } = require('./utils');
 
 // checkpoints_extra 阶段管理的引擎
@@ -214,11 +214,7 @@ ipcMain.handle('app:clearUserData', () => {
 });
 
 ipcMain.handle('app:clearAndOpenSetup', async () => {
-  const result = _clearAllUserData();
-  if (!result.ok) return result;
-
-  openDualSetupConfigWindow();
-  return { ok: true };
+  return _clearAllUserData();
 });
 
 // ─── IPC：删除模型 ────────────────────────────────────────────────────────────
@@ -430,26 +426,10 @@ ipcMain.handle('app:clearStageAndOpenSetup', async (_event, stage) => {
       .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
   } catch {}
 
-  openSetupGuideWindow(missingEngines, stage);
   return { ok: true };
 });
 
-// ─── IPC：补充安装（不清除已有数据，直接打开引导页）─────────────────────────
-ipcMain.handle('app:supplementInstall', async (_event, stage) => {
-  const keys = STAGE_CLEAR_KEYS[stage];
-  if (!keys) return { ok: false, error: `未知阶段：${stage}` };
-
-  let missingEngines = [];
-  try {
-    const runtimeInfo = await fetchRuntimeInfo(state.backendBaseUrl);
-    missingEngines = Object.entries(runtimeInfo.engines || {})
-      .filter(([, v]) => !v.ready)
-      .map(([name, v]) => ({ engine: name, files: v.missing_checkpoints || [] }));
-  } catch {}
-
-  openSetupGuideWindow(missingEngines, stage);
-  return { ok: true };
-});
+// app:supplementInstall — 已迁移到 Web API /system/install/{stage}
 
 // ─── IPC：下载单个引擎 checkpoint ────────────────────────────────────────────
 ipcMain.handle('app:downloadEngine', (_event, engine) => {

@@ -24,7 +24,7 @@ import threading
 import time
 from pathlib import Path
 
-from wrappers._common import get_root
+from _common import get_root
 
 # 空闲超时（秒）：无请求时自动退出，释放 GPU/CPU 内存
 IDLE_TIMEOUT = 600  # 10 分钟

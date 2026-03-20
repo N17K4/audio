@@ -27,7 +27,7 @@ import sys
 import time
 from pathlib import Path
 
-from wrappers._common import get_root, get_embedded_python, get_engine_dir
+from _common import get_root, get_embedded_python, get_engine_dir
 
 
 def parse_args() -> argparse.Namespace:

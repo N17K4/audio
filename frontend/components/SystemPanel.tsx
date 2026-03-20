@@ -10,7 +10,7 @@ interface SystemPanelProps {
 
 const NAV_ITEMS = [
   { id: 'about',   label: '功能说明',   electronOnly: false, keywords: ['功能', '说明', '关于', '引擎'] },
-  { id: 'models',  label: '模型管理',   electronOnly: true,  keywords: ['模型', '磁盘', '安装', '卸载', '下载', '体积', '清除', '重置', '重新下载', '数据'] },
+  { id: 'models',  label: '模型管理',   electronOnly: false, keywords: ['模型', '磁盘', '安装', '卸载', '下载', '体积', '清除', '重置', '重新下载', '数据'] },
   { id: 'perf',    label: '性能',       electronOnly: false, keywords: ['并发', '性能', '推理', '并行'] },
 ] as const;
 
@@ -119,28 +119,57 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   const [redownloading, setRedownloading] = useState(false);
   const [redownloadMsg, setRedownloadMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const visibleNav = NAV_ITEMS.filter(item => !item.electronOnly || isElectron);
+  const visibleNav = NAV_ITEMS.filter(item => !item.electronOnly);
 
   // ── 切换 section 时自动刷新 ──────────────────────────────────────────────────
   useEffect(() => {
-    if (effectiveSection === 'models' && isElectron) { doRefreshDisk(); }
+    if (effectiveSection === 'models' && backendBaseUrl) { doRefreshDisk(); }
   }, [effectiveSection]);
 
   async function doRefreshDisk() {
+    if (!backendBaseUrl) return;
     setDiskLoading(true);
-    try { setDiskRows(await window.electronAPI?.getDiskUsage() ?? null); } catch { /**/ }
+    try {
+      const r = await fetch(`${backendBaseUrl}/system/disk-usage`);
+      if (r.ok) setDiskRows(await r.json());
+    } catch { /**/ }
     setDiskRefreshedAt(new Date());
     setDiskLoading(false);
   }
 
-  // ── 补充安装 ────────────────────────────────────────────────────────────────
+  // ── 补充安装（SSE ストリーム）────────────────────────────────────────────────
   async function doSupplementInstall(stage: string) {
+    if (!backendBaseUrl) return;
     setStageStatus(s => ({ ...s, [stage]: 'reinstalling' }));
-    const res = await window.electronAPI?.supplementInstall?.(stage);
-    if (res && !res.ok) {
-      setInstallLog(prev => [...prev, `✗ 操作失败：${res.error ?? '未知错误'}`]);
+    setInstallLogKey(stage);
+    try {
+      const r = await fetch(`${backendBaseUrl}/system/install/${stage}`, { method: 'POST' });
+      if (r.ok && r.body) {
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() || '';
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const msg = JSON.parse(line.slice(6));
+                if (msg.log) setInstallLog(prev => [...prev, msg.log]);
+              } catch { /**/ }
+            }
+          }
+        }
+      } else {
+        setInstallLog(prev => [...prev, `✗ 操作失败：HTTP ${r.status}`]);
+      }
+    } catch (e: any) {
+      setInstallLog(prev => [...prev, `✗ 操作失败：${e.message}`]);
     }
-    try { setDiskRows(await window.electronAPI?.getDiskUsage() ?? null); } catch { /**/ }
+    await doRefreshDisk();
     setStageStatus(s => ({ ...s, [stage]: 'idle' }));
   }
 
@@ -353,10 +382,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
                   {rows.map(r => (
                     <div key={r.key} className="flex items-center gap-4 px-5 py-2.5 pl-12 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
-                      <button className="flex-1 min-w-0 text-left group" title="点击打开目录"
-                        onClick={() => r.sub && window.electronAPI?.openDir?.(r.sub)}>
+                      <div className="flex-1 min-w-0 text-left">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-medium text-slate-600 dark:text-slate-300 group-hover:underline decoration-dotted underline-offset-2">
+                          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                             {r.label}
                           </span>
                           {r.estimatedSizeMb != null && r.estimatedSizeMb > 0 && (
@@ -371,7 +399,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                         {r.desc && (
                           <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-relaxed">{r.desc}</div>
                         )}
-                      </button>
+                      </div>
                       <span className="w-16 text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
                         {fmtSize(r.size)}
                       </span>
@@ -401,19 +429,20 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
               <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
                 {cacheRows.map(r => (
                   <div key={r.key} className="flex items-center justify-between px-5 py-3 gap-4">
-                    <button className="flex-1 min-w-0 text-left group" title="点击打开目录"
-                      onClick={() => r.sub && window.electronAPI?.openDir?.(r.sub)}>
-                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400 group-hover:underline decoration-dotted underline-offset-2">{r.label}</p>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{r.label}</p>
                       {r.sub && <p className="text-[11px] text-slate-400 font-mono mt-0.5 break-all">{r.sub}</p>}
-                    </button>
+                    </div>
                     <span className="text-xs text-slate-500 tabular-nums shrink-0">{fmtSize(r.size)}</span>
                     <button
                       className="shrink-0 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 transition-all disabled:opacity-50 flex items-center gap-1"
                       disabled={clearingRow[r.key] || r.size === 0}
                       onClick={async () => {
                         setClearingRow(s => ({ ...s, [r.key]: true }));
-                        await window.electronAPI?.clearDiskRow?.(r.key);
-                        try { setDiskRows(await window.electronAPI?.getDiskUsage() ?? null); } catch { /**/ }
+                        try {
+                          await fetch(`${backendBaseUrl}/system/clear/${r.key}`, { method: 'POST' });
+                        } catch { /**/ }
+                        await doRefreshDisk();
                         setClearingRow(s => ({ ...s, [r.key]: false }));
                       }}>
                       {clearingRow[r.key] ? <><Spinner />清空中</> : '清空'}
@@ -554,11 +583,17 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 disabled={clearingData}
                 onClick={async () => {
                   setClearingData(true);
-                  const res = await window.electronAPI?.clearUserData();
+                  try {
+                    const r = await fetch(`${backendBaseUrl}/system/reset`, { method: 'POST' });
+                    const res = await r.json();
+                    setClearMsg(res?.ok
+                      ? { ok: true, text: '已清除，重新启动后需要重新下载' }
+                      : { ok: false, text: `清除失败：${res?.error ?? '未知错误'}` });
+                  } catch (e: any) {
+                    setClearMsg({ ok: false, text: `清除失败：${e.message}` });
+                  }
                   setClearingData(false); setShowClearConfirm(false);
-                  setClearMsg(res?.ok
-                    ? { ok: true, text: '已清除，重新启动应用后将引导重新下载' }
-                    : { ok: false, text: `清除失败：${res?.error ?? '未知错误'}` });
+                  await doRefreshDisk();
                 }}>
                 {clearingData ? '清除中…' : '确认清除'}
               </button>
@@ -602,11 +637,17 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 disabled={redownloading}
                 onClick={async () => {
                   setRedownloading(true);
-                  const res = await window.electronAPI?.clearAndOpenSetup();
+                  try {
+                    const r = await fetch(`${backendBaseUrl}/system/reset`, { method: 'POST' });
+                    const res = await r.json();
+                    setRedownloadMsg(res?.ok
+                      ? { ok: true, text: '已清除，请通过「补充安装」按钮重新下载' }
+                      : { ok: false, text: `操作失败：${res?.error ?? '未知错误'}` });
+                  } catch (e: any) {
+                    setRedownloadMsg({ ok: false, text: `操作失败：${e.message}` });
+                  }
                   setRedownloading(false); setRedownloadStep(0);
-                  setRedownloadMsg(res?.ok
-                    ? { ok: true, text: '已清除，下载引导窗口已打开' }
-                    : { ok: false, text: `操作失败：${res?.error ?? '未知错误'}` });
+                  await doRefreshDisk();
                 }}>
                 {redownloading ? '处理中…' : '确认执行'}
               </button>
@@ -658,7 +699,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
       <div className={isEmbedded ? '' : 'flex-1 overflow-y-auto bg-slate-50 dark:bg-[#111]'}>
         <div className={isEmbedded ? '' : 'max-w-4xl px-8 py-6'}>
           {effectiveSection === 'perf'   && <SectionPerf />}
-          {effectiveSection === 'models' && isElectron && <SectionModels />}
+          {effectiveSection === 'models' && <SectionModels />}
           {effectiveSection === 'about'  && <SectionAbout />}
         </div>
       </div>

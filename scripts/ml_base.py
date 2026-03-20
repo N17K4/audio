@@ -512,7 +512,7 @@ def main():
 
     all_pkgs: list[str] = []
     for cfg in engines.values():
-        all_pkgs.extend(cfg.get("pip_packages", []))
+        # pip_packages は pyproject.toml に統合済み、ここでは runtime_pip_packages のみ収集
         all_pkgs.extend(cfg.get("runtime_pip_packages", []))
 
     packages = _dedup_packages(all_pkgs)

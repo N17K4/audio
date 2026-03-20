@@ -252,6 +252,27 @@ PYTHONPATH=backend runtime/python/mac/bin/python3 tests/smoke_test2.py  # 进阶
 
 **判定规则**：日志中 ✅ = 通过、❌ = 失败。smoke_test.py 失败时抛 AssertionError；smoke_test2.py 失败时 `return False`（前端通过 exit code 和日志 ❌ 判定）。
 
+### 开发环境 smoke test 完整步骤
+
+```bash
+# 1. 确保后端依赖就绪
+pnpm run setup && pnpm run runtime && pnpm run ml && pnpm run checkpoints
+
+# 2. 启动后端（后台）
+PYTHONPATH=backend:runtime/ml poetry -C backend run uvicorn main:app --host 127.0.0.1 --port 8000 &
+
+# 3. 等待后端就绪
+curl -s http://127.0.0.1:8000/health
+
+# 4. 运行 smoke test（用嵌入式 Python）
+PYTHONPATH=backend/wrappers:runtime/ml BACKEND_PORT=8000 runtime/python/mac/bin/python3 tests/smoke_test.py
+
+# 5. 清理
+pkill -f "uvicorn main:app"
+```
+
+也可以通过前端页面 TaskList → "运行烟雾测试" 触发（Electron 环境自动配置所有路径）。
+
 ---
 
 ## 禁止直接修改 gitignored 的外部代码
@@ -272,6 +293,16 @@ PYTHONPATH=backend runtime/python/mac/bin/python3 tests/smoke_test2.py  # 进阶
 - 大型模型文件和 `runtime/` 整个目录已 gitignore
 - fairseq 在 Python 3.12 有 dataclass 不兼容问题（afterPack.js 中有 patch）
 - MPS 补丁（macOS Apple Silicon）：`runtime.py` 自动修补 fish_speech 的 `torch.isin` dtype 不匹配
+
+
+## 开发规范：Electron / Web / Docker 兼容
+
+- **优先使用 Web 标准 API 和后端 HTTP API**，禁止在前端代码中新增 `window.electronAPI` 调用
+- 所有系统管理功能（磁盘占用、安装、清理等）统一通过 `backend/routers/system.py` 的 REST API 实现
+- 文件下载使用 `<a download>` + 后端 `/download/` 端点，不使用 `shell.openPath()`
+- **仅以下场景允许使用 Electron 原生功能**（必须用 `?.` 可选链保护）：
+    - webapp 不需要的部分功能放在系统级菜单 / 托盘时
+- 新增功能时，先确认 Docker/Web 模式下可用，再考虑 Electron 
 
 ---
 

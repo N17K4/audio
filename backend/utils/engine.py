@@ -390,11 +390,12 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
-    # 确保 backend/ 在 PYTHONPATH 中，使子进程可 import wrappers._common 等模块
+    # backend/wrappers/ を PYTHONPATH に追加（_common.py を import するため）
+    # backend/ 全体を入れると backend/models.py が GPT-SoVITS engine の models パッケージと衝突する
+    wrappers_dir = str(WRAPPERS_ROOT)
     existing_pypath = merged.get("PYTHONPATH", "")
-    app_root_str = str(APP_ROOT)
-    if app_root_str not in existing_pypath.split(os.pathsep):
-        merged["PYTHONPATH"] = app_root_str + (os.pathsep + existing_pypath if existing_pypath else "")
+    if wrappers_dir not in existing_pypath.split(os.pathsep):
+        merged["PYTHONPATH"] = wrappers_dir + (os.pathsep + existing_pypath if existing_pypath else "")
     if engine == "facefusion":
         # FaceFusion 独立 site-packages（与引擎源码同级，避免 runtime 根目录污染）
         facefusion_pkgs = RUNTIME_ROOT / "engine" / "facefusion" / ".packages"

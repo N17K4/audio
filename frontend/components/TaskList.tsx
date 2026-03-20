@@ -761,13 +761,10 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
                 <div className="flex items-center gap-2 flex-wrap">
                   <a href={job.result_url} target="_blank" rel="noreferrer"
                     className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
-                  {outputDir && window.electronAPI?.openDir && (
-                    <button
-                      onClick={() => window.electronAPI!.openDir!(outputDir)}
-                      className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap">
-                      打开目录
-                    </button>
-                  )}
+                  <a href={job.result_url} download
+                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap">
+                    下载文件
+                  </a>
                 </div>
               </div>
             );
@@ -877,14 +874,10 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试</span>
-              {downloadDir && (typeof window !== 'undefined') && (window as any).electronAPI?.openDir && (
-                <button
-                  onClick={() => (window as any).electronAPI.openDir(downloadDir)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  title={downloadDir}
-                >
-                  打开音频缓存目录
-                </button>
+              {downloadDir && (
+                <span className="text-[11px] text-slate-400 dark:text-slate-500" title={downloadDir}>
+                  缓存目录：{downloadDir}
+                </span>
               )}
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">自动提交 7 项任务验证本地引擎（TTS · STT · Seed-VC · RVC · 训练 · FaceFusion · FFmpeg）</p>
@@ -934,14 +927,10 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试 2</span>
-              {downloadDir && (typeof window !== 'undefined') && (window as any).electronAPI?.openDir && (
-                <button
-                  onClick={() => (window as any).electronAPI.openDir(downloadDir)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  title={downloadDir}
-                >
-                  打开缓存目录
-                </button>
+              {downloadDir && (
+                <span className="text-[11px] text-slate-400 dark:text-slate-500" title={downloadDir}>
+                  缓存目录：{downloadDir}
+                </span>
               )}
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">高级功能测试（RAG 知识库 · Agent 智能体 · LoRA 微调）</p>

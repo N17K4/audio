@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from wrappers._common import get_engine_dir
+from _common import get_engine_dir
 
 
 def _find_facefusion_script() -> str:
