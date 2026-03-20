@@ -248,10 +248,6 @@ def check_and_download(
                 print(f"  ✓ {rel_path}  ({dest.stat().st_size // 1024 // 1024} MB)  sha256 已记录")
                 continue
 
-        size_str = f"~{size_mb:.0f} MB" if size_mb else "未知大小"
-        status = "必填" if required else "可选"
-        print(f"  ✗ {rel_path}  [{status}] {size_str}")
-
         if not required and not explicit:
             print(f"    跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）")
             continue
@@ -467,9 +463,6 @@ def download_hf_cache(
         if blobs_real_size > 0 or direct_size > 0:
             partial_mb = max(blobs_real_size, direct_size) / 1024 / 1024
             partial_hint = f"  (已有 {partial_mb:.1f} MB 部分数据，将继续下载)"
-        msg = f"  ✗ {label}  {size_indicator} [{status}]{partial_hint}  {note}"
-        emit("log", message=msg)
-
         if not required and not force and not explicit:
             skip_msg = f"    跳过（required=false，如需下载请用 --force 或 --engine {engine_name}）"
             emit("log", message=skip_msg)
@@ -849,7 +842,6 @@ def prefetch_faster_whisper_model(
     size_hint = {"tiny": 40, "base": 150, "small": 490, "medium": 1500,
                  "large-v2": 3100, "large-v3": 3100, "large-v3-turbo": 1600}.get(model, 0)
     size_str = f"~{size_hint} MB" if size_hint else "未知大小"
-    print(f"  ✗ faster-whisper/{model}  [{size_str}]")
     emit("file_start", engine="faster_whisper", file=f"{model}/model.bin", size_mb=size_hint)
 
     if check_only:
