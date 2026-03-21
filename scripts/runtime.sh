@@ -11,9 +11,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# 激活 mise 环境（确保 python3 版本一致）
+# 使用 mise exec 确保 python3 版本一致
 if command -v mise &> /dev/null; then
-    eval "$(mise activate bash)"
+    mise exec -- python3 "$SCRIPT_DIR/runtime.py" "$@"
+else
+    python3 "$SCRIPT_DIR/runtime.py" "$@"
 fi
-
-python3 "$SCRIPT_DIR/runtime.py" "$@"

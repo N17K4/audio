@@ -369,6 +369,16 @@ async def train_voice(
         "dataset": str(dataset_path),
         "created_at": datetime.utcnow().isoformat(),
     }
+    train_params = {
+        "voice_id": safe_voice_id,
+        "engine": eng,
+        "epochs": epochs,
+        "f0_method": f0_method,
+        "sample_rate": sample_rate,
+    }
+    if eng == "gpt_sovits":
+        train_params.update({"batch_size": batch_size, "learning_rate": learning_rate})
+
     JOBS[job_id] = {
         "id": job_id,
         "type": "train",
@@ -382,6 +392,7 @@ async def train_voice(
         "result_url": None,
         "result_text": None,
         "error": None,
+        "_params": train_params,
     }
 
     if eng == "gpt_sovits":

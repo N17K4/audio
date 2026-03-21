@@ -75,6 +75,10 @@
         "to": "scripts/ml_extra.py"
       },
       {
+        "from": "tests/",
+        "to": "tests/"
+      },
+      {
         "from": "user_data/",
         "to": "user_data/"
       },

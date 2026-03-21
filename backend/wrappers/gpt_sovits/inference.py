@@ -104,6 +104,11 @@ def main() -> int:
     os.environ.setdefault("HF_HUB_CACHE", hf_cache)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_cache)
 
+    # NLTK データパス（ml_base.py でダウンロード済み）
+    nltk_data_dir = root / "runtime" / "ml" / "nltk_data"
+    if nltk_data_dir.exists():
+        os.environ.setdefault("NLTK_DATA", str(nltk_data_dir))
+
     engine_dir = _detect_engine_dir()
     if not engine_dir:
         print("[gpt_sovits] engine 目录不存在，请先运行 pnpm run setup 安装 GPT-SoVITS", file=sys.stderr)

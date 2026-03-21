@@ -101,10 +101,40 @@ def check_backend_running(base_url: str = _BASE_URL) -> bool:
         return False
 
 
+def _poll_job(job_id: str, timeout: int = 300) -> dict:
+    """轮询 GET /jobs/{job_id} 直到任务完成或超时。"""
+    import httpx
+    import time
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with httpx.Client(timeout=5) as client:
+                resp = client.get(f"{_BASE_URL}/jobs/{job_id}")
+                if resp.status_code == 200:
+                    job = resp.json()
+                    if job.get("status") in ("completed", "failed"):
+                        return job
+        except Exception:
+            pass
+        time.sleep(2)
+    return {"status": "timeout"}
+
+
 def _ok(tag: str, name: str, body: dict) -> bool:
     job_id = body.get("job_id", "")
-    suffix = f" [job_id: {job_id}]" if job_id else ""
-    print(f"✅ {tag} 通过 — {name}{suffix}")
+    if job_id:
+        print(f"  ⏳ 等待任务完成 [job_id: {job_id}]...")
+        job = _poll_job(job_id)
+        status = job.get("status", "")
+        if status == "completed":
+            print(f"✅ {tag} 通过 — {name} [job_id: {job_id}]")
+            return True
+        error = job.get("error", "未知错误")
+        print(f"❌ {tag} 失败 — {name} [job_id: {job_id}]")
+        print(f"   错误：{str(error)[:500]}")
+        raise AssertionError(f"job failed: {str(error)[:200]}")
+    print(f"✅ {tag} 通过 — {name}")
     return True
 
 

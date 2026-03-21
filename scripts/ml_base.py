@@ -592,6 +592,23 @@ def main():
             capture_output=True, timeout=60,
         )
 
+    # NLTK データダウンロード（GPT-SoVITS の英語テキスト処理に必要）
+    _emit({"type": "log", "message": "下载 NLTK 数据…"}, args.json_progress)
+    nltk_data_dir = str(Path(args.target) / "nltk_data") if args.target else ""
+    nltk_cmd = [
+        py, "-c",
+        f"import sys; sys.path.insert(0,'{args.target}'); import nltk; "
+        f"nltk.data.path.insert(0,'{nltk_data_dir}'); "
+        f"nltk.download('averaged_perceptron_tagger_eng',download_dir='{nltk_data_dir}')"
+    ] if nltk_data_dir else [
+        py, "-c", "import nltk; nltk.download('averaged_perceptron_tagger_eng')"
+    ]
+    nltk_result = subprocess.run(nltk_cmd, capture_output=True, text=True, timeout=120)
+    if nltk_result.returncode == 0:
+        _emit({"type": "log", "message": "✓ NLTK 数据下载完成"}, args.json_progress)
+    else:
+        _emit({"type": "log", "message": f"⚠ NLTK 数据下载失败: {nltk_result.stderr[:200]}"}, args.json_progress)
+
     if ok:
         _emit({"type": "log", "message": "✓ 运行库安装完成"}, args.json_progress)
         return 0

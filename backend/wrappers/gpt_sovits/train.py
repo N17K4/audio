@@ -201,9 +201,10 @@ def main() -> int:
         # 公共环境变量
         py = sys.executable
         gpt_sovits_dir = str(engine_dir / "GPT_SoVITS")
+        stubs_dir = str(Path(__file__).resolve().parent / "_stubs")
         base_env = {
             **os.environ,
-            "PYTHONPATH": f"{str(engine_dir)}:{gpt_sovits_dir}:{os.environ.get('PYTHONPATH', '')}",
+            "PYTHONPATH": f"{stubs_dir}:{str(engine_dir)}:{gpt_sovits_dir}:{os.environ.get('PYTHONPATH', '')}",
             "PYTHONIOENCODING": "utf-8",
             "inp_text": str(list_path),
             "inp_wav_dir": str(wav_dir),

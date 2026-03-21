@@ -36,6 +36,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="输出音频路径")
     parser.add_argument("--voice_ref", nargs="*", default=[], help="参考音频路径（可选，可多个）")
     parser.add_argument("--checkpoint_dir", default="", help="模型权重目录（覆盖 manifest 默认值）")
+    parser.add_argument("--top_p", type=float, default=0.7, help="Top-P 核采样（默认 0.7）")
+    parser.add_argument("--temperature", type=float, default=0.7, help="采样温度（默认 0.7）")
+    parser.add_argument("--repetition_penalty", type=float, default=1.2, help="重复惩罚（默认 1.2）")
+    parser.add_argument("--max_new_tokens", type=int, default=1024, help="最大生成 token 数（默认 1024）")
     return parser.parse_args()
 
 
@@ -193,9 +197,10 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
     sys.exit(1)
 
 
-def _send_request(socket_path: str, text: str, voice_refs: list, output: str) -> dict:
+def _send_request(socket_path: str, text: str, voice_refs: list, output: str, **kwargs) -> dict:
     """通过 socket/TCP 发送推理请求，返回响应 dict。"""
-    payload = json.dumps({"text": text, "voice_refs": voice_refs, "output": output}, ensure_ascii=False)
+    req = {"text": text, "voice_refs": voice_refs, "output": output, **kwargs}
+    payload = json.dumps(req, ensure_ascii=False)
     if _USE_TCP:
         port = int(Path(socket_path).read_text().strip())
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -286,6 +291,10 @@ def main() -> int:
             text=args.text,
             voice_refs=args.voice_ref or [],
             output=str(output_path),
+            top_p=args.top_p,
+            temperature=args.temperature,
+            repetition_penalty=args.repetition_penalty,
+            max_new_tokens=args.max_new_tokens,
         )
         print(f"[fish_speech] 收到推理响应，耗时 {_time.monotonic()-_req_t0:.1f}s", file=sys.stderr, flush=True)
     except Exception as exc:

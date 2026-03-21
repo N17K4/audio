@@ -18,10 +18,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# 激活 mise 环境（确保 pnpm、node 等可用）
-if command -v mise &> /dev/null; then
-    eval "$(mise activate bash)"
-fi
+# mise exec 用于确保 pnpm、node 等版本一致（见下方各命令调用）
 
 # ─── 颜色输出 ──────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
@@ -88,7 +85,7 @@ fi
 # ─── 1. 构建前端静态文件 ────────────────────────────────────────────────────
 log_step "1/2 构建前端"
 cd "$PROJECT_ROOT/frontend"
-pnpm build
+mise exec -- pnpm build
 cd "$PROJECT_ROOT"
 log_done "前端构建完成"
 
@@ -100,13 +97,13 @@ fi
 
 if [ "$TARGET" = "mac" ] || [ "$TARGET" = "both" ]; then
     log_info "构建 macOS..."
-    npx electron-builder --mac $FULL_FLAG $PUBLISH_FLAG
+    mise exec -- npx electron-builder --mac $FULL_FLAG $PUBLISH_FLAG
     log_done "macOS 打包完成"
 fi
 
 if [ "$TARGET" = "win" ] || [ "$TARGET" = "both" ]; then
     log_info "构建 Windows (x64)..."
-    npx electron-builder --win --x64 $FULL_FLAG $PUBLISH_FLAG
+    mise exec -- npx electron-builder --win --x64 $FULL_FLAG $PUBLISH_FLAG
     log_done "Windows 打包完成"
 fi
 

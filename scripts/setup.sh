@@ -81,14 +81,13 @@ fi
 # ─── 2. mise install — 安装 Node.js、Python、Poetry 等 ─────────────────────
 log_step "2/4 安装 Node.js、Python、Poetry 等（通过 .mise.toml）"
 $MISE_CMD install
-eval "$($MISE_CMD activate bash)"
 log_done "工具安装完成"
 
 # ─── 3. pnpm install — 安装前端和根目录依赖 ────────────────────────────────
 log_step "3/4 安装 pnpm 依赖（根目录 + 前端）"
-pnpm install
+$MISE_CMD exec -- pnpm install
 cd "$PROJECT_ROOT/frontend"
-pnpm install
+$MISE_CMD exec -- pnpm install
 cd "$PROJECT_ROOT"
 log_done "pnpm 依赖安装完成"
 

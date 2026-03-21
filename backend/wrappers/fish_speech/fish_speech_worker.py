@@ -169,7 +169,13 @@ def handle_request(conn: socket.socket, engine, last_active: list) -> None:
             if vr and Path(vr).exists() and Path(vr).stat().st_size > 0
         ]
 
-        req = ServeTTSRequest(text=text, references=references, streaming=False, format="wav")
+        req = ServeTTSRequest(
+            text=text, references=references, streaming=False, format="wav",
+            top_p=req_dict.get("top_p", 0.7),
+            temperature=req_dict.get("temperature", 0.7),
+            repetition_penalty=req_dict.get("repetition_penalty", 1.2),
+            max_new_tokens=req_dict.get("max_new_tokens", 1024),
+        )
 
         import time as _t
         _infer_t0 = _t.monotonic()

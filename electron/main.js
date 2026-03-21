@@ -198,10 +198,49 @@ async function createWindow() {
 
   pyProcess = spawn(pyCmd, pyArgs, { cwd, shell: isDev, env: backendEnv });
 
-  pyProcess.stdout.on('data', (data) => { try { process.stdout.write(`[Backend] ${data}`); } catch { /**/ } });
-  pyProcess.stderr.on('data', (data) => { try { process.stderr.write(`[Backend] ${data}`); } catch { /**/ } });
-  pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err));
-  pyProcess.on('exit', (code, signal) => { if (code !== 0) console.error(`[Backend] exited code=${code} signal=${signal}`); });
+  // ── バックエンド出力をログファイルに記録 ──
+  const _backendStderrBuf = [];
+  pyProcess.stdout.on('data', (data) => {
+    const s = data.toString().trimEnd();
+    if (s) { console.log(`[Backend:stdout] ${s}`); }
+  });
+  pyProcess.stderr.on('data', (data) => {
+    const s = data.toString().trimEnd();
+    if (s) {
+      console.error(`[Backend:stderr] ${s}`);
+      _backendStderrBuf.push(s);
+      // バッファが溢れないよう最新 200 行のみ保持
+      if (_backendStderrBuf.length > 200) _backendStderrBuf.shift();
+    }
+  });
+  pyProcess.on('error', (err) => console.error('[Python Spawn Error]:', err.message));
+
+  // ── バックエンド crash 検知 → フロントエンドに通知 ──
+  pyProcess.on('exit', (code, signal) => {
+    if (code !== 0) {
+      console.error(`[Backend] exited code=${code} signal=${signal}`);
+      if (_backendStderrBuf.length > 0) {
+        console.error(`[Backend] ── 最近の stderr 出力 (${_backendStderrBuf.length} 行) ──`);
+        for (const line of _backendStderrBuf.slice(-50)) {
+          console.error(`[Backend:stderr] ${line}`);
+        }
+      }
+      // フロントエンドにエラーを通知
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const errLines = _backendStderrBuf.slice(-20).join('\n');
+        mainWindow.webContents.executeJavaScript(`
+          document.title = 'AI Workshop — 后端启动失败';
+          if (!document.getElementById('__backend_crash_overlay')) {
+            const d = document.createElement('div');
+            d.id = '__backend_crash_overlay';
+            d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:12px 20px;font-size:14px;font-family:monospace;white-space:pre-wrap;max-height:40vh;overflow-y:auto;';
+            d.textContent = '后端启动失败 (exit code=${code}):\\n\\n' + ${JSON.stringify(errLines)};
+            document.body.prepend(d);
+          }
+        `).catch(() => {});
+      }
+    }
+  });
 
   // ── フロントエンド読み込み ──
   if (isDev) {

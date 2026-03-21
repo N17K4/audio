@@ -62,7 +62,7 @@ async def run_facefusion_i2i(
     if frame_enhancer:
         cmd.extend(["--processors", "frame_enhancer"])
     if many_faces:
-        cmd.append("--many-faces")
+        cmd.extend(["--face-selector-mode", "many"])
 
     logger.debug("[facefusion] 执行换脸: %s", " ".join(str(c) for c in cmd))
     log_ai_call("facefusion", {"source": source_image_path, "target": target_image_path, "output": output_path}, command=cmd)
