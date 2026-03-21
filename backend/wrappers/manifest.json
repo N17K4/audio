@@ -774,9 +774,8 @@
         "numba",
         "tensorboard",
         "jieba",
-        "jieba_fast",
         "g2p_en",
-        "pyopenjtalk>=0.4.1"
+        "pyopenjtalk>=0.4.1; sys_platform != 'win32'"
       ],
       "checkpoint_files": [
         {

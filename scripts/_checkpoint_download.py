@@ -830,7 +830,7 @@ except Exception as e1:
     clean_env = {k: v for k, v in runtime_env.items() if k not in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")}
     r = subprocess.run(
         [py, "-c", script],
-        capture_output=True, text=True, timeout=600,
+        capture_output=True, text=True, timeout=1800,
         env=clean_env,
     )
     if r.returncode == 0 and model_bin.exists() and model_bin.stat().st_size > 0:

@@ -144,11 +144,16 @@ async def disk_usage():
             })
 
         # ── setup 阶段 ──────────────────────────────────────────────────────
-        add("engine_runtime", "引擎运行环境",
-            str(RUNTIME_ROOT / "engine"),
-            _dir_size(RUNTIME_ROOT / "engine"),
-            stage="setup", estimated_size_mb=100,
-            desc="引擎源码（Fish Speech · GPT-SoVITS · Seed-VC · FaceFusion · LivePortrait 等）")
+        setup_size = (
+            _dir_size(RUNTIME_ROOT / "engine")
+            + _dir_size(RUNTIME_ROOT / "python")
+            + _dir_size(RUNTIME_ROOT / "bin")
+        )
+        add("engine_runtime", "运行环境",
+            str(RUNTIME_ROOT),
+            setup_size,
+            stage="setup", estimated_size_mb=600,
+            desc="嵌入式 Python + 后端依赖 + 引擎源码 + FFmpeg + Pandoc")
 
         # ── ml_base 阶段 ────────────────────────────────────────────────────
         ml_dir = ML_PACKAGES_DIR
@@ -467,13 +472,14 @@ async def browse_dir(path: str = ""):
 
 @router.get("/logs")
 async def list_logs():
-    """ログファイル一覧を返す。"""
-    if not LOGS_DIR.exists():
-        return []
-    return sorted(
-        [f.name for f in LOGS_DIR.iterdir() if f.is_file() and f.suffix == ".log"],
-        reverse=True,
-    )
+    """ログファイル一覧とディレクトリパスを返す。"""
+    files = []
+    if LOGS_DIR.exists():
+        files = sorted(
+            [f.name for f in LOGS_DIR.iterdir() if f.is_file() and f.suffix == ".log"],
+            reverse=True,
+        )
+    return {"dir": str(LOGS_DIR), "files": files}
 
 
 @router.get("/logs/{filename}")

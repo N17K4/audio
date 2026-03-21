@@ -391,6 +391,7 @@ def test_rvc_voice_convert():
         files = {"file": ("test.wav", BytesIO(wav_data), "audio/wav")}
         data = {
             "voice_id": voice_id,
+            "provider": "rvc",
             "mode": "local",
             "output_dir": str(Path(tempfile.gettempdir()) / "ai-workshop-temp" / "download"),
         }
@@ -462,6 +463,112 @@ def test_ffmpeg_media_convert():
             raise AssertionError("test failed")
 
 
+def test_rvc_create_voice():
+    """测试：RVC 音色创建（上传音频 + 训练）。"""
+    import httpx
+
+    print("🎤 测试 RVC 音色创建（训练）")
+
+    wav_data = create_test_wav(duration_sec=3)
+    # 创建一个最小 ZIP 文件包含训练音频
+    import zipfile
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr("train_sample.wav", wav_data)
+    zip_buf.seek(0)
+
+    with httpx.Client(timeout=30) as client:
+        files = {"dataset": ("dataset.zip", zip_buf, "application/zip")}
+        data = {
+            "voice_id": "smoke_test_rvc",
+            "voice_name": "烟雾测试RVC",
+            "epochs": "1",
+            "f0_method": "harvest",
+            "sample_rate": "40000",
+        }
+
+        print(f"  📤 POST /train")
+        print(f"     请求参数：voice_id={data['voice_id']}, epochs={data['epochs']}")
+
+        resp = client.post(
+            f"{_BASE_URL}/train",
+            data=data,
+            files=files,
+        )
+
+        print(f"     HTTP {resp.status_code}")
+        if resp.status_code == 200:
+            body = resp.json()
+            print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
+            if body.get("job_id"):
+                print(f"✅ 通过 — RVC 训练已排队 [job_id: {body['job_id']}]")
+            else:
+                print(f"✅ 通过 — RVC 训练响应正常")
+            return True
+        else:
+            print(f"❌ 失败 — RVC 训练 (HTTP {resp.status_code})")
+            print(f"   响应：{resp.text}")
+            raise AssertionError("test failed")
+
+
+def create_test_png() -> bytes:
+    """创建一个最小的 1x1 白色 PNG 文件。"""
+    import struct
+    import zlib
+
+    def _chunk(chunk_type: bytes, data: bytes) -> bytes:
+        raw = chunk_type + data
+        return struct.pack(">I", len(data)) + raw + struct.pack(">I", zlib.crc32(raw) & 0xFFFFFFFF)
+
+    header = b"\x89PNG\r\n\x1a\n"
+    ihdr = _chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+    raw_data = zlib.compress(b"\x00\xFF\xFF\xFF")
+    idat = _chunk(b"IDAT", raw_data)
+    iend = _chunk(b"IEND", b"")
+    return header + ihdr + idat + iend
+
+
+def test_facefusion():
+    """测试：FaceFusion 换脸（本地推理）。"""
+    import httpx
+
+    print("🎭 测试 FaceFusion 换脸")
+
+    png_data = create_test_png()
+
+    with httpx.Client(timeout=30) as client:
+        files = {
+            "source_image": ("source.png", BytesIO(png_data), "image/png"),
+            "reference_image": ("ref.png", BytesIO(png_data), "image/png"),
+        }
+        data = {
+            "provider": "facefusion",
+        }
+
+        print(f"  📤 POST /tasks/image-i2i")
+        print(f"     请求参数：{data}")
+
+        resp = client.post(
+            f"{_BASE_URL}/tasks/image-i2i",
+            data=data,
+            files=files,
+        )
+
+        print(f"     HTTP {resp.status_code}")
+        if resp.status_code == 200:
+            body = resp.json()
+            print(f"     响应：{json.dumps(body, ensure_ascii=False)}")
+            if body.get("job_id"):
+                print(f"✅ 通过 — FaceFusion 已排队 [job_id: {body['job_id']}]")
+            else:
+                print(f"✅ 通过 — FaceFusion 响应正常")
+            return True
+        else:
+            print(f"❌ 失败 — FaceFusion (HTTP {resp.status_code})")
+            print(f"   响应：{resp.text}")
+            raise AssertionError("test failed")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 主入口
 # ──────────────────────────────────────────────────────────────────────────────
@@ -487,6 +594,8 @@ if __name__ == "__main__":
         "Faster Whisper STT": test_faster_whisper_stt,
         "Seed-VC 音色转换": test_seed_vc_voice_convert,
         "RVC 音色转换": test_rvc_voice_convert,
+        "RVC 训练": test_rvc_create_voice,
+        "FaceFusion 换脸": test_facefusion,
         "FFmpeg 媒体转換": test_ffmpeg_media_convert,
     }
 

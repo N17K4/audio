@@ -161,8 +161,18 @@ async def run_smoketest():
             env["PYTHONUNBUFFERED"] = "1"
             env["PYTHONIOENCODING"] = "utf-8"
 
+            cmd = [py_cmd, "-u", str(test_file)]
+            logger.info("[smoketest] Python: %s", py_cmd)
+            logger.info("[smoketest] 测试文件: %s (存在: %s)", test_file, test_file.exists())
+            logger.info("[smoketest] PYTHONPATH: %s", env["PYTHONPATH"])
+            logger.info("[smoketest] ML_PACKAGES_DIR: %s (存在: %s)", ML_PACKAGES_DIR, Path(str(ML_PACKAGES_DIR)).exists())
+            logger.info("[smoketest] 命令: %s", " ".join(cmd))
+            yield f"data: {json.dumps({'log': f'[调试] Python: {py_cmd}'})}\n\n"
+            yield f"data: {json.dumps({'log': f'[调试] 测试文件: {test_file} (存在: {test_file.exists()})'})}\n\n"
+            yield f"data: {json.dumps({'log': f'[调试] PYTHONPATH: {env[\"PYTHONPATH\"]}'})}\n\n"
+
             proc = subprocess.Popen(
-                [py_cmd, "-u", str(test_file)],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -170,6 +180,7 @@ async def run_smoketest():
                 env=env,
                 encoding="utf-8", errors="replace",
             )
+            yield f"data: {json.dumps({'log': f'[调试] 进程已启动 (PID: {proc.pid})'})}\n\n"
 
             returncode = None
             for item in _stream_subprocess(proc):
@@ -178,6 +189,7 @@ async def run_smoketest():
                 else:
                     yield f"data: {item}\n\n"
 
+            logger.info("[smoketest] 进程结束，退出码: %s", returncode)
             if returncode == 0:
                 yield f"data: {json.dumps({'log': '─── 烟雾测试 1 执行完成 ✅'})}\n\n"
             else:
@@ -221,8 +233,18 @@ async def run_smoketest2():
             env["PYTHONUNBUFFERED"] = "1"
             env["PYTHONIOENCODING"] = "utf-8"
 
+            cmd = [py_cmd, "-u", str(test_file)]
+            logger.info("[smoketest2] Python: %s", py_cmd)
+            logger.info("[smoketest2] 测试文件: %s (存在: %s)", test_file, test_file.exists())
+            logger.info("[smoketest2] PYTHONPATH: %s", env["PYTHONPATH"])
+            logger.info("[smoketest2] ML_PACKAGES_DIR: %s (存在: %s)", ML_PACKAGES_DIR, Path(str(ML_PACKAGES_DIR)).exists())
+            logger.info("[smoketest2] 命令: %s", " ".join(cmd))
+            yield f"data: {json.dumps({'log': f'[调试] Python: {py_cmd}'})}\n\n"
+            yield f"data: {json.dumps({'log': f'[调试] 测试文件: {test_file} (存在: {test_file.exists()})'})}\n\n"
+            yield f"data: {json.dumps({'log': f'[调试] PYTHONPATH: {env[\"PYTHONPATH\"]}'})}\n\n"
+
             proc = subprocess.Popen(
-                [py_cmd, "-u", str(test_file)],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -230,6 +252,7 @@ async def run_smoketest2():
                 env=env,
                 encoding="utf-8", errors="replace",
             )
+            yield f"data: {json.dumps({'log': f'[调试] 进程已启动 (PID: {proc.pid})'})}\n\n"
 
             returncode = None
             for item in _stream_subprocess(proc):
@@ -238,6 +261,7 @@ async def run_smoketest2():
                 else:
                     yield f"data: {item}\n\n"
 
+            logger.info("[smoketest2] 进程结束，退出码: %s", returncode)
             if returncode == 0:
                 yield f"data: {json.dumps({'log': '─── 烟雾测试 2 执行完成 ✅'})}\n\n"
             else:

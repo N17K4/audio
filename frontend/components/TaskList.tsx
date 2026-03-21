@@ -602,7 +602,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">自动提交 7 项任务验证本地引擎（TTS · STT · Seed-VC · RVC · 训练 · FaceFusion · FFmpeg）</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">自动提交 10 项任务验证本地引擎（TTS · STT · Seed-VC · RVC · RVC训练 · FaceFusion · FFmpeg）</p>
           </div>
           <button
             className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
@@ -780,11 +780,15 @@ function HealthCheck({ backendBaseUrl }: { backendBaseUrl: string }) {
 function LogViewer({ backendBaseUrl }: { backendBaseUrl: string }) {
   const [logContent, setLogContent] = useState<{ name: string; content: string } | null>(null);
   const [logFiles, setLogFiles] = useState<string[]>([]);
+  const [logDir, setLogDir] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!backendBaseUrl) return;
-    fetch(`${backendBaseUrl}/system/logs`).then(r => r.json()).then(setLogFiles).catch(() => {});
+    fetch(`${backendBaseUrl}/system/logs`).then(r => r.json()).then(data => {
+      if (Array.isArray(data)) { setLogFiles(data); } // 兼容旧格式
+      else { setLogFiles(data.files || []); setLogDir(data.dir || ''); }
+    }).catch(() => {});
   }, [backendBaseUrl]);
 
   async function loadLog(name: string) {
@@ -808,7 +812,10 @@ function LogViewer({ backendBaseUrl }: { backendBaseUrl: string }) {
       <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">运行日志</span>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">查看各进程的运行日志，用于排查问题</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+            查看各进程的运行日志，用于排查问题
+            {logDir && <span className="ml-1 text-slate-300 dark:text-slate-600">· {logDir}</span>}
+          </p>
         </div>
       </div>
       <div className="px-5 py-3">

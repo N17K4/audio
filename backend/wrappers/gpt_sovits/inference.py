@@ -118,6 +118,36 @@ def main() -> int:
     if os.path.isdir(gpt_sovits_subdir) and gpt_sovits_subdir not in sys.path:
         sys.path.insert(0, gpt_sovits_subdir)
 
+    # jieba_fast は Windows でビルドできない（C 拡張必要）。
+    # GPT-SoVITS が import jieba_fast する前に、jieba で代替するシムを注入。
+    try:
+        import jieba_fast  # noqa: F401
+    except ImportError:
+        import jieba
+        jieba.setLogLevel = getattr(jieba, "setLogLevel", lambda *_: None)
+        sys.modules["jieba_fast"] = jieba
+        # jieba_fast.posseg → jieba.posseg
+        import jieba.posseg
+        sys.modules["jieba_fast.posseg"] = jieba.posseg
+
+    # pyopenjtalk は Windows で CMake ビルドが必要で失敗しやすい。
+    # 未インストール時はスタブを注入し、日本語 TTS 使用時に明確なエラーを出す。
+    try:
+        import pyopenjtalk  # noqa: F401
+    except ImportError:
+        import types
+        _stub = types.ModuleType("pyopenjtalk")
+        _stub.OPEN_JTALK_DICT_DIR = b""
+        def _not_available(*args, **kwargs):
+            raise RuntimeError(
+                "pyopenjtalk 未安装。Windows では CMake + C++ コンパイラが必要です。"
+                "日本語テキストの音素変換は利用できません。"
+            )
+        _stub.g2p = _not_available
+        _stub.run_frontend = _not_available
+        _stub.update_global_jtalk_with_user_dict = lambda *a, **k: None
+        sys.modules["pyopenjtalk"] = _stub
+
     # GPT-SoVITS 内部使用 os.getcwd() 的相对路径定位 pretrained_models
     original_cwd = os.getcwd()
     os.chdir(engine_dir_str)
