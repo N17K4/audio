@@ -81,18 +81,22 @@ async def task_tts(
 
     is_local = p in ("fish_speech", "gpt_sovits") and not cloud_endpoint.strip()
 
-    # 本地队列容量检查
+    # 本地队列容量检查：等待空位（最多 120 秒）
     if is_local:
-        local_active = sum(
-            1 for j in JOBS.values() if j.get("is_local") and j["status"] in ("queued", "running")
-        )
-        if local_active >= MAX_LOCAL_QUEUE:
+        for _ in range(60):
+            local_active = sum(
+                1 for j in JOBS.values() if j.get("is_local") and j["status"] in ("queued", "running")
+            )
+            if local_active < MAX_LOCAL_QUEUE:
+                break
+            await asyncio.sleep(2)
+        else:
             for tmp in ref_audio_tmps:
                 if tmp.exists():
                     tmp.unlink()
             raise HTTPException(
                 status_code=429,
-                detail=f"本地推理队列已满（{MAX_LOCAL_QUEUE} 个），请等待当前任务完成后再提交。",
+                detail=f"本地推理队列持续满载（{MAX_LOCAL_QUEUE} 个），等待超时，请稍后再试。",
             )
 
     label = (text[:30] + "…") if len(text) > 30 else text

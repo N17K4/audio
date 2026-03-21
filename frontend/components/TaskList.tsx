@@ -208,9 +208,11 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       hasError = true;
     }
 
-    // 从日志解析 ✅/❌ 结果
+    // 从日志解析 ✅/❌ 结果（仅解析最终汇总区域，避免与逐项日志重复）
     const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
-    for (const line of allLines) {
+    const summaryIdx = allLines.findIndex(l => l.includes('📊 测试结果汇总'));
+    const linesToParse = summaryIdx >= 0 ? allLines.slice(summaryIdx) : allLines;
+    for (const line of linesToParse) {
       const passMatch = line.match(/[✅✓]\s*(?:通过\s*—?\s*)?(.+)/);
       const failMatch = line.match(/[❌✗]\s*(?:失败\s*—?\s*)?(.+)/);
       if (passMatch) results.push({ name: passMatch[1].trim().split('：')[0].split(' [')[0], status: 'passed' });

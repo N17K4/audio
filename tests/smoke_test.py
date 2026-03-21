@@ -241,7 +241,7 @@ def test_3_1_seed_vc():
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
         files = {
-            "file": ("test.wav", BytesIO(wav_data), "audio/wav"),
+            "file": ("[3-1]test.wav", BytesIO(wav_data), "audio/wav"),
             "reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav"),
         }
         data = _seed_vc_base_data()
@@ -263,7 +263,7 @@ def test_3_2_seed_vc_advanced():
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
         files = {
-            "file": ("test.wav", BytesIO(wav_data), "audio/wav"),
+            "file": ("[3-2]test.wav", BytesIO(wav_data), "audio/wav"),
             "reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav"),
         }
         data = {
@@ -326,7 +326,7 @@ def test_4_1_rvc_convert():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[4-1]test.wav", BytesIO(wav_data), "audio/wav")}
         data = _rvc_convert_base_data(voice_id)
         print(f"  📤 POST /convert  参数：{data}")
 
@@ -351,7 +351,7 @@ def test_4_2_rvc_convert_advanced():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[4-2]test.wav", BytesIO(wav_data), "audio/wav")}
         data = {
             **_rvc_convert_base_data(voice_id),
             "pitch_shift": "3",
@@ -440,7 +440,7 @@ def test_5_faster_whisper():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[5]test.wav", BytesIO(wav_data), "audio/wav")}
         data = {"provider": "faster_whisper", "model": "large-v3"}
         print(f"  📤 POST /tasks/stt  参数：{data}")
 
@@ -468,8 +468,8 @@ def test_6_facefusion():
     png_data = create_test_png()
     with httpx.Client(timeout=30) as client:
         files = {
-            "source_image": ("source.png", BytesIO(png_data), "image/png"),
-            "reference_image": ("ref.png", BytesIO(png_data), "image/png"),
+            "source_image": ("[6]source.png", BytesIO(png_data), "image/png"),
+            "reference_image": ("[6]ref.png", BytesIO(png_data), "image/png"),
         }
         data = {"provider": "facefusion"}
         print(f"  📤 POST /tasks/image-i2i  参数：{data}")
@@ -493,7 +493,7 @@ def test_7_ffmpeg():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[7]test.wav", BytesIO(wav_data), "audio/wav")}
         data = {"action": "convert", "output_format": "mp3"}
         print(f"  📤 POST /tasks/media-convert  参数：{data}")
 

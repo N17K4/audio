@@ -94,18 +94,22 @@ async def convert(
             copy_to_output_dir(DOWNLOAD_DIR / url_name, output_dir)
         return result
 
-    # 本地推理：检查队列容量
-    local_active = sum(
-        1 for j in JOBS.values() if j.get("is_local") and j["status"] in ("queued", "running")
-    )
-    if local_active >= MAX_LOCAL_QUEUE:
+    # 本地推理：等待队列空出位置（最多等 120 秒）
+    for _ in range(60):
+        local_active = sum(
+            1 for j in JOBS.values() if j.get("is_local") and j["status"] in ("queued", "running")
+        )
+        if local_active < MAX_LOCAL_QUEUE:
+            break
+        await asyncio.sleep(2)
+    else:
         for t in ref_audio_tmps:
             t.unlink(missing_ok=True)
         if concat_ref_tmp:
             concat_ref_tmp.unlink(missing_ok=True)
         raise HTTPException(
             status_code=429,
-            detail=f"本地推理队列已满（{MAX_LOCAL_QUEUE} 个），请等待当前任务完成后再提交。",
+            detail=f"本地推理队列持续满载（{MAX_LOCAL_QUEUE} 个），等待超时，请稍后再试。",
         )
 
     # 保存输入文件，本地引擎统一转为 WAV（rvc_python/torchaudio 不支持 webm 等容器格式）
