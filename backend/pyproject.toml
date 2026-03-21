@@ -35,10 +35,7 @@ munch = "*"
 faster-whisper = "==1.2.1"
 cn2an = "*"
 pypinyin = "*"
-jieba = "*"
-jieba_fast = "*"
 wordsegment = "*"
-g2p_en = "*"
 LangSegment = "*"
 chardet = "*"
 PyYAML = "*"
@@ -50,7 +47,6 @@ g2pk2 = "*"
 ko_pron = "*"
 opencc = "*"
 ffmpeg-python = "*"
-pyopenjtalk = ">=0.4.1"
 
 [tool.poetry.group.engines-extra]
 optional = true

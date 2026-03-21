@@ -11,8 +11,8 @@ RESOURCES_ROOT = APP_ROOT
 RUNTIME_ROOT = APP_ROOT / "runtime"
 WRAPPERS_ROOT = Path(__file__).resolve().parent / "wrappers"
 
-# dev / prod 判定：dev にだけ package.json がある（prod の app/ には含まれない）
-IS_DEV = (APP_ROOT / "package.json").exists()
+# dev / prod 判定：dev にだけ .git がある（prod には含まれない）
+IS_DEV = (APP_ROOT / ".git").exists()
 
 
 def _get_user_data_base() -> Path:

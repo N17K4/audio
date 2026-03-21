@@ -311,7 +311,6 @@
         }
       ],
       "pip_packages": [
-        "rvc-python==0.1.5",
         "setuptools"
       ],
       "runtime_pip_packages": [
@@ -322,7 +321,8 @@
         "ffmpeg-python",
         "praat-parselmouth",
         "pyworld",
-        "torchcrepe"
+        "torchcrepe",
+        "rvc-python==0.1.5"
       ],
       "env_key": "RVC_CHECKPOINT_DIR"
     },
@@ -772,7 +772,11 @@
         "av>=11",
         "scipy",
         "numba",
-        "tensorboard"
+        "tensorboard",
+        "jieba",
+        "jieba_fast",
+        "g2p_en",
+        "pyopenjtalk>=0.4.1"
       ],
       "checkpoint_files": [
         {
