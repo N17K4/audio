@@ -1277,12 +1277,19 @@ def _cleanup_embedded_ml_packages(py: str) -> None:
     嵌入式 Python に入るが、ML target（torch 等）が別バージョンを必要とする。
     嵌入式側を削除して PYTHONPATH で ML target のバージョンを優先させる。
     """
-    site_dir = Path(py).resolve().parent.parent / "lib"
-    # macOS: lib/python3.12/site-packages, Windows: Lib/site-packages
-    candidates = list(site_dir.rglob("site-packages"))
-    if not candidates:
-        site_dir = Path(py).resolve().parent.parent / "Lib"
-        candidates = list(site_dir.rglob("site-packages"))
+    # Windows: python.exe は runtime/python/win/python.exe（parent = win/）
+    # macOS:   python3.12 は runtime/python/mac/bin/python3.12（parent.parent = mac/）
+    py_path = Path(py).resolve()
+    search_roots = [py_path.parent, py_path.parent.parent]
+    candidates = []
+    for root in search_roots:
+        for sub in ["lib", "Lib"]:
+            found = list((root / sub).rglob("site-packages")) if (root / sub).exists() else []
+            if found:
+                candidates = found
+                break
+        if candidates:
+            break
     if not candidates:
         return
 

@@ -284,11 +284,19 @@ def _cleanup_embedded_ml_packages(py: str, json_progress: bool) -> None:
     - numpy: torch は 2.x の C API 向けコンパイル、1.x だと segfault
     - typing_extensions: torch が 4.x の新機能を使用
     """
-    site_dir = Path(py).resolve().parent.parent / "lib"
-    candidates = list(site_dir.rglob("site-packages"))
-    if not candidates:
-        site_dir = Path(py).resolve().parent.parent / "Lib"
-        candidates = list(site_dir.rglob("site-packages"))
+    # Windows: python.exe は runtime/python/win/python.exe（parent = win/）
+    # macOS:   python3.12 は runtime/python/mac/bin/python3.12（parent.parent = mac/）
+    py_path = Path(py).resolve()
+    search_roots = [py_path.parent, py_path.parent.parent]
+    candidates = []
+    for root in search_roots:
+        for sub in ["lib", "Lib"]:
+            found = list((root / sub).rglob("site-packages")) if (root / sub).exists() else []
+            if found:
+                candidates = found
+                break
+        if candidates:
+            break
     if not candidates:
         return
 
