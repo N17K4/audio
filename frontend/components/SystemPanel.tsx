@@ -8,6 +8,9 @@ interface SystemPanelProps {
   externalSection?: string;
 }
 
+// ── モジュールレベルキャッシュ：unmount 後もインストールログを保持 ───────────
+const _spCache: { installLogs: Record<string, string[]> } = { installLogs: {} };
+
 const NAV_ITEMS = [
   { id: 'about',   label: '功能说明',   electronOnly: false, keywords: ['功能', '说明', '关于', '引擎'] },
   { id: 'models',  label: '模型管理',   electronOnly: false, keywords: ['模型', '磁盘', '安装', '卸载', '下载', '体积', '清除', '重置', '重新下载', '数据'] },
@@ -125,7 +128,8 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   const [diskLoading, setDiskLoading] = useState(false);
   const [diskRefreshedAt, setDiskRefreshedAt] = useState<Date | null>(null);
   const [clearingRow, setClearingRow] = useState<Record<string, boolean>>({});
-  const [installLogs, setInstallLogs] = useState<Record<string, string[]>>({});
+  const [installLogs, _setInstallLogs] = useState<Record<string, string[]>>(() => _spCache.installLogs);
+  const setInstallLogs: typeof _setInstallLogs = (v) => { _setInstallLogs(prev => { const next = typeof v === 'function' ? v(prev) : v; _spCache.installLogs = next; return next; }); };
   const installLogRefs = useRef<Record<string, HTMLPreElement | null>>({});
   const [stageStatus, setStageStatus] = useState<Record<string, 'idle' | 'reinstalling' | 'deleting'>>({});
 

@@ -9,6 +9,24 @@ const { spawn } = require('child_process');
 const PROJECT_ROOT = path.join(__dirname, '..');
 const resRoot = () => app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
+// ─── ログ出力（コンソール + ファイル）────────────────────────────────────────
+const logsDir = path.join(resRoot(), 'logs');
+try { fs.mkdirSync(logsDir, { recursive: true }); } catch { /**/ }
+const _logStream = (() => {
+  try {
+    return fs.createWriteStream(path.join(logsDir, 'electron.log'), { flags: 'w' });
+  } catch { return null; }
+})();
+function _writeLog(level, args) {
+  const ts = new Date().toISOString();
+  const msg = `${ts} [${level}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}\n`;
+  if (_logStream) _logStream.write(msg);
+}
+const _origLog = console.log.bind(console);
+const _origErr = console.error.bind(console);
+console.log = (...args) => { _origLog(...args); _writeLog('INFO', args); };
+console.error = (...args) => { _origErr(...args); _writeLog('ERROR', args); };
+
 // ─── 状態 ─────────────────────────────────────────────────────────────────────
 let pyProcess = null;
 let backendBaseUrl = 'http://127.0.0.1:8000';
@@ -123,6 +141,14 @@ async function createWindow() {
   });
   mainWindow = win;
   win.on('page-title-updated', e => e.preventDefault());
+
+  // フロントエンド（renderer）の console 出力をログファイルに収集
+  const _levelMap = { 0: 'LOG', 1: 'WARN', 2: 'ERROR' };
+  win.webContents.on('console-message', (_ev, level, message, line, sourceId) => {
+    const tag = _levelMap[level] || 'LOG';
+    const src = sourceId ? sourceId.split('/').pop() : '';
+    _writeLog(`FE:${tag}`, [`${message}${src ? ` (${src}:${line})` : ''}`]);
+  });
 
   const menu = Menu.buildFromTemplate([
     { role: 'appMenu' },

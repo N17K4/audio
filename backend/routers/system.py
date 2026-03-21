@@ -44,12 +44,14 @@ def _dir_size(p: Path) -> int:
         return 0
     total = 0
     try:
-        for entry in p.rglob("*"):
-            if entry.is_file():
-                try:
+        for entry in os.scandir(p):
+            try:
+                if entry.is_file(follow_symlinks=False):
                     total += entry.stat().st_size
-                except OSError:
-                    pass
+                elif entry.is_dir(follow_symlinks=False):
+                    total += _dir_size(Path(entry.path))
+            except OSError:
+                pass
     except OSError:
         pass
     return total
@@ -150,16 +152,13 @@ async def disk_usage():
             + _dir_size(RUNTIME_ROOT / "bin")
         )
         add("engine_runtime", "运行环境",
-            str(RUNTIME_ROOT),
-            setup_size,
+            str(RUNTIME_ROOT), setup_size,
             stage="setup", estimated_size_mb=600,
             desc="嵌入式 Python + 后端依赖 + 引擎源码 + FFmpeg + Pandoc")
 
         # ── ml_base 阶段 ────────────────────────────────────────────────────
-        ml_dir = ML_PACKAGES_DIR
         add("python_packages", "ML 依赖包（torch · torchaudio · transformers 等）",
-            str(ml_dir),
-            _dir_size(ml_dir),
+            str(ML_PACKAGES_DIR), _dir_size(ML_PACKAGES_DIR),
             stage="ml_base", estimated_size_mb=3000,
             desc="runtime_pip_packages 汇总去重安装")
 
@@ -205,7 +204,6 @@ async def disk_usage():
         for engine, sub, est_mb in extra_engines:
             d = CHECKPOINTS_ROOT / sub
             size = _dir_size(d)
-            # 加上 HF cache 中的模型
             hf_map = {e.get("repo_id", ""): True
                       for e in _eng(engine).get("hf_cache_downloads", [])}
             for repo_id in hf_map:
@@ -231,7 +229,11 @@ async def disk_usage():
 
         return rows
 
-    return await asyncio.to_thread(_build)
+    try:
+        return await asyncio.to_thread(_build)
+    except Exception as exc:
+        logger.error("disk-usage 计算失败: %s", exc, exc_info=True)
+        return []
 
 
 # ─── POST /system/clear/{key} ──────────────────────────────────────────────

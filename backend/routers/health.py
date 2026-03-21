@@ -169,7 +169,7 @@ async def run_smoketest():
             logger.info("[smoketest] 命令: %s", " ".join(cmd))
             yield f"data: {json.dumps({'log': f'[调试] Python: {py_cmd}'})}\n\n"
             yield f"data: {json.dumps({'log': f'[调试] 测试文件: {test_file} (存在: {test_file.exists()})'})}\n\n"
-            yield f"data: {json.dumps({'log': f'[调试] PYTHONPATH: {env[\"PYTHONPATH\"]}'})}\n\n"
+            yield f"data: {json.dumps({'log': '[调试] PYTHONPATH: ' + env['PYTHONPATH']})}\n\n"
 
             proc = subprocess.Popen(
                 cmd,
@@ -241,7 +241,7 @@ async def run_smoketest2():
             logger.info("[smoketest2] 命令: %s", " ".join(cmd))
             yield f"data: {json.dumps({'log': f'[调试] Python: {py_cmd}'})}\n\n"
             yield f"data: {json.dumps({'log': f'[调试] 测试文件: {test_file} (存在: {test_file.exists()})'})}\n\n"
-            yield f"data: {json.dumps({'log': f'[调试] PYTHONPATH: {env[\"PYTHONPATH\"]}'})}\n\n"
+            yield f"data: {json.dumps({'log': '[调试] PYTHONPATH: ' + env['PYTHONPATH']})}\n\n"
 
             proc = subprocess.Popen(
                 cmd,

@@ -18,6 +18,15 @@ interface TaskListProps {
 
 const SPRING_GREEN = '#6db33f';
 
+// ── モジュールレベルキャッシュ：unmount 後もログを保持 ─────────────────────
+type SmokeResult = Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>;
+const _cache: {
+  smokeLog: string[];
+  smokeSummary: SmokeResult;
+  smoke2Log: string[];
+  smoke2Summary: SmokeResult;
+} = { smokeLog: [], smokeSummary: [], smoke2Log: [], smoke2Summary: [] };
+
 function Spinner() {
   return (
     <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
@@ -95,16 +104,21 @@ function fmtDateTime(ts: number): string {
 export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir, downloadDir, addInstantJobResult }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
 
-  // ── 烟雾测试 ────────────────────────────────────────────────────────────────
+  // ── 烟雾测试（キャッシュから初期化、更新時にキャッシュ同期）───────────────
   const [smokeRunning, setSmokeRunning] = useState(false);
-  const [smokeLog, setSmokeLog] = useState<string[]>([]);
-  const [smokeSummary, setSmokeSummary] = useState<Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>>([]);
+  const [smokeLog, _setSmokeLog] = useState<string[]>(() => _cache.smokeLog);
+  const [smokeSummary, _setSmokeSummary] = useState<SmokeResult>(() => _cache.smokeSummary);
   const smokeLogRef = useRef<HTMLDivElement>(null);
 
   const [smoke2Running, setSmoke2Running] = useState(false);
-  const [smoke2Log, setSmoke2Log] = useState<string[]>([]);
-  const [smoke2Summary, setSmoke2Summary] = useState<Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>>([]);
+  const [smoke2Log, _setSmoke2Log] = useState<string[]>(() => _cache.smoke2Log);
+  const [smoke2Summary, _setSmoke2Summary] = useState<SmokeResult>(() => _cache.smoke2Summary);
   const smoke2LogRef = useRef<HTMLDivElement>(null);
+
+  const setSmokeLog: typeof _setSmokeLog = (v) => { _setSmokeLog(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smokeLog = next; return next; }); };
+  const setSmokeSummary: typeof _setSmokeSummary = (v) => { _setSmokeSummary(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smokeSummary = next; return next; }); };
+  const setSmoke2Log: typeof _setSmoke2Log = (v) => { _setSmoke2Log(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smoke2Log = next; return next; }); };
+  const setSmoke2Summary: typeof _setSmoke2Summary = (v) => { _setSmoke2Summary(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smoke2Summary = next; return next; }); };
 
   useEffect(() => {
     const el = smokeLogRef.current;
@@ -602,7 +616,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">自动提交 10 项任务验证本地引擎（TTS · STT · Seed-VC · RVC · RVC训练 · FaceFusion · FFmpeg）</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">7 大引擎 13 项测试（1.Fish Speech · 2.GPT-SoVITS · 3.Seed-VC · 4.RVC · 5.Faster Whisper · 6.FaceFusion · 7.FFmpeg）</p>
           </div>
           <button
             className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
