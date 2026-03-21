@@ -21,13 +21,13 @@ services:
       - logs:/app/logs
     # ── GPU 支持（需要 NVIDIA Container Toolkit） ──────────────────────────
     # 无 GPU 时注释掉 deploy 块即可，云端 API 仍可正常使用
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
