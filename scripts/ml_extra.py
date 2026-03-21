@@ -309,12 +309,9 @@ def main():
     if not args.target:
         args.target = str(project_root / "runtime" / "ml")
 
-    resources_root_env = os.getenv("RESOURCES_ROOT", "")
-    resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
+    resources_root = project_root
 
     manifest_path = resources_root / "backend" / "wrappers" / "manifest.json"
-    if not manifest_path.exists():
-        manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         _emit({"type": "log", "message": f"✗ 找不到 manifest.json"}, args.json_progress)
         return 1

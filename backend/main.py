@@ -9,14 +9,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT, RUNTIME_ROOT
+from config import APP_ROOT, DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT, RUNTIME_ROOT, ML_PACKAGES_DIR
 from logging_setup import logger
 from routers import health, voices, jobs, convert, train, tasks, rag, agent, finetune, system
 
 # ---------------------------------------------------------------------------
 # runtime/ml/ を sys.path に追加（torch 等の ML パッケージを import 可能にする）
 # ---------------------------------------------------------------------------
-_ml_dir = RUNTIME_ROOT / "ml"
+_ml_dir = ML_PACKAGES_DIR
 if _ml_dir.is_dir():
     _ml_str = str(_ml_dir)
     if _ml_str not in sys.path:

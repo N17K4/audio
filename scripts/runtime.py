@@ -1335,8 +1335,6 @@ def main_single_engine(engine: str, project_root: Path) -> int:
     """只安装指定引擎（pip_packages + 源码），供 main.js app:downloadEngine 调用。"""
     manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
-        manifest_path = Path(os.getenv("RESOURCES_ROOT", "")) / "backend" / "wrappers" / "manifest.json"
-    if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json")
         return 1
 
@@ -1344,9 +1342,6 @@ def main_single_engine(engine: str, project_root: Path) -> int:
     engines: dict = manifest.get("engines", {})
 
     py = get_embedded_python(project_root)
-    resources_root = os.getenv("RESOURCES_ROOT", "")
-    if not py and resources_root:
-        py = get_embedded_python(Path(resources_root))
     if not py:
         print("✗ 嵌入式 Python 未找到")
         return 1

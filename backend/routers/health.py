@@ -5,7 +5,7 @@ import json
 import threading
 import queue as _queue
 
-from config import BACKEND_HOST, BACKEND_PORT, USER_DATA_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings, APP_ROOT, RESOURCES_ROOT, RUNTIME_ROOT
+from config import BACKEND_HOST, BACKEND_PORT, USER_DATA_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings, APP_ROOT, RESOURCES_ROOT, RUNTIME_ROOT, ML_PACKAGES_DIR
 from utils.engine import get_checkpoint_dir, detect_ffmpeg_hwaccel
 from utils.voices import list_voices
 from logging_setup import logger
@@ -151,7 +151,7 @@ async def run_smoketest():
     def generate():
         try:
             env = os.environ.copy()
-            paths_to_add = [str(APP_ROOT), str(RUNTIME_ROOT / "ml")]
+            paths_to_add = [str(APP_ROOT), str(ML_PACKAGES_DIR)]
             existing = env.get("PYTHONPATH", "")
             for p in paths_to_add:
                 if p not in existing:
@@ -211,7 +211,7 @@ async def run_smoketest2():
         """流式输出测试结果。"""
         try:
             env = os.environ.copy()
-            paths_to_add = [str(APP_ROOT), str(RUNTIME_ROOT / "ml")]
+            paths_to_add = [str(APP_ROOT), str(ML_PACKAGES_DIR)]
             existing = env.get("PYTHONPATH", "")
             for p in paths_to_add:
                 if p not in existing:

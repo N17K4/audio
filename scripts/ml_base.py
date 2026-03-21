@@ -542,8 +542,7 @@ def main():
     # 开发模式（无 --target）：默认装到 runtime/ml/，不污染嵌入式 Python
     if not args.target:
         args.target = str(project_root / "runtime" / "ml")
-    resources_root_env = os.getenv("RESOURCES_ROOT", "")
-    resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
+    resources_root = project_root
 
     manifest_path = resources_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():

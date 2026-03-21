@@ -1,23 +1,38 @@
 import json
 import os
+import platform
 from pathlib import Path
 from typing import Dict
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 # dev: APP_ROOT = プロジェクトルート、prod: APP_ROOT = Resources/
 # backend/ が extraResources に移動したため、parent.parent はどちらも正しいルートを指す
-RESOURCES_ROOT = Path(os.getenv("RESOURCES_ROOT", str(APP_ROOT))).resolve()
-RUNTIME_ROOT = RESOURCES_ROOT / "runtime"
+RESOURCES_ROOT = APP_ROOT
+RUNTIME_ROOT = APP_ROOT / "runtime"
 WRAPPERS_ROOT = Path(__file__).resolve().parent / "wrappers"
 
-# 模型 checkpoints 目录：生产模式由 Electron 传入 CHECKPOINTS_DIR（userData/checkpoints/）
-# 开发模式回退到项目根下的 checkpoints/
-_CHECKPOINTS_DIR_ENV = os.getenv("CHECKPOINTS_DIR", "").strip()
-CHECKPOINTS_ROOT = (
-    Path(_CHECKPOINTS_DIR_ENV).resolve()
-    if _CHECKPOINTS_DIR_ENV
-    else RUNTIME_ROOT / "checkpoints"
-)
+# dev / prod 判定：dev にだけ package.json がある（prod の app/ には含まれない）
+IS_DEV = (APP_ROOT / "package.json").exists()
+
+
+def _get_user_data_base() -> Path:
+    """ユーザーデータのベースディレクトリを返す。"""
+    if IS_DEV:
+        return RUNTIME_ROOT
+    _sys = platform.system()
+    if _sys == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "AI-Workshop"
+    elif _sys == "Windows":
+        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "AI-Workshop"
+    else:
+        return Path.home() / ".local" / "share" / "AI-Workshop"
+
+
+_USER_DATA_BASE = _get_user_data_base()
+
+# ml packages / checkpoints：dev は runtime/ 配下、prod はユーザーディレクトリ
+ML_PACKAGES_DIR: Path = _USER_DATA_BASE / "ml"
+CHECKPOINTS_ROOT: Path = _USER_DATA_BASE / "checkpoints"
 
 USER_DATA_ROOT = Path(os.getenv("USER_DATA_ROOT", str(APP_ROOT / "user_data"))).resolve()
 RVC_VOICES_DIR = USER_DATA_ROOT / "rvc"

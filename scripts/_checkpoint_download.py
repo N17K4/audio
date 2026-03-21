@@ -906,8 +906,7 @@ def main() -> int:
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
-    resources_root_env = os.getenv("RESOURCES_ROOT", "")
-    resources_root = Path(resources_root_env).resolve() if resources_root_env else project_root
+    resources_root = project_root
 
     checkpoints_dir_env = os.getenv("CHECKPOINTS_DIR", "").strip()
     checkpoints_base: "Path | None" = Path(checkpoints_dir_env).resolve() if checkpoints_dir_env else None

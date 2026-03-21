@@ -11,6 +11,7 @@ from config import (
     WRAPPERS_ROOT,
     _MANIFEST,
     CHECKPOINTS_ROOT,
+    ML_PACKAGES_DIR,
 )
 from logging_setup import logger
 
@@ -363,7 +364,7 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         merged["PATH"] = ffmpeg_dir + os.pathsep + merged.get("PATH", "")
         merged.setdefault("FFMPEG_BINARY", ffmpeg_bin)
     # runtime/ml/ を PYTHONPATH に追加（torch, torchaudio 等の ML パッケージ）
-    ml_dir = str(RUNTIME_ROOT / "ml")
+    ml_dir = str(ML_PACKAGES_DIR)
     existing_pypath = merged.get("PYTHONPATH", "")
     if os.path.isdir(ml_dir) and ml_dir not in existing_pypath.split(os.pathsep):
         merged["PYTHONPATH"] = ml_dir + (os.pathsep + existing_pypath if existing_pypath else "")

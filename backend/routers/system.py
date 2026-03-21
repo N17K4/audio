@@ -22,6 +22,7 @@ from config import (
     RESOURCES_ROOT,
     RUNTIME_ROOT,
     CHECKPOINTS_ROOT,
+    ML_PACKAGES_DIR,
     WRAPPERS_ROOT,
     USER_DATA_ROOT,
     CACHE_DIR,
@@ -150,7 +151,7 @@ async def disk_usage():
             desc="引擎源码（Fish Speech · GPT-SoVITS · Seed-VC · FaceFusion · LivePortrait 等）")
 
         # ── ml_base 阶段 ────────────────────────────────────────────────────
-        ml_dir = RUNTIME_ROOT / "ml"
+        ml_dir = ML_PACKAGES_DIR
         add("python_packages", "ML 依赖包（torch · torchaudio · transformers 等）",
             str(ml_dir),
             _dir_size(ml_dir),
@@ -352,8 +353,6 @@ async def install_stage(stage: str):
         env["PYTHONPATH"] = str(APP_ROOT)
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
-        env["RESOURCES_ROOT"] = str(RESOURCES_ROOT)
-        env["CHECKPOINTS_DIR"] = str(CHECKPOINTS_ROOT)
 
         # 将 HF 镜像端点通过环境变量传递（_checkpoint_download.py 读取 HF_ENDPOINT）
         if hf_endpoint:
@@ -369,6 +368,9 @@ async def install_stage(stage: str):
 
             # 构建命令行参数：传递镜像源（各脚本支持的参数不同）
             extra_args: list[str] = []
+            # ml_base / ml_extra: --target でインストール先を指定
+            if stage in ("ml_base", "ml_extra"):
+                extra_args += ["--target", str(ML_PACKAGES_DIR)]
             if pip_mirror:
                 extra_args += ["--pypi-mirror", pip_mirror]
             # --hf-endpoint 仅 checkpoints 脚本支持

@@ -1,8 +1,7 @@
 """wrapper 脚本共通ユーティリティ。
 
 全 wrapper が子プロセスとして実行されるため、backend.config は import 不可。
-代わりに RESOURCES_ROOT 環境変数（Electron → backend → 子プロセスに継承）を使って
-runtime/ 配下のパスを解決する。
+__file__ ベースでプロジェクトルートを解決する。
 """
 
 import os
@@ -10,18 +9,13 @@ import sys
 from pathlib import Path
 
 # wrapper 脚本は backend/wrappers/{engine}/ にある → 3 段上がると backend/
-# さらに 1 段上がるとプロジェクトルート
-_FALLBACK_ROOT = Path(__file__).resolve().parent.parent.parent
+# さらに 1 段上がるとプロジェクトルート（dev / prod 共通）
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def get_root() -> Path:
-    """runtime/ 等が存在するルートディレクトリを返す。
-
-    打包後: RESOURCES_ROOT = process.resourcesPath（extraResources のルート）
-    開発時: RESOURCES_ROOT 未設定 → __file__ ベースのプロジェクトルート
-    """
-    env = os.environ.get("RESOURCES_ROOT", "").strip()
-    return Path(env).resolve() if env else _FALLBACK_ROOT
+    """runtime/ 等が存在するルートディレクトリを返す。"""
+    return _PROJECT_ROOT
 
 
 def get_runtime_root() -> Path:

@@ -161,12 +161,10 @@ async function createWindow() {
     cwd = res;
   }
 
-  // BACKEND_PORT: Electron が動的に割り当てたポート
-  // RESOURCES_ROOT: 打包後 runtime/ は app.asar 外の Resources/ にあるため必要
+  // BACKEND_PORT: Electron が動的に割り当てたポート（backend は __file__ から他のパスを自力解決）
   const backendEnv = {
     ...process.env,
     BACKEND_PORT: backendPort,
-    RESOURCES_ROOT: resRoot(),
   };
 
   console.log(`Start backend: ${pyCmd} ${pyArgs.join(' ')}`);
