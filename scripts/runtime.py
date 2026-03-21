@@ -895,7 +895,7 @@ def setup_gpt_sovits_engine(project_root: Path) -> bool:
 
 _FACEFUSION_REPO = "https://github.com/facefusion/facefusion"
 _FACEFUSION_TAG = "3.5.4"
-_FACEFUSION_KEEP = ["facefusion", "facefusion.py"]
+_FACEFUSION_KEEP = ["facefusion", "facefusion.py", "requirements.txt"]
 _FACEFUSION_RM = [".github", "tests", "docs", "assets"]
 
 
