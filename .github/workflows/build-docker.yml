@@ -34,7 +34,7 @@ jobs:
         with:
           images: ${{ env.DOCKERHUB_USERNAME }}/ai-workshop-backend
           tags: |
-            type=ref,event=branch
+            type=raw,value=latest
             type=match,pattern=d(.*),group=1
             type=sha,prefix=
 
@@ -68,7 +68,7 @@ jobs:
         with:
           images: ${{ env.DOCKERHUB_USERNAME }}/ai-workshop-frontend
           tags: |
-            type=ref,event=branch
+            type=raw,value=latest
             type=match,pattern=d(.*),group=1
             type=sha,prefix=
 
