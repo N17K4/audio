@@ -8,9 +8,10 @@ interface UseNavigationParams {
   backendBaseUrl: string;
   setMiscSubPage: (page: MiscSubPage) => void;
   fetchJobs: () => void;
+  isElectron?: boolean;
 }
 
-export function useNavigation({ backendBaseUrl, setMiscSubPage, fetchJobs }: UseNavigationParams) {
+export function useNavigation({ backendBaseUrl, setMiscSubPage, fetchJobs, isElectron }: UseNavigationParams) {
   const [taskType, setTaskType] = useState<TaskType>('tts');
   const [showHome, setShowHome] = useState(true);
   const [showTasks, setShowTasks] = useState(false);
@@ -41,7 +42,7 @@ export function useNavigation({ backendBaseUrl, setMiscSubPage, fetchJobs }: Use
     };
     if (page === 'home') { resetAll(); setShowHome(true); }
     else if (page === 'tasks') { resetAll(); setShowTasks(true); setTasksTab('tasks'); fetchJobs(); }
-    else if (page === 'system') { resetAll(); setShowTasks(true); setTasksTab('models'); }
+    else if (page === 'system') { resetAll(); setShowTasks(true); setTasksTab(isElectron ? 'models' : 'about'); }
     else if (page === 'audio_tools') {
       resetAll(); setShowAudioTools(true);
       if (subPage && ['tts', 'vc', 'asr', 'voice_chat'].includes(subPage)) setTaskType(subPage as TaskType);
