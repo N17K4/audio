@@ -114,12 +114,13 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
         // 并发数
         const n = d?.local_concurrency ?? 1;
         setConcurrency(n); setConcurrencyInput(String(n));
-        // 镜像源：有值则使用，无值则写入默认
-        const savedPip = d?.pip_mirror ?? '';
-        const savedHf = d?.hf_endpoint ?? '';
-        if (savedPip) { setPipMirror(savedPip); }
+        // 镜像源：settings 中存在该字段则使用（含空字符串=官方源），
+        // 只有字段完全不存在（undefined）时才写入默认值
+        const savedPip = d?.pip_mirror;
+        const savedHf = d?.hf_endpoint;
+        if (savedPip !== undefined && savedPip !== null) { setPipMirror(savedPip); }
         else { updateMirror('pip_mirror', PIP_DEFAULT); }
-        if (savedHf) { setHfEndpoint(savedHf); }
+        if (savedHf !== undefined && savedHf !== null) { setHfEndpoint(savedHf); }
         else { updateMirror('hf_endpoint', HF_DEFAULT); }
       })
       .catch(() => {});

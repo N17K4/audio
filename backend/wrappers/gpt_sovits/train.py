@@ -198,6 +198,31 @@ def main() -> int:
         list_path = work_dir / "train_list.txt"
         _generate_text_list(wav_dir, list_path)
 
+        # 生成 s2.json 训练配置（GPT-SoVITS 的 prepare_datasets/3-get-semantic.py 需要）
+        s2_config = {
+            "train": {"log_interval": 100, "eval_interval": 500, "seed": 1234,
+                      "epochs": args.epochs, "learning_rate": args.learning_rate,
+                      "batch_size": args.batch_size, "fp16_run": is_half,
+                      "segment_size": 20480},
+            "data": {"max_wav_value": 32768.0, "sampling_rate": 32000,
+                     "filter_length": 2048, "hop_length": 640, "win_length": 2048,
+                     "n_speakers": 0},
+            "model": {"inter_channels": 192, "hidden_channels": 192,
+                      "filter_channels": 768, "n_heads": 2, "n_layers": 6,
+                      "kernel_size": 3, "p_dropout": 0.1, "resblock": "1",
+                      "resblock_kernel_sizes": [3, 7, 11],
+                      "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+                      "upsample_rates": [10, 8, 2, 2, 2],
+                      "upsample_initial_channel": 512,
+                      "upsample_kernel_sizes": [16, 16, 8, 2, 2],
+                      "n_layers_q": 3, "use_spectral_norm": False,
+                      "semantic_frame_rate": "25hz", "freeze_quantizer": True},
+            "s2_ckpt_dir": str(voice_dir / "sovits_weights"),
+            "s1_ckpt_dir": str(voice_dir / "gpt_weights"),
+        }
+        s2_config_path = work_dir / "s2.json"
+        s2_config_path.write_text(json.dumps(s2_config, ensure_ascii=False, indent=2), encoding="utf-8")
+
         # 公共环境变量
         py = sys.executable
         gpt_sovits_dir = str(engine_dir / "GPT_SoVITS")
@@ -216,7 +241,7 @@ def main() -> int:
             "bert_pretrained_dir": str(checkpoint_dir / "chinese-roberta-wwm-ext-large"),
             "cnhubert_base_dir": str(checkpoint_dir / "chinese-hubert-base"),
             "pretrained_s2G": str(checkpoint_dir / "gsv-v2final-pretrained" / "s2G2333k.pth"),
-            "s2config_path": str(engine_dir / "GPT_SoVITS" / "configs" / "s2.json"),
+            "s2config_path": str(s2_config_path),
         }
 
         prepare_dir = engine_dir / "GPT_SoVITS" / "prepare_datasets"

@@ -109,6 +109,7 @@ def _label(name: str, suffix: str = "") -> str:
 
 def _clearable_dirs() -> Dict[str, Path | None]:
     return {
+        "python_packages":     ML_PACKAGES_DIR,
         "fish_speech_engine":  RUNTIME_ROOT / "engine" / "fish_speech",
         "seed_vc_engine":      RUNTIME_ROOT / "engine" / "seed_vc",
         "gpt_sovits_engine":   RUNTIME_ROOT / "engine" / "gpt_sovits",
@@ -279,11 +280,25 @@ async def disk_usage():
         return []
 
 
+def _abort_all_installs():
+    """実行中の全インストールプロセスを中止する。"""
+    for stage, proc in list(_INSTALL_PROCS.items()):
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            logger.info("[abort_all] 中止: %s (PID %s)", stage, proc.pid)
+        _INSTALL_PROCS.pop(stage, None)
+
+
 # ─── POST /system/clear/{key} ──────────────────────────────────────────────
 
 @router.post("/clear/{key}")
 async def clear_item(key: str):
-    """指定された key のディレクトリを削除。"""
+    """指定された key のディレクトリを削除。実行中のインストールを自動中止。"""
+    _abort_all_installs()
     dirs = _clearable_dirs()
 
     if key == "seed_vc_hf_root":
@@ -329,7 +344,8 @@ async def clear_item(key: str):
 
 @router.post("/reset")
 async def reset_all():
-    """ML 依赖 + 全模型権重 + 缓存を削除（运行环境は保留）。"""
+    """ML 依赖 + 全模型権重 + 缓存を削除（运行环境は保留）。実行中のインストールを自動中止。"""
+    _abort_all_installs()
     errors = []
     all_keys = []
     for keys in STAGE_CLEAR_KEYS.values():
@@ -348,6 +364,11 @@ async def reset_all():
                 err = _rm_dir(d)
                 if err:
                     errors.append(err)
+
+    # ML パッケージディレクトリも削除
+    err = _rm_dir(ML_PACKAGES_DIR)
+    if err:
+        errors.append(err)
 
     # checkpoints ルートも削除
     err = _rm_dir(CHECKPOINTS_ROOT)

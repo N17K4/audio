@@ -71,8 +71,8 @@ def create_test_wav(duration_sec: int = 1) -> bytes:
     return buf.getvalue()
 
 
-def create_test_png() -> bytes:
-    """创建一个最小的 1x1 白色 PNG 文件。"""
+def create_test_png(width: int = 64, height: int = 64) -> bytes:
+    """创建指定尺寸的白色 PNG 文件（默认 64x64，FaceFusion 需要足够大的图像）。"""
     import struct
     import zlib
 
@@ -81,8 +81,10 @@ def create_test_png() -> bytes:
         return struct.pack(">I", len(data)) + raw + struct.pack(">I", zlib.crc32(raw) & 0xFFFFFFFF)
 
     header = b"\x89PNG\r\n\x1a\n"
-    ihdr = _chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
-    raw_data = zlib.compress(b"\x00\xFF\xFF\xFF")
+    ihdr = _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+    # 每行: filter byte (0) + RGB × width
+    row = b"\x00" + b"\xFF\xFF\xFF" * width
+    raw_data = zlib.compress(row * height)
     idat = _chunk(b"IDAT", raw_data)
     iend = _chunk(b"IEND", b"")
     return header + ihdr + idat + iend

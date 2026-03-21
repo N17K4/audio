@@ -101,11 +101,15 @@ async def hw_accel_info():
 @router.get("/settings")
 async def get_settings():
     s = load_settings()
-    return {
+    result: dict = {
         "local_concurrency": max(1, min(4, int(s.get("local_concurrency", 1)))),
-        "pip_mirror": s.get("pip_mirror", ""),
-        "hf_endpoint": s.get("hf_endpoint", ""),
     }
+    # pip_mirror / hf_endpoint: 只有用户设置过才返回（区分"未设置"和"选择了官方源=空字符串"）
+    if "pip_mirror" in s:
+        result["pip_mirror"] = s["pip_mirror"]
+    if "hf_endpoint" in s:
+        result["hf_endpoint"] = s["hf_endpoint"]
+    return result
 
 
 @router.post("/settings")
