@@ -605,6 +605,114 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     return all_ok
 
 
+def _verify_numpy_pyd(py: str, target: str, mirror: str, json_progress: bool) -> None:
+    """Windows: numpy C 拡張（.pyd）が --target に正しくインストールされたか検証。
+
+    pip install --target で numpy wheel を展開した際、.pyd ファイルが欠落する
+    ケースがある（アンチウイルス、パス長、pip バグ等）。
+    欠落時は --force-reinstall で再インストールする。
+    """
+    core_dir = Path(target) / "numpy" / "_core"
+    if not core_dir.is_dir():
+        return  # numpy 自体が未インストール
+
+    pyd_files = list(core_dir.glob("*.pyd"))
+    if pyd_files:
+        return  # 正常
+
+    _emit({"type": "log", "message": "  ⚠ numpy C 拡張（.pyd）が欠落、強制再インストール…"}, json_progress)
+
+    # 壊れた numpy を削除してから再インストール
+    numpy_dir = Path(target) / "numpy"
+    numpy_libs = Path(target) / "numpy.libs"
+    for d in [numpy_dir, numpy_libs]:
+        if d.exists():
+            shutil.rmtree(d, ignore_errors=True)
+    # dist-info も削除
+    for di in Path(target).glob("numpy-*.dist-info"):
+        shutil.rmtree(di, ignore_errors=True)
+
+    mirror_args = ["-i", mirror] if mirror else []
+    cmd = [
+        py, "-m", "pip", "install", "numpy>=2.2,<2.3",
+        "--target", target, "--force-reinstall", "--no-deps", "-q",
+        *mirror_args,
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    # 再検証
+    pyd_after = list(core_dir.glob("*.pyd")) if core_dir.exists() else []
+    if pyd_after:
+        _emit({"type": "log", "message": f"  ✓ numpy C 拡張を修復（{len(pyd_after)} 個の .pyd）"}, json_progress)
+    else:
+        _emit({"type": "log", "message": "  ✗ numpy C 拡張の修復に失敗。アンチウイルスソフトが .pyd をブロックしている可能性があります"}, json_progress)
+
+
+def _patch_fairseq_in_target(target: str, json_progress: bool) -> None:
+    """--target にインストールされた fairseq に Python 3.12 兼容パッチを適用。
+
+    fairseq 0.12.2 は Python 3.12 の dataclass 厳格化と hydra 初期化に非互換。
+    1) __init__.py: hydra_init() を try/except で囲み、bulk import をループ化
+    2) dataclass configs: mutable default を default_factory に変換
+    """
+    fairseq_dir = Path(target) / "fairseq"
+    if not fairseq_dir.is_dir():
+        return
+
+    init_py = fairseq_dir / "__init__.py"
+    if init_py.exists():
+        text = init_py.read_text(encoding="utf-8")
+        changed = False
+
+        # hydra_init() を try/except で囲む
+        if "hydra_init()" in text and "try:\n    hydra_init()" not in text:
+            text = text.replace(
+                "hydra_init()",
+                "try:\n    hydra_init()\nexcept Exception:\n    pass  # Py3.12 兼容跳过",
+            )
+            changed = True
+
+        # bulk import を安全なループに変換
+        bulk_imports = re.findall(r"^import fairseq\.\S+.*$", text, re.MULTILINE)
+        if bulk_imports:
+            modules = [b.replace("import ", "").replace("  # noqa", "").strip() for b in bulk_imports]
+            loop = (
+                "for _m in " + repr(modules) + ":\n"
+                "    try:\n"
+                "        import importlib as _il; _il.import_module(_m)\n"
+                "    except Exception:\n"
+                "        pass\n"
+            )
+            for imp_line in bulk_imports:
+                text = text.replace(imp_line + "\n", "", 1)
+            hydra_marker = "    pass  # Py3.12 兼容跳过\n"
+            if hydra_marker in text:
+                text = text.replace(hydra_marker, hydra_marker + "\n" + loop)
+            changed = True
+
+        if changed:
+            init_py.write_text(text, encoding="utf-8")
+
+    # mutable default を default_factory に変換
+    def _fix_mutable_defaults(py_file: Path) -> None:
+        if not py_file.exists():
+            return
+        text = py_file.read_text(encoding="utf-8")
+        pattern1 = r'^(\s+\w+:\s+\w+)\s*=\s*(\w+)\(\)$'
+        def _rep1(m: re.Match) -> str:
+            prefix, typename = m.group(1), m.group(2)
+            if typename[0].isupper() and typename not in ("Optional", "List", "Dict", "Tuple", "Any"):
+                return f"{prefix} = field(default_factory={typename})"
+            return m.group(0)
+        text = re.sub(pattern1, _rep1, text, flags=re.MULTILINE)
+        text = re.sub(r'field\(default=([A-Z]\w+)\(\)\)', r'field(default_factory=\1)', text)
+        py_file.write_text(text, encoding="utf-8")
+
+    for rel in ["dataclass/configs.py", "models/transformer/transformer_config.py"]:
+        _fix_mutable_defaults(fairseq_dir / rel)
+
+    _emit({"type": "log", "message": "  ✓ fairseq Python 3.12 兼容パッチ適用済み"}, json_progress)
+
+
 def _install_rvc_to_target(py: str, target: str, pypi_mirror: str, json_progress: bool) -> bool:
     """fairseq + rvc-python を --target に安装する（RVC 用）。
 
@@ -676,12 +784,8 @@ def _install_rvc_to_target(py: str, target: str, pypi_mirror: str, json_progress
                 _emit({"type": "log", "message": f"  ✗ fairseq 安装异常: {e}"}, json_progress)
                 return False
 
-        # fairseq Python 3.12 兼容パッチ
-        try:
-            from runtime import _patch_fairseq_for_py312
-            _patch_fairseq_for_py312(py)
-        except ImportError:
-            pass  # runtime.py が見つからない場合はスキップ（パッチは afterPack でも適用される）
+        # fairseq Python 3.12 兼容パッチ（--target にインストールされた fairseq に直接適用）
+        _patch_fairseq_in_target(target, json_progress)
 
     # bitarray（fairseq 依赖）
     subprocess.run(
@@ -773,6 +877,10 @@ def main():
     # 嵌入式 Python の site-packages から ML 専用パッケージを削除
     # （numpy/typing_extensions は torch とバージョン競合するため、ML target のみ保持）
     _cleanup_embedded_ml_packages(py, args.json_progress)
+
+    # Windows: numpy C 拡張（.pyd）が欠落していないか検証し、欠落時は強制再インストール
+    if platform.system() == "Windows" and args.target:
+        _verify_numpy_pyd(py, args.target, args.pypi_mirror, args.json_progress)
 
     # macOS: 移除 quarantine 属性，防止 .so 文件被系统策略拒绝加载
     if platform.system() == "Darwin" and args.target:

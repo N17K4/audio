@@ -312,25 +312,25 @@ pkill -f "uvicorn main:app"
 
 | 文件 | 用途 |
 |------|------|
-| `Dockerfile.backend` | 后端镜像（多阶段构建：builder + runtime） |
-| `Dockerfile.frontend` | 前端镜像（Node 构建 + nginx 托管） |
-| `docker/Dockerfile.frontend.dev` | 前端开发用镜像（next dev + HMR） |
+| `docker/backend.Dockerfile` | 后端镜像（多阶段构建：builder + runtime） |
+| `docker/frontend.Dockerfile` | 前端镜像（Node 构建 + nginx 托管） |
+| `docker/frontend.dev.Dockerfile` | 前端开发用镜像（next dev + HMR） |
+| `docker/nginx.conf` | nginx 配置（静态文件 + API 反向代理到 backend:8000） |
 | `docker-compose.yml` | 本番用编排（backend + backend-gpu + frontend） |
 | `docker-compose.dev.yml` | 开发用覆盖（源码挂载 + hot reload） |
-| `docker/nginx.conf` | nginx 配置（静态文件 + API 反向代理到 backend:8000） |
 | `.dockerignore` | 排除 runtime/、模型权重、electron/、node_modules 等 |
 | `.github/workflows/build-docker.yml` | CI：构建并推送 Docker 镜像到 DockerHub |
 
-### 后端镜像（Dockerfile.backend）
+### 后端镜像（docker/backend.Dockerfile）
 
 - **多阶段构建**：builder（含编译器）→ runtime（slim，无编译器）
-- Stage 1（builder）：`requirements.txt` + manifest.json 的 `runtime_pip_packages` + fairseq/rvc 特殊安装
-- Stage 2（runtime）：系统依赖（ffmpeg/pandoc/git/libsndfile1/libgl1）+ builder 的 Python 包 + 引擎源码 clone（`runtime.py --engines-only`）
+- Stage 1（builder）：venv 内で `poetry export` → `pip install` + manifest.json の `runtime_pip_packages` + fairseq/rvc 特殊安装
+- Stage 2（runtime）：系统依赖（ffmpeg/pandoc/git/libsndfile1/libgl1）+ builder の venv コピー + 引擎源码 clone（`runtime.py --engines-only`）
 - **Checkpoints 不打入镜像**，通过 volume 挂载：`/app/runtime/checkpoints`、`/app/user_data`、`/app/cache`、`/app/logs`
 - 基础镜像：`python:3.12-slim`
 - 入口：`python backend/main.py`
 
-### 前端镜像（Dockerfile.frontend）
+### 前端镜像（docker/frontend.Dockerfile）
 
 - Stage 1：`node:20-alpine` + pnpm build → 静态文件 `out/`
 - Stage 2：`nginx:alpine`，静态文件 + `docker/nginx.conf`
@@ -351,15 +351,27 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
 - backend：源码挂载 `./backend:/app/backend` + `uvicorn --reload`
-- frontend：使用 `Dockerfile.frontend.dev`，源码挂载 + `pnpm dev`（HMR）
+- frontend：使用 `docker/frontend.dev.Dockerfile`，源码挂载 + `pnpm dev`（HMR）
 - 独立 volume `frontend_node_modules` 避免覆盖宿主 node_modules
 
-### CI（build-docker.yml）
+### CI/CD（GitHub Actions）
 
-- 触发：`d*` tag push 或手动 workflow_dispatch
-- 双平台构建：`linux/amd64` + `linux/arm64`（QEMU + buildx）
-- 推送到 DockerHub，tag 策略：`latest` + 版本号（`d1.0.0` → `1.0.0`）+ commit SHA
-- GHA cache 加速构建
+| Workflow | 触发条件 | 作用 |
+|----------|---------|------|
+| `build-mac.yml` | `v*` tag push / 手动 | Electron 双端打包（macOS + Windows）→ GitHub Release |
+| `build-docker.yml` | `d*` tag push / 手动 | Docker 双平台构建（amd64 + arm64）→ DockerHub Push |
+
+**发版流程**：
+```bash
+# Electron 桌面版发布
+git tag v1.0.3 && git push origin v1.0.3
+
+# Docker Web 版发布
+git tag d1.0.3 && git push origin d1.0.3
+```
+
+- `build-mac.yml`：单 macOS 14 runner 构建双端（mac + win），通过 `scripts/dist.sh --both` 打包，`scripts/upload.sh` 上传到 GitHub Release
+- `build-docker.yml`：双平台（linux/amd64 + linux/arm64，QEMU + buildx），推送 DockerHub，tag 策略 `latest` + 版本号 + commit SHA，GHA cache 加速
 
 ### Docker 启动命令
 

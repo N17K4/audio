@@ -22,7 +22,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # backend Python 依赖（poetry export → pip install）
-RUN pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir poetry poetry-plugin-export
 COPY backend/pyproject.toml backend/poetry.lock ./backend/
 RUN cd backend && poetry export -f requirements.txt --without-hashes -o requirements.txt \
     && pip install --no-cache-dir -r requirements.txt

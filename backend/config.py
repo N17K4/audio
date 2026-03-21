@@ -34,7 +34,14 @@ _USER_DATA_BASE = _get_user_data_base()
 ML_PACKAGES_DIR: Path = _USER_DATA_BASE / "ml"
 CHECKPOINTS_ROOT: Path = _USER_DATA_BASE / "checkpoints"
 
-USER_DATA_ROOT = Path(os.getenv("USER_DATA_ROOT", str(APP_ROOT / "user_data"))).resolve()
+# user_data：dev は APP_ROOT/user_data/、prod はユーザーディレクトリ（アプリ更新でデータ消失しない）
+_user_data_env = os.getenv("USER_DATA_ROOT", "").strip()
+if _user_data_env:
+    USER_DATA_ROOT = Path(_user_data_env).resolve()
+elif IS_DEV:
+    USER_DATA_ROOT = APP_ROOT / "user_data"
+else:
+    USER_DATA_ROOT = _USER_DATA_BASE / "user_data"
 RVC_VOICES_DIR = USER_DATA_ROOT / "rvc"
 RVC_USER_VOICES_DIR = RVC_VOICES_DIR / "user"
 SEED_VC_VOICES_DIR = USER_DATA_ROOT / "seed_vc"
@@ -85,6 +92,7 @@ def load_settings() -> Dict:
 
 
 def save_settings(data: Dict) -> None:
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -148,6 +156,7 @@ def setup_dirs():
         UPLOADS_DIR, DOWNLOAD_DIR, TRAIN_DATA_DIR, LOGS_DIR, CHECKPOINTS_ROOT,
     ]:
         d.mkdir(parents=True, exist_ok=True)
+
 
 
 setup_dirs()

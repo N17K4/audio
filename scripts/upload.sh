@@ -117,9 +117,10 @@ fi
 
 # ─── 获取版本号 ────────────────────────────────────────────────────────────
 # 优先使用 GitHub Actions 传入的 TAG_NAME，其次 git describe，最后 dev
-TAG="${TAG_NAME:-${CI_COMMIT_TAG:-$(git describe --tags 2>/dev/null || echo 'dev')}}"
-TAG="${TAG#v}"  # 移除 v 前缀
-[ -z "$TAG" ] && TAG="dev"
+RELEASE_TAG="${TAG_NAME:-${CI_COMMIT_TAG:-$(git describe --tags 2>/dev/null || echo 'dev')}}"
+[ -z "$RELEASE_TAG" ] && RELEASE_TAG="dev"
+# ZIP 文件名用不带 v 前缀的版本号，gh release 用原始 tag
+TAG="${RELEASE_TAG#v}"
 
 # ─── 1. 压缩 Zip（如果需要）────────────────────────────────────────────────
 if [ "$NO_COMPRESS" != "true" ]; then
@@ -246,16 +247,16 @@ if [ "$UPYUN_ONLY" != "true" ]; then
         if ! command -v gh &> /dev/null; then
             log_info "⚠ gh 命令未安装，跳过 Release 创建"
         else
-            log_info "创建 Release：$TAG"
-            RELEASE_NOTES="AI Workshop $TAG
+            log_info "创建 Release：$RELEASE_TAG"
+            RELEASE_NOTES="AI Workshop $RELEASE_TAG
 
 下载说明：安装包已附在本页面的 Assets 中。
 
 > AI 模型（约 6 GB）将在首次启动时弹窗引导下载，支持设置 HuggingFace 镜像。"
 
-            if ensure_release_exists "$TAG" "$RELEASE_NOTES"; then
+            if ensure_release_exists "$RELEASE_TAG" "$RELEASE_NOTES"; then
                 log_info "上传 Zip 到 GitHub Release..."
-                if gh release upload "$TAG" "$ZIP_NAME" --clobber; then
+                if gh release upload "$RELEASE_TAG" "$ZIP_NAME" --clobber; then
                     log_done "GitHub Release 上传完成"
                 else
                     log_error "GitHub Release 上传失败（但继续）"

@@ -29,7 +29,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: docker/Dockerfile.frontend.dev
+      dockerfile: docker/frontend.dev.Dockerfile
     ports: !override
       - "3000:3000"
     volumes:

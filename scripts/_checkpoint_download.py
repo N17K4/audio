@@ -237,9 +237,12 @@ def check_and_download(
     checkpoint_dir_rel = cfg.get("checkpoint_dir", f"runtime/checkpoints/{engine_name}")
     if checkpoints_base is not None and checkpoint_dir_rel.startswith("runtime/checkpoints/"):
         checkpoint_dir = checkpoints_base / checkpoint_dir_rel[len("runtime/checkpoints/"):]
+    elif checkpoints_base is not None and checkpoint_dir_rel.startswith("user_data/"):
+        # user_data/ もユーザーディレクトリに保存（アプリ更新でデータ消失しない）
+        # checkpoints_base = <USER_DATA_BASE>/checkpoints → .parent = <USER_DATA_BASE>
+        checkpoint_dir = checkpoints_base.parent / checkpoint_dir_rel
     else:
-        # user_data/ や runtime/engine/ パスはアプリバンドル内に保存
-        # （voice の meta.json と model.pth は同ディレクトリに必要）
+        # runtime/engine/ 等はアプリバンドル内に保存
         checkpoint_dir = resources_root / checkpoint_dir_rel
     checkpoint_files: list[dict] = cfg.get("checkpoint_files", [])
 
