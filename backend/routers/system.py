@@ -160,21 +160,51 @@ async def disk_usage():
             })
 
         # ── setup 阶段 ──────────────────────────────────────────────────────
-        setup_size = (
-            _dir_size(RUNTIME_ROOT / "engine")
-            + _dir_size(RUNTIME_ROOT / "python")
-            + _dir_size(RUNTIME_ROOT / "bin")
-        )
-        add("engine_runtime", "运行环境",
-            str(RUNTIME_ROOT), setup_size,
-            stage="setup", estimated_size_mb=600,
-            desc="嵌入式 Python + 后端依赖 + 引擎源码 + FFmpeg + Pandoc")
+        _py_dir = RUNTIME_ROOT / "python"
+        _eng_dir = RUNTIME_ROOT / "engine"
+        _bin_dir = RUNTIME_ROOT / "bin"
+        add("setup_python", "嵌入式 Python + 后端依赖 + 引擎 pip 包",
+            str(_py_dir), _dir_size(_py_dir),
+            stage="setup", estimated_size_mb=300,
+            desc="python-build-standalone + pyproject.toml + manifest pip_packages")
+        add("setup_engine", "引擎源码",
+            str(_eng_dir), _dir_size(_eng_dir),
+            stage="setup", estimated_size_mb=200,
+            desc="Fish Speech · Seed-VC · GPT-SoVITS · FaceFusion · LivePortrait 等")
+        add("setup_bin", "FFmpeg + Pandoc",
+            str(_bin_dir), _dir_size(_bin_dir),
+            stage="setup", estimated_size_mb=100,
+            desc="音视频处理 + 文档转换")
 
         # ── ml_base 阶段 ────────────────────────────────────────────────────
-        add("python_packages", "ML 依赖包（torch · torchaudio · transformers 等）",
-            str(ML_PACKAGES_DIR), _dir_size(ML_PACKAGES_DIR),
+        _ml_size = _dir_size(ML_PACKAGES_DIR)
+        add("python_packages", "ML 依赖包合计",
+            str(ML_PACKAGES_DIR), _ml_size,
             stage="ml_base", estimated_size_mb=3000,
-            desc="runtime_pip_packages 汇总去重安装")
+            desc="所有引擎 runtime_pip_packages 汇总去重安装到 runtime/ml/")
+        # 按引擎列出各自的 runtime_pip_packages（大小无法按引擎拆分，仅展示包列表）
+        for eng_name in ["fish_speech", "seed_vc", "rvc", "facefusion"]:
+            pkgs = _eng(eng_name).get("runtime_pip_packages", [])
+            if pkgs:
+                add(f"ml_base_{eng_name}", _label(eng_name),
+                    "", 0,
+                    stage="ml_base",
+                    desc=" · ".join(pkgs))
+
+        # ── ml_extra 阶段 ─────────────────────────────────────────────────
+        # ml_extra 与 ml_base 共享 ML_PACKAGES_DIR，无法独立计算大小，按组显示
+        add("ml_extra_rag", "RAG（llama-index · faiss）",
+            str(ML_PACKAGES_DIR), 0,
+            stage="ml_extra", estimated_size_mb=300,
+            desc="pnpm run ml:rag — 向量索引 + 检索增强生成")
+        add("ml_extra_agent", "Agent（langgraph · langchain）",
+            str(ML_PACKAGES_DIR), 0,
+            stage="ml_extra", estimated_size_mb=100,
+            desc="pnpm run ml:agent — 智能体工具调用")
+        add("ml_extra_lora", "LoRA（peft · trl · datasets）",
+            str(ML_PACKAGES_DIR), 0,
+            stage="ml_extra", estimated_size_mb=200,
+            desc="pnpm run ml:lora — 参数高效微调")
 
         # ── checkpoints_base 阶段 ───────────────────────────────────────────
         for engine in ["fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper"]:

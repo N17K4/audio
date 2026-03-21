@@ -270,12 +270,22 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
                 {isVideo && <video controls src={job.result_url} className="w-full rounded-lg max-h-48" />}
                 {isImage && <img src={job.result_url} alt="result" className="max-w-full rounded-lg max-h-48 object-contain" />}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <a href={job.result_url} target="_blank" rel="noreferrer"
-                    className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all">{job.result_url}</a>
-                  <a href={job.result_url} download
-                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap">
+                  <span className="text-[11px] text-slate-400 break-all">{job.result_url?.split('/').pop()}</span>
+                  <button
+                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch(job.result_url!);
+                        const blob = await resp.blob();
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = job.result_url!.split('/').pop() || 'download';
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      } catch { /**/ }
+                    }}>
                     下载文件
-                  </a>
+                  </button>
                 </div>
               </div>
             );
@@ -338,7 +348,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       <header className="flex items-center gap-3.5 pb-1">
         <TasksIcon size={36} badge={activeJobs.length} />
         <div className="flex-1">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">管理页面</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">任务列表</h1>
           <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT · 图像生成 · 图像处理 · 视频生成 · OCR · 口型同步 · 文档转换 · 媒体转换</p>
         </div>
         <button className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors" onClick={onFetchJobs}>刷新</button>

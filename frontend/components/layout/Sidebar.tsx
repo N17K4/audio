@@ -147,7 +147,7 @@ export default function Sidebar({
 
         {/* 底部工具区 */}
         <div className="px-2 pb-1 space-y-1">
-          <NavItem page="tasks" label="管理页面" icon={
+          <NavItem page="tasks" label="任务列表" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#15803d"/>
               <rect x="7" y="8" width="14" height="2.5" rx="1.25" fill="#bbf7d0"/>

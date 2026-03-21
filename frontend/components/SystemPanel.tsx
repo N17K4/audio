@@ -470,9 +470,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
               </div>
 
               {/* 介绍面板：子项列表 */}
-              {panel === 'info' && rows.length > 0 && (
+              {panel === 'info' && (
                 <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
-                  {rows.map(r => (
+                  {rows.length > 0 ? rows.map(r => (
                     <div key={r.key} className="flex items-center gap-4 px-5 py-2.5 pl-8 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
                       <div className="flex-1 min-w-0 text-left">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -496,7 +496,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                         {fmtSize(r.size)}
                       </span>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="px-5 py-3 pl-8 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">{meta.desc}</div>
+                  )}
                 </div>
               )}
 
