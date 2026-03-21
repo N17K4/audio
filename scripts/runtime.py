@@ -1266,7 +1266,8 @@ def _install_engine(engine_name: str, engines: dict, py: str, project_root: Path
 
 
 # ML 専用パッケージを嵌入式 Python から削除（ML target との競合防止）
-_ML_ONLY_PACKAGES = {"numpy", "numpy.libs", "typing_extensions"}
+_ML_ONLY_PACKAGES = {"numpy", "numpy.libs"}
+# typing_extensions は pip 等が依存するため嵌入式から削除してはならない
 
 
 def _cleanup_embedded_ml_packages(py: str) -> None:

@@ -270,7 +270,9 @@ def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
         _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
 
-_ML_ONLY_PACKAGES = {"numpy", "numpy.libs", "typing_extensions"}
+_ML_ONLY_PACKAGES = {"numpy", "numpy.libs"}
+# 注意: typing_extensions は pip が依存するため嵌入式 Python から削除してはならない。
+# PYTHONPATH で ML target のバージョンが優先されるため、嵌入式側に残しても問題ない。
 
 
 def _cleanup_embedded_ml_packages(py: str, json_progress: bool) -> None:
