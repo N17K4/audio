@@ -270,6 +270,46 @@ def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
         _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
 
+_ML_ONLY_PACKAGES = {"numpy", "numpy.libs", "typing_extensions"}
+
+
+def _cleanup_embedded_ml_packages(py: str, json_progress: bool) -> None:
+    """嵌入式 Python の site-packages から ML 専用パッケージを削除。
+
+    numpy / typing_extensions は backend 依赖の transitive dependency として
+    嵌入式 Python に入るが、ML target（torch 等）が別バージョンを必要とする。
+    嵌入式側を削除して PYTHONPATH で ML target のバージョンを優先させる。
+    - numpy: torch は 2.x の C API 向けコンパイル、1.x だと segfault
+    - typing_extensions: torch が 4.x の新機能を使用
+    """
+    site_dir = Path(py).resolve().parent.parent / "lib"
+    candidates = list(site_dir.rglob("site-packages"))
+    if not candidates:
+        site_dir = Path(py).resolve().parent.parent / "Lib"
+        candidates = list(site_dir.rglob("site-packages"))
+    if not candidates:
+        return
+
+    site_packages = candidates[0]
+    removed = []
+    for item in site_packages.iterdir():
+        name_lower = item.name.lower().replace("-", "_")
+        base = name_lower.split(".")[0]
+        dist_match = re.match(r"^([a-z0-9_]+?)[-_]\d", name_lower)
+        pkg_name = dist_match.group(1) if dist_match else base
+        if pkg_name in _ML_ONLY_PACKAGES or name_lower in _ML_ONLY_PACKAGES:
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+                removed.append(item.name)
+            except OSError:
+                pass
+    if removed:
+        _emit({"type": "log", "message": f"  清理嵌入式 Python ML 冲突包: {', '.join(removed)}"}, json_progress)
+
+
 def _actual_pkg_version(target: str, pkg_name: str) -> str:
     """读取 target 目录中包的实际 version.py，返回版本号。
     比 dist-info 更可靠：pip --upgrade 可能替换了包目录但留下旧的 dist-info。"""
@@ -619,6 +659,10 @@ def main():
 
     # 清理 transitive dependency 中与嵌入式 Python 冲突的包
     _cleanup_protected_packages(args.target, args.json_progress)
+
+    # 嵌入式 Python の site-packages から ML 専用パッケージを削除
+    # （numpy/typing_extensions は torch とバージョン競合するため、ML target のみ保持）
+    _cleanup_embedded_ml_packages(py, args.json_progress)
 
     # macOS: 移除 quarantine 属性，防止 .so 文件被系统策略拒绝加载
     if platform.system() == "Darwin" and args.target:
