@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from fastapi import HTTPException
 
-from config import RVC_VOICES_DIR, RVC_USER_VOICES_DIR, SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR
+from config import RVC_VOICES_DIR, RVC_USER_VOICES_DIR, SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR, CHECKPOINTS_ROOT
 from logging_setup import logger
 
 
@@ -74,15 +74,18 @@ def read_voice_meta(voice_dir: Path, is_builtin: bool = False) -> Dict:
 def list_voices() -> List[Dict]:
     voices = []
     # 各エンジンの内蔵音色 + ユーザー音色をスキャン
+    # CHECKPOINTS_ROOT / "voices" — ユーザーディレクトリにダウンロードされた内蔵音色
+    _voices_ckpt_dir = CHECKPOINTS_ROOT / "voices"
     for builtin_dir, user_dir in [
         (RVC_VOICES_DIR, RVC_USER_VOICES_DIR),
+        (_voices_ckpt_dir, None),
         (SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR),
     ]:
         if builtin_dir.exists():
             for p in builtin_dir.iterdir():
                 if p.is_dir() and p.name != "user":
                     voices.append(read_voice_meta(p, is_builtin=True))
-        if user_dir.exists():
+        if user_dir and user_dir.exists():
             for p in user_dir.iterdir():
                 if p.is_dir():
                     voices.append(read_voice_meta(p, is_builtin=False))

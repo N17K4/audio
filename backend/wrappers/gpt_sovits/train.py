@@ -205,7 +205,7 @@ def main() -> int:
                       "batch_size": args.batch_size, "fp16_run": is_half,
                       "segment_size": 20480},
             "data": {"max_wav_value": 32768.0, "sampling_rate": 32000,
-                     "filter_length": 2048, "hop_length": 640, "win_length": 2048,
+                     "filter_length": 1406, "hop_length": 640, "win_length": 1406,
                      "n_speakers": 0},
             "model": {"inter_channels": 192, "hidden_channels": 192,
                       "filter_channels": 768, "n_heads": 2, "n_layers": 6,

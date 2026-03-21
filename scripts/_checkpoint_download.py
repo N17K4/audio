@@ -222,7 +222,11 @@ def check_and_download(
     checkpoint_dir_rel = cfg.get("checkpoint_dir", f"runtime/checkpoints/{engine_name}")
     if checkpoints_base is not None and checkpoint_dir_rel.startswith("runtime/checkpoints/"):
         checkpoint_dir = checkpoints_base / checkpoint_dir_rel[len("runtime/checkpoints/"):]
+    elif checkpoints_base is not None and checkpoint_dir_rel.startswith("user_data/"):
+        # user_data/ パスもユーザーディレクトリに保存（アプリ更新時に消失しない）
+        checkpoint_dir = checkpoints_base / engine_name
     else:
+        # runtime/engine/ 等はアプリバンドル内（pnpm run checkpoints で事前ダウンロード）
         checkpoint_dir = resources_root / checkpoint_dir_rel
     checkpoint_files: list[dict] = cfg.get("checkpoint_files", [])
 
@@ -439,6 +443,8 @@ def download_hf_cache(
         hf_token_required: bool = item.get("hf_token_required", False)
         if checkpoints_base is not None and cache_dir_rel.startswith("runtime/checkpoints/"):
             cache_dir = checkpoints_base / cache_dir_rel[len("runtime/checkpoints/"):]
+        elif checkpoints_base is not None:
+            cache_dir = checkpoints_base / "hf_cache"
         else:
             cache_dir = resources_root / cache_dir_rel
 
