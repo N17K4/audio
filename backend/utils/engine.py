@@ -358,6 +358,12 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     # Windows 子进程 stderr/stdout 默认使用系统编码（cp1252/cp932 等），
     # 导致中文错误信息丢失或乱码。强制 UTF-8 保证诊断输出完整。
     merged["PYTHONIOENCODING"] = "utf-8"
+    # OpenBLAS/OMP スレッド制限：VM や低メモリ環境で
+    # "Memory allocation still failed after 10 retries" を防止。
+    # 推理は主に GPU（CUDA/MPS）で行うため、CPU 側のスレッド削減は影響なし。
+    merged.setdefault("OPENBLAS_NUM_THREADS", "1")
+    merged.setdefault("OMP_NUM_THREADS", "4")
+    merged.setdefault("MKL_NUM_THREADS", "4")
     ffmpeg_bin = get_ffmpeg_binary()
     if ffmpeg_bin:
         ffmpeg_dir = str(Path(ffmpeg_bin).resolve().parent)
