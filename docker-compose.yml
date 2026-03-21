@@ -1,5 +1,8 @@
 services:
   backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
     image: ${DOCKERHUB_USERNAME}/ai-workshop-backend:${TAG:-latest}
     ports:
       - "8000:8000"
@@ -33,6 +36,9 @@ services:
       start_period: 30s
 
   frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     image: ${DOCKERHUB_USERNAME}/ai-workshop-frontend:${TAG:-latest}
     ports:
       - "3000:80"

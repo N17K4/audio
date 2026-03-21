@@ -1,16 +1,58 @@
 # ── AI Workshop Backend（Docker 用） ──────────────────────────────────────────
-# 设计思路：
-#   1) 系统依赖 + backend pip 依赖（变动少，缓存层稳定）
-#   2) 引擎 pip_packages + runtime_pip_packages（ML 重型包，缓存层大但稳定）
-#   3) 引擎源码 clone（runtime.py 负责 clone + patch）
-#   4) backend 源码（变动频繁，放最后）
+# 设计思路：マルチステージビルド
+#   builder: C コンパイラ等でネイティブ拡張をビルド → wheel 生成
+#   runtime: slim イメージに wheel だけコピー（コンパイラ不要、イメージ軽量）
 #   checkpoints 不打入镜像，通过 volume 挂载
 
-FROM python:3.12-slim AS base
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Stage 1: builder — コンパイラ付き、wheel をビルド
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# ── 系统依赖 ─────────────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# backend Python 依赖 + 引擎 pip_packages
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r backend/requirements.txt
+
+# 引擎 runtime_pip_packages（ML 重型包）
+COPY backend/wrappers/manifest.json ./backend/wrappers/manifest.json
+RUN python <<'PYEOF' && pip install --no-cache-dir --prefix=/install -r /tmp/engine_reqs.txt
+import json
+m = json.load(open('backend/wrappers/manifest.json'))
+engines = m.get('engines', {})
+SKIP = {'rvc-python', 'fairseq'}
+pkgs = set()
+for e in engines.values():
+    for p in e.get('runtime_pip_packages', []):
+        name = p.split('==')[0].split('>=')[0].split('<=')[0].split('<')[0].split('>')[0]
+        if name not in SKIP:
+            pkgs.add(p)
+pkgs = sorted(pkgs)
+print(f'安装 {len(pkgs)} 个运行时 ML 依赖...')
+open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs))
+PYEOF
+
+# RVC 特殊安装（fairseq + rvc-python）
+RUN pip install --no-cache-dir --prefix=/install setuptools'<72' \
+    && pip install --no-cache-dir --prefix=/install --no-deps fairseq==0.12.2 \
+    && pip install --no-cache-dir --prefix=/install bitarray \
+    && pip install --no-cache-dir --prefix=/install --no-deps rvc-python==0.1.5
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Stage 2: runtime — コンパイラなし、軽量イメージ
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# ── 実行時システム依赖のみ（コンパイラなし） ────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         pandoc \
@@ -20,54 +62,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── backend Python 依赖 + 引擎 pip_packages（requirements.txt 統合済み） ────
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
-
-# ── 引擎 runtime_pip_packages（ML 重型包、manifest.json 中定義） ─────────────
-# 先拷贝 manifest + 安装脚本，利用 Docker 缓存
-COPY backend/wrappers/manifest.json ./backend/wrappers/manifest.json
-COPY scripts/runtime.py scripts/_checkpoint_download.py ./scripts/
-
-# 从 manifest.json 提取 runtime_pip_packages 并安装
-RUN python -c "\
-import json; \
-m = json.load(open('backend/wrappers/manifest.json')); \
-engines = m.get('engines', {}); \
-pkgs = set(); \
-for e in engines.values(): \
-    for p in e.get('runtime_pip_packages', []): \
-        pkgs.add(p); \
-pkgs = sorted(pkgs); \
-print(f'安装 {len(pkgs)} 个运行时 ML 依赖...'); \
-open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs)); \
-" && pip install --no-cache-dir -r /tmp/engine_reqs.txt && rm /tmp/engine_reqs.txt
-
-# RVC 特殊安装（fairseq + rvc-python）
-RUN pip install --no-cache-dir setuptools'<72' \
-    && pip install --no-cache-dir --no-deps fairseq==0.12.2 \
-    && pip install --no-cache-dir bitarray \
-    && pip install --no-cache-dir --no-deps rvc-python==0.1.5
+# ── builder からインストール済み Python パッケージをコピー ───────────────────────
+COPY --from=builder /install /usr/local
 
 # ── 引擎源码 clone（通过 runtime.py --engines-only） ─────────────────────────
-# 仅 clone 引擎源码 + 应用 patch，跳过嵌入式 Python 下载和 pip 安装
 COPY backend/wrappers/ ./backend/wrappers/
+COPY scripts/runtime.py scripts/_checkpoint_download.py ./scripts/
 RUN python scripts/runtime.py --engines-only
 
 # ── backend 源码 ─────────────────────────────────────────────────────────────
 COPY backend/ ./backend/
-
-# ── 前端静态文件（可选，如果需要后端直接托管） ────────────────────────────────
-# 如使用 nginx 独立托管前端则无需此步
-# COPY frontend/out/ ./frontend/out/
 
 # ── 环境变量 ─────────────────────────────────────────────────────────────────
 ENV BACKEND_HOST=0.0.0.0
 ENV BACKEND_PORT=8000
 ENV PYTHONPATH=/app/backend
 ENV PYTHONIOENCODING=utf-8
-# 容器内无需 HF 离线模式（可按需开启）
-# ENV HF_HUB_OFFLINE=1
 
 # ── 数据目录（运行时 volume 挂载） ──────────────────────────────────────────
 VOLUME ["/app/runtime/checkpoints", "/app/user_data", "/app/cache", "/app/logs"]

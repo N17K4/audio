@@ -120,7 +120,7 @@ def _clearable_dirs() -> Dict[str, Path | None]:
         "seed_vc_ckpt":        CHECKPOINTS_ROOT / "seed_vc",
         "rvc_ckpt":            CHECKPOINTS_ROOT / "rvc",
         "faster_whisper_ckpt": CHECKPOINTS_ROOT / "faster_whisper",
-        "facefusion_ckpt":     RUNTIME_ROOT / "engine" / "facefusion",
+        "facefusion_ckpt":     RUNTIME_ROOT / "engine" / "facefusion" / ".assets" / "models",
         "cosyvoice_ckpt":      CHECKPOINTS_ROOT / "cosyvoice",
         "sd_ckpt":             CHECKPOINTS_ROOT / "sd",
         "flux_ckpt":           CHECKPOINTS_ROOT / "flux",
@@ -413,13 +413,13 @@ async def install_stage(stage: str):
     pip_mirror = settings.get("pip_mirror", "").strip()
     hf_endpoint = settings.get("hf_endpoint", "").strip().rstrip("/")
 
-    # ログファイル：logs/download-{stage}.log（毎回クリアして新規作成）
+    # ログファイル：logs/download-{stage}.log（リクエスト受信時に即クリア）
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_file_path = LOGS_DIR / f"download-{stage}.log"
+    log_file_path.write_text("", encoding="utf-8")
 
     def generate():
-        # 每次下载前清空旧日志
-        log_fp = open(log_file_path, "w", encoding="utf-8")
+        log_fp = open(log_file_path, "a", encoding="utf-8")
 
         def _emit(msg: str):
             """同时写入 SSE 和日志文件。"""

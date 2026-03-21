@@ -79,5 +79,4 @@ temp/
 # ─── Claude 相关（本地开发工具，不进版本库） ──────────────────────────────────
 .claude
 
-.envdocker-compose.override.yml
 .env
