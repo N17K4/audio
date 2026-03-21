@@ -204,7 +204,7 @@ def main() -> int:
         stubs_dir = str(Path(__file__).resolve().parent / "_stubs")
         base_env = {
             **os.environ,
-            "PYTHONPATH": f"{stubs_dir}:{str(engine_dir)}:{gpt_sovits_dir}:{os.environ.get('PYTHONPATH', '')}",
+            "PYTHONPATH": os.pathsep.join(filter(None, [stubs_dir, str(engine_dir), gpt_sovits_dir, os.environ.get('PYTHONPATH', '')])),
             "PYTHONIOENCODING": "utf-8",
             "inp_text": str(list_path),
             "inp_wav_dir": str(wav_dir),

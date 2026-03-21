@@ -155,7 +155,7 @@
         "torchaudio",
         "hydra-core",
         "transformers",
-        "huggingface_hub>=1.3.0,<2.0",
+        "huggingface_hub>=0.26.0,<1.0",
         "einops",
         "vector-quantize-pytorch"
       ],

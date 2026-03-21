@@ -95,6 +95,18 @@ function fmtDateTime(ts: number): string {
 export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir, downloadDir, addInstantJobResult }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
 
+  /** result_url 可能带旧端口的绝对 URL，统一替换为当前 backendBaseUrl */
+  function fixUrl(url: string | undefined | null): string {
+    if (!url) return '';
+    try {
+      const u = new URL(url);
+      return `${backendBaseUrl}${u.pathname}${u.search}`;
+    } catch {
+      // 已经是相对路径
+      return url.startsWith('/') ? `${backendBaseUrl}${url}` : url;
+    }
+  }
+
   // ── 烟雾测试（fire-and-forget，结果写入 task.log）──────────────────────────
   const [smokeRunning, setSmokeRunning] = useState(false);
   const [smoke2Running, setSmoke2Running] = useState(false);
@@ -260,33 +272,34 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
 
           {/* 结果 / 错误 */}
           {job.status === 'completed' && job.result_url && (() => {
-            const ext = job.result_url.split('.').pop()?.toLowerCase() ?? '';
+            const url = fixUrl(job.result_url);
+            const fileName = url.split('/').pop() || '';
+            const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
             const isAudio = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg', 'opus'].includes(ext);
             const isVideo = ['mp4', 'webm', 'mov', 'mkv'].includes(ext);
             const isImage = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(ext);
             return (
               <div className="pt-2 space-y-1.5">
-                {isAudio && <audio controls src={job.result_url} className="w-full h-8" />}
-                {isVideo && <video controls src={job.result_url} className="w-full rounded-lg max-h-48" />}
-                {isImage && <img src={job.result_url} alt="result" className="max-w-full rounded-lg max-h-48 object-contain" />}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] text-slate-400 break-all">{job.result_url?.split('/').pop()}</span>
-                  <button
-                    className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
-                    onClick={async () => {
-                      try {
-                        const resp = await fetch(job.result_url!);
-                        const blob = await resp.blob();
-                        const a = document.createElement('a');
-                        a.href = URL.createObjectURL(blob);
-                        a.download = job.result_url!.split('/').pop() || 'download';
-                        a.click();
-                        URL.revokeObjectURL(a.href);
-                      } catch { /**/ }
-                    }}>
-                    下载文件
-                  </button>
-                </div>
+                {isAudio && <audio controls src={url} className="w-full h-8" />}
+                {isVideo && <video controls src={url} className="w-full rounded-lg max-h-48" />}
+                {isImage && <img src={url} alt="result" className="max-w-full rounded-lg max-h-48 object-contain" />}
+                <button
+                  className="text-[11px] text-indigo-500 hover:text-indigo-700 underline break-all text-left"
+                  onClick={async () => {
+                    try {
+                      const resp = await fetch(url);
+                      const blob = await resp.blob();
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = fileName || 'download';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(a.href);
+                    } catch { /**/ }
+                  }}>
+                  {fileName}
+                </button>
               </div>
             );
           })()}

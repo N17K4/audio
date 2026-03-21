@@ -88,7 +88,7 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   const [concurrencySaving, setConcurrencySaving] = useState(false);
   const [concurrencyMsg, setConcurrencyMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // ── 镜像源（始终使用默认值，不缓存） ─────────────────────────────────────
+  // ── 镜像源（从 settings 读取，未设置时写入默认值） ─────────────────────────
   const PIP_DEFAULT = 'https://pypi.tuna.tsinghua.edu.cn/simple';
   const HF_DEFAULT = 'https://hf-mirror.com';
   const [pipMirror, setPipMirror] = useState(PIP_DEFAULT);
@@ -105,18 +105,23 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     }).catch(() => {});
   }
 
-  // 初始化：写入默认镜像源 + 加载并发设置
+  // 初始化：从 settings 加载镜像源 + 并发数（未设置时写入默认值）
   useEffect(() => {
     if (!backendBaseUrl) return;
-    // 写入默认镜像源
-    fetch(`${backendBaseUrl}/settings`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pip_mirror: PIP_DEFAULT, hf_endpoint: HF_DEFAULT }),
-    }).catch(() => {});
-    // 加载并发数
     fetch(`${backendBaseUrl}/settings`)
       .then(r => r.json())
-      .then(d => { const n = d?.local_concurrency ?? 1; setConcurrency(n); setConcurrencyInput(String(n)); })
+      .then(d => {
+        // 并发数
+        const n = d?.local_concurrency ?? 1;
+        setConcurrency(n); setConcurrencyInput(String(n));
+        // 镜像源：有值则使用，无值则写入默认
+        const savedPip = d?.pip_mirror ?? '';
+        const savedHf = d?.hf_endpoint ?? '';
+        if (savedPip) { setPipMirror(savedPip); }
+        else { updateMirror('pip_mirror', PIP_DEFAULT); }
+        if (savedHf) { setHfEndpoint(savedHf); }
+        else { updateMirror('hf_endpoint', HF_DEFAULT); }
+      })
       .catch(() => {});
   }, [backendBaseUrl]);
 

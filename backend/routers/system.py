@@ -41,27 +41,29 @@ router = APIRouter(prefix="/system", tags=["system"])
 def _dir_size(p: Path) -> int:
     """ディレクトリの合計サイズ（バイト）。存在しなければ 0。
 
-    Windows: robocopy /L で高速取得（Python 再帰の 5〜10 倍速）
+    Windows: robocopy /L（src==dst で確実にサマリー出力）
     macOS/Linux: du -s で高速取得
     """
     if not p.exists():
         return 0
     try:
         if sys.platform == "win32":
-            # robocopy /L（リストのみ、コピーしない）で合計サイズを取得
+            # src==dst + /L で「全ファイル skipped」→ サマリーの Total に合計サイズが出る
+            # NUL を宛先にすると一部 Windows でサマリーが出ないため回避
             r = subprocess.run(
-                ["robocopy", str(p), "NUL", "/L", "/S", "/BYTES", "/NFL", "/NDL", "/NJH"],
+                ["robocopy", str(p), str(p), "/L", "/S", "/BYTES", "/NFL", "/NDL", "/NJH"],
                 capture_output=True, text=True, timeout=30,
             )
-            # 最終行 "Bytes : XXXXXXXX" を探す
-            # robocopy はカンマ区切り（例: 1,234,567）で出力するため strip する
             for line in reversed(r.stdout.splitlines()):
-                if "Bytes" in line:
-                    parts = line.split()
-                    for part in parts:
-                        cleaned = part.strip().replace(",", "")
-                        if cleaned.isdigit() and int(cleaned) > 0:
-                            return int(cleaned)
+                # "Bytes" / "字节" 等ロケール文字列に依存しない:
+                # サマリー行は ":" の後に数値が並ぶ（例: Bytes : 123456 0 123456 0 0 0）
+                if ":" in line:
+                    after_colon = line.split(":", 1)[1]
+                    nums = [s.replace(",", "") for s in after_colon.split() if s.replace(",", "").isdigit()]
+                    if len(nums) >= 3:
+                        val = int(nums[0])
+                        if val > 0:
+                            return val
             return 0
         else:
             # macOS / Linux: du -s -b（バイト単位）
@@ -408,6 +410,9 @@ async def install_stage(stage: str):
         env["PYTHONPATH"] = str(APP_ROOT)
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+
+        # checkpoint を常にユーザーディレクトリに保存（アプリ更新時に消失しない）
+        env["CHECKPOINTS_DIR"] = str(CHECKPOINTS_ROOT)
 
         # 将 HF 镜像端点通过环境变量传递（_checkpoint_download.py 读取 HF_ENDPOINT）
         if hf_endpoint:

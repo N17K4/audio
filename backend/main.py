@@ -64,7 +64,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/download", StaticFiles(directory=str(DOWNLOAD_DIR)), name="download")
+# /download/{filename} — router で提供（StaticFiles mount だと CORSMiddleware が効かない）
+from fastapi.responses import FileResponse
+from fastapi import HTTPException as _HTTPException, Request as _Request
+from starlette.responses import Response as _Response
+
+@app.get("/download/{filename:path}")
+async def serve_download(filename: str, request: _Request):
+    file_path = DOWNLOAD_DIR / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise _HTTPException(status_code=404, detail=f"File not found: {filename}")
+    resp = FileResponse(file_path)
+    origin = request.headers.get("origin", "*")
+    resp.headers["Access-Control-Allow-Origin"] = origin
+    return resp
+
+@app.options("/download/{filename:path}")
+async def download_preflight(filename: str, request: _Request):
+    origin = request.headers.get("origin", "*")
+    return _Response(status_code=204, headers={
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    })
 
 app.include_router(health.router)
 app.include_router(voices.router)
