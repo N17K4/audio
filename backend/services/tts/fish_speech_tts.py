@@ -35,10 +35,12 @@ def run_local_fish_speech_tts_cmd(
             ),
         )
     import shlex
-    refs_arg = " ".join(shlex.quote(r) for r in voice_refs if r) if voice_refs else '""'
+    import sys as _sys
+    _q = (lambda s: f'"{s}"') if _sys.platform == "win32" else shlex.quote
+    refs_arg = " ".join(_q(r) for r in voice_refs if r) if voice_refs else '""'
     cmd = (
         cmd_tpl
-        .replace("{text}", shlex.quote(text))
+        .replace("{text}", _q(text))
         .replace("{output}", str(output_path.resolve()))
         .replace("{voice_ref}", refs_arg)
     )

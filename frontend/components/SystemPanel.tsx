@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { DiskRow } from '../types';
 
 interface SystemPanelProps {
@@ -7,9 +7,6 @@ interface SystemPanelProps {
   /** 外部控制要显示的 section（嵌入模式：隐藏 hero header + tab bar） */
   externalSection?: string;
 }
-
-// ── モジュールレベルキャッシュ：unmount 後もインストールログを保持 ───────────
-const _spCache: { installLogs: Record<string, string[]> } = { installLogs: {} };
 
 const NAV_ITEMS = [
   { id: 'about',   label: '功能说明',   electronOnly: false, keywords: ['功能', '说明', '关于', '引擎'] },
@@ -128,17 +125,8 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
   const [diskLoading, setDiskLoading] = useState(false);
   const [diskRefreshedAt, setDiskRefreshedAt] = useState<Date | null>(null);
   const [clearingRow, setClearingRow] = useState<Record<string, boolean>>({});
-  const [installLogs, _setInstallLogs] = useState<Record<string, string[]>>(() => _spCache.installLogs);
-  const setInstallLogs: typeof _setInstallLogs = (v) => { _setInstallLogs(prev => { const next = typeof v === 'function' ? v(prev) : v; _spCache.installLogs = next; return next; }); };
-  const installLogRefs = useRef<Record<string, HTMLPreElement | null>>({});
   const [stageStatus, setStageStatus] = useState<Record<string, 'idle' | 'reinstalling' | 'deleting'>>({});
-
-  useEffect(() => {
-    for (const stage of Object.keys(installLogs)) {
-      const el = installLogRefs.current[stage];
-      if (el) el.scrollTop = el.scrollHeight;
-    }
-  }, [installLogs]);
+  const [stageLogContent, setStageLogContent] = useState<Record<string, string | null>>({});
 
   // ── 重置 ────────────────────────────────────────────────────────────────────
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -166,44 +154,38 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     setDiskLoading(false);
   }
 
-  // ── 补充安装（SSE ストリーム）────────────────────────────────────────────────
-  function appendLog(stage: string, line: string) {
-    setInstallLogs(prev => ({ ...prev, [stage]: [...(prev[stage] || []), line] }));
-  }
-
+  // ── 补充安装（fire-and-forget，日志写入 logs/download-{stage}.log）─────────
   async function doSupplementInstall(stage: string) {
     if (!backendBaseUrl) return;
     setStageStatus(s => ({ ...s, [stage]: 'reinstalling' }));
-    setInstallLogs(prev => ({ ...prev, [stage]: [] }));
     try {
       const r = await fetch(`${backendBaseUrl}/system/install/${stage}`, { method: 'POST' });
       if (r.ok && r.body) {
+        // 消费 SSE 流直到结束（后端同时写入日志文件）
         const reader = r.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '';
         while (true) {
-          const { done, value } = await reader.read();
+          const { done } = await reader.read();
           if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() || '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const msg = JSON.parse(line.slice(6));
-                if (msg.log) appendLog(stage, msg.log);
-              } catch { /**/ }
-            }
-          }
         }
-      } else {
-        appendLog(stage, `✗ 操作失败：HTTP ${r.status}`);
       }
-    } catch (e: any) {
-      appendLog(stage, `✗ 操作失败：${e.message}`);
-    }
+    } catch { /**/ }
     await doRefreshDisk();
     setStageStatus(s => ({ ...s, [stage]: 'idle' }));
+  }
+
+  // ── 查看日志（按需加载 logs/download-{stage}.log）──────────────────────────
+  async function toggleStageLog(stage: string) {
+    if (stageLogContent[stage] != null) {
+      setStageLogContent(s => { const next = { ...s }; delete next[stage]; return next; });
+      return;
+    }
+    try {
+      const r = await fetch(`${backendBaseUrl}/system/logs/download-${stage}.log`);
+      const d = await r.json();
+      setStageLogContent(s => ({ ...s, [stage]: d?.content ?? '（暂无日志）' }));
+    } catch {
+      setStageLogContent(s => ({ ...s, [stage]: '（加载失败）' }));
+    }
   }
 
   // ── 折叠状态 ─────────────────────────────────────────────────────────────────
@@ -446,13 +428,24 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 </button>
                 <span className="text-sm font-bold text-slate-600 dark:text-slate-300 tabular-nums shrink-0">{fmtSize(stageSize)}</span>
                 {stage !== 'setup' && (
-                  <button
-                    className="shrink-0 rounded border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1"
-                    style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
-                    disabled={isBusy}
-                    onClick={() => doSupplementInstall(stage)}>
-                    {isBusy && stageStatus[stage] === 'reinstalling' ? <><Spinner />安装中</> : '补充安装'}
-                  </button>
+                  isBusy && stageStatus[stage] === 'reinstalling' ? (
+                    <button
+                      className="shrink-0 rounded border border-rose-300 dark:border-rose-700 px-2.5 py-1 text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all flex items-center gap-1"
+                      onClick={async () => {
+                        await fetch(`${backendBaseUrl}/system/install/${stage}/abort`, { method: 'POST' }).catch(() => {});
+                        setStageStatus(s => ({ ...s, [stage]: 'idle' }));
+                      }}>
+                      中止
+                    </button>
+                  ) : (
+                    <button
+                      className="shrink-0 rounded border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 flex items-center gap-1"
+                      style={{ borderColor: SPRING_GREEN, color: SPRING_GREEN }}
+                      disabled={isBusy}
+                      onClick={() => doSupplementInstall(stage)}>
+                      补充安装
+                    </button>
+                  )
                 )}
               </div>
 
@@ -487,21 +480,19 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 </div>
               )}
 
-              {/* 安装日志（内联） */}
-              {(installLogs[stage]?.length ?? 0) > 0 && (
-                <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">安装日志</span>
-                    <button className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                      onClick={() => setInstallLogs(prev => { const next = { ...prev }; delete next[stage]; return next; })}>
-                      清除
-                    </button>
-                  </div>
+              {/* 查看日志按钮（按需加载 logs/download-{stage}.log） */}
+              <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-2 flex items-center">
+                <button className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                  onClick={() => toggleStageLog(stage)}>
+                  {stageLogContent[stage] != null ? '收起日志' : '查看日志'}
+                </button>
+              </div>
+              {stageLogContent[stage] != null && (
+                <div className="px-5 pb-3">
                   <pre
-                    ref={el => { installLogRefs.current[stage] = el; }}
                     className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
                     style={{ maxHeight: '14rem' }}>
-                    {installLogs[stage].join('\n')}
+                    {stageLogContent[stage]}
                   </pre>
                 </div>
               )}

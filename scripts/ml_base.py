@@ -595,19 +595,30 @@ def main():
     # NLTK データダウンロード（GPT-SoVITS の英語テキスト処理に必要）
     _emit({"type": "log", "message": "下载 NLTK 数据…"}, args.json_progress)
     nltk_data_dir = str(Path(args.target) / "nltk_data") if args.target else ""
-    nltk_cmd = [
-        py, "-c",
-        f"import sys; sys.path.insert(0,'{args.target}'); import nltk; "
-        f"nltk.data.path.insert(0,'{nltk_data_dir}'); "
-        f"nltk.download('averaged_perceptron_tagger_eng',download_dir='{nltk_data_dir}')"
-    ] if nltk_data_dir else [
-        py, "-c", "import nltk; nltk.download('averaged_perceptron_tagger_eng')"
-    ]
-    nltk_result = subprocess.run(nltk_cmd, capture_output=True, text=True, timeout=120)
-    if nltk_result.returncode == 0:
-        _emit({"type": "log", "message": "✓ NLTK 数据下载完成"}, args.json_progress)
-    else:
-        _emit({"type": "log", "message": f"⚠ NLTK 数据下载失败: {nltk_result.stderr[:200]}"}, args.json_progress)
+    # Windows パスにバックスラッシュが含まれるため -c 文字列ではなくスクリプトファイルで実行
+    nltk_script = (
+        "import sys, os\n"
+        "target = sys.argv[1]\n"
+        "dl_dir = sys.argv[2]\n"
+        "sys.path.insert(0, target)\n"
+        "import nltk\n"
+        "os.makedirs(dl_dir, exist_ok=True)\n"
+        "nltk.data.path.insert(0, dl_dir)\n"
+        "nltk.download('averaged_perceptron_tagger_eng', download_dir=dl_dir)\n"
+    )
+    nltk_tmp = Path(tempfile.mktemp(suffix=".py"))
+    nltk_tmp.write_text(nltk_script, encoding="utf-8")
+    try:
+        nltk_cmd = [py, str(nltk_tmp), args.target, nltk_data_dir] if nltk_data_dir else [
+            py, "-c", "import nltk; nltk.download('averaged_perceptron_tagger_eng')"
+        ]
+        nltk_result = subprocess.run(nltk_cmd, capture_output=True, text=True, timeout=120)
+        if nltk_result.returncode == 0:
+            _emit({"type": "log", "message": "✓ NLTK 数据下载完成"}, args.json_progress)
+        else:
+            _emit({"type": "log", "message": f"⚠ NLTK 数据下载失败: {nltk_result.stderr[:200]}"}, args.json_progress)
+    finally:
+        nltk_tmp.unlink(missing_ok=True)
 
     if ok:
         _emit({"type": "log", "message": "✓ 运行库安装完成"}, args.json_progress)

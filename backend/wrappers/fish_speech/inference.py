@@ -240,11 +240,12 @@ def main() -> int:
     legacy_cmd = (os.getenv("FISH_SPEECH_CMD_TEMPLATE") or "").strip()
     if legacy_cmd:
         import shlex
+        _q = (lambda s: f'"{s}"') if sys.platform == "win32" else shlex.quote
         voice_refs_legacy = args.voice_ref or []
-        refs_arg = " ".join(shlex.quote(r) for r in voice_refs_legacy if r) if voice_refs_legacy else '""'
+        refs_arg = " ".join(_q(r) for r in voice_refs_legacy if r) if voice_refs_legacy else '""'
         cmd = (
             legacy_cmd
-            .replace("{text}", shlex.quote(args.text))
+            .replace("{text}", _q(args.text))
             .replace("{output}", f'"{output_path}"')
             .replace("{voice_ref}", refs_arg)
             .replace("{checkpoint_dir}", f'"{checkpoint_dir}"')

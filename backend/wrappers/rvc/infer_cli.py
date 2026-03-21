@@ -132,7 +132,9 @@ def main() -> int:
     checkpoint_dir = resolve_checkpoint_dir(getattr(args, "checkpoint_dir", ""))
 
     def _q(p: str) -> str:
-        return shlex.quote(p) if p else "''"
+        if not p:
+            return '""'
+        return f'"{p}"' if sys.platform == "win32" else shlex.quote(p)
 
     cmd = (
         cmd_template.replace("{input}", _q(str(input_path)))

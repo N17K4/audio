@@ -38,8 +38,10 @@ def run_local_gpt_sovits_tts_cmd(
             ),
         )
     import shlex
-    refs_arg = " ".join(shlex.quote(r) for r in voice_refs if r) if voice_refs else ""
-    cmd = cmd_tpl.replace("{text}", shlex.quote(text)).replace("{output}", str(output_path.resolve()))
+    import sys as _sys
+    _q = (lambda s: f'"{s}"') if _sys.platform == "win32" else shlex.quote
+    refs_arg = " ".join(_q(r) for r in voice_refs if r) if voice_refs else ""
+    cmd = cmd_tpl.replace("{text}", _q(text)).replace("{output}", str(output_path.resolve()))
     if refs_arg:
         cmd = cmd.replace("{voice_ref}", refs_arg)
     else:
@@ -53,20 +55,20 @@ def run_local_gpt_sovits_tts_cmd(
         sovits_model = voice_meta.get("sovits_model", "")
         if voice_dir and gpt_model:
             gpt_path = str(Path(voice_dir) / gpt_model)
-            cmd += f" --gpt_model {shlex.quote(gpt_path)}"
+            cmd += f" --gpt_model {_q(gpt_path)}"
         if voice_dir and sovits_model:
             sovits_path = str(Path(voice_dir) / sovits_model)
-            cmd += f" --sovits_model {shlex.quote(sovits_path)}"
+            cmd += f" --sovits_model {_q(sovits_path)}"
         # voice_meta 中的 ref_text 作为默认值
         if not ref_text and voice_meta.get("ref_text"):
             ref_text = voice_meta["ref_text"]
     # 高级参数
     if text_lang and text_lang != "auto":
-        cmd += f" --text_lang {shlex.quote(text_lang)}"
+        cmd += f" --text_lang {_q(text_lang)}"
     if prompt_lang and prompt_lang != "auto":
-        cmd += f" --prompt_lang {shlex.quote(prompt_lang)}"
+        cmd += f" --prompt_lang {_q(prompt_lang)}"
     if ref_text:
-        cmd += f" --ref_text {shlex.quote(ref_text)}"
+        cmd += f" --ref_text {_q(ref_text)}"
     if top_k != 15:
         cmd += f" --top_k {int(top_k)}"
     if top_p != 1.0:
@@ -80,7 +82,7 @@ def run_local_gpt_sovits_tts_cmd(
     if seed != -1:
         cmd += f" --seed {int(seed)}"
     if text_split_method != "cut5":
-        cmd += f" --text_split_method {shlex.quote(text_split_method)}"
+        cmd += f" --text_split_method {_q(text_split_method)}"
     if batch_size != 1:
         cmd += f" --batch_size {int(batch_size)}"
     if not parallel_infer:

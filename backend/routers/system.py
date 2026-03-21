@@ -54,13 +54,14 @@ def _dir_size(p: Path) -> int:
                 capture_output=True, text=True, timeout=30,
             )
             # 最終行 "Bytes : XXXXXXXX" を探す
+            # robocopy はカンマ区切り（例: 1,234,567）で出力するため strip する
             for line in reversed(r.stdout.splitlines()):
                 if "Bytes" in line:
                     parts = line.split()
                     for part in parts:
-                        part = part.strip()
-                        if part.isdigit() and int(part) > 0:
-                            return int(part)
+                        cleaned = part.strip().replace(",", "")
+                        if cleaned.isdigit() and int(cleaned) > 0:
+                            return int(cleaned)
             return 0
         else:
             # macOS / Linux: du -s -b（バイト単位）
@@ -335,12 +336,19 @@ STAGE_SCRIPTS = {
 }
 
 
+# 当前正在运行的安装进程（stage → subprocess.Popen）
+_INSTALL_PROCS: dict[str, subprocess.Popen] = {}
+
+
 @router.post("/install/{stage}")
 async def install_stage(stage: str):
     """指定されたステージのスクリプトを実行し、SSE でログを配信。"""
     scripts = STAGE_SCRIPTS.get(stage)
     if not scripts:
         return {"ok": False, "error": f"未知阶段：{stage}"}
+
+    if stage in _INSTALL_PROCS and _INSTALL_PROCS[stage].poll() is None:
+        return {"ok": False, "error": f"阶段 {stage} 正在运行中"}
 
     try:
         py_cmd = sys.executable
@@ -405,12 +413,14 @@ async def install_stage(stage: str):
                     encoding="utf-8",
                     errors="replace",
                 )
+                _INSTALL_PROCS[stage] = proc
 
                 for line in iter(proc.stdout.readline, ""):
                     if line:
                         yield _emit(line.rstrip())
 
                 returncode = proc.wait()
+                _INSTALL_PROCS.pop(stage, None)
 
                 for line in iter(proc.stderr.readline, ""):
                     if line:
@@ -418,16 +428,33 @@ async def install_stage(stage: str):
 
                 if returncode == 0:
                     yield _emit(f"✓ {script_rel} 执行完成")
+                elif returncode < 0:
+                    yield _emit(f"⚠ {script_rel} 已中止")
                 else:
                     yield _emit(f"✗ {script_rel} 失败（退出码：{returncode}）")
 
             except Exception as e:
+                _INSTALL_PROCS.pop(stage, None)
                 yield _emit(f"✗ 异常：{e}")
 
         yield f"data: {json.dumps({'done': True})}\n\n"
         log_fp.close()
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/install/{stage}/abort")
+async def abort_install(stage: str):
+    """正在运行的安装进程を中止する。"""
+    proc = _INSTALL_PROCS.pop(stage, None)
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        return {"ok": True, "message": f"阶段 {stage} 已中止"}
+    return {"ok": False, "error": f"阶段 {stage} 未在运行"}
 
 
 # ─── GET /system/browse-dir ────────────────────────────────────────────────
