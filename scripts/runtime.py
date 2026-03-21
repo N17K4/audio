@@ -1265,6 +1265,49 @@ def _install_engine(engine_name: str, engines: dict, py: str, project_root: Path
     return ok
 
 
+# ML 専用パッケージを嵌入式 Python から削除（ML target との競合防止）
+_ML_ONLY_PACKAGES = {"numpy", "numpy.libs", "typing_extensions"}
+
+
+def _cleanup_embedded_ml_packages(py: str) -> None:
+    """嵌入式 Python の site-packages から ML 専用パッケージを削除。
+
+    numpy と typing_extensions は backend 依赖の transitive dependency として
+    嵌入式 Python に入るが、ML target（torch 等）が別バージョンを必要とする。
+    嵌入式側を削除して PYTHONPATH で ML target のバージョンを優先させる。
+    """
+    site_dir = Path(py).resolve().parent.parent / "lib"
+    # macOS: lib/python3.12/site-packages, Windows: Lib/site-packages
+    candidates = list(site_dir.rglob("site-packages"))
+    if not candidates:
+        site_dir = Path(py).resolve().parent.parent / "Lib"
+        candidates = list(site_dir.rglob("site-packages"))
+    if not candidates:
+        return
+
+    site_packages = candidates[0]
+    removed = []
+    for item in site_packages.iterdir():
+        name_lower = item.name.lower().replace("-", "_")
+        base = name_lower.split(".")[0]
+        # dist-info もマッチ: numpy-2.2.6.dist-info → numpy
+        import re as _re
+        dist_match = _re.match(r"^([a-z0-9_]+?)[-_]\d", name_lower)
+        pkg_name = dist_match.group(1) if dist_match else base
+        if pkg_name in _ML_ONLY_PACKAGES or name_lower in _ML_ONLY_PACKAGES:
+            try:
+                if item.is_dir():
+                    import shutil
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+                removed.append(item.name)
+            except Exception:
+                pass
+    if removed:
+        print(f"  清理嵌入式 Python ML 冲突包: {', '.join(removed)}")
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 主流程
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1290,6 +1333,13 @@ def main_full_setup(project_root: Path) -> int:
     print("\n=== 2/5 安装 backend 依赖 ===")
     if not install_backend_deps(project_root, py):
         all_ok = False
+
+    # numpy / typing_extensions は backend 依赖の transitive dependency として
+    # 嵌入式 Python の site-packages にインストールされるが、ML target（torch 等）は
+    # 独自バージョンを必要とする。嵌入式側を削除して ML target のバージョンを優先させる。
+    # （numpy: torch は 2.x の C API 向けコンパイル、1.x だと segfault）
+    # （typing_extensions: torch は 4.x の新機能を使用）
+    _cleanup_embedded_ml_packages(py)
 
     # 3. 安装基础引擎（rvc-python 特殊流程 + 源码 clone）
     print("\n=== 3/5 安装基础引擎 ===")

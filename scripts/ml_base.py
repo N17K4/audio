@@ -233,11 +233,13 @@ _EMBEDDED_PROTECTED_PACKAGES = {
     "uvicorn", "httpx", "httpcore",
     "anyio", "sniffio",
     "annotated_types",
-    "numpy",
 }
-# 注意: typing_extensions は torch が必要とするバージョン（4.x）と
+# 注意: typing_extensions / numpy は torch が必要とするバージョンと
 # 嵌入式 Python 同梱バージョンが異なる場合があるため、ここに含めない。
-# target 側の新しいバージョンを維持し、torch の import が壊れるのを防ぐ。
+# numpy: torch は numpy 2.x の C API 向けにコンパイルされており、
+#         1.26.x にダウングレードするとメモリアクセス違反（segfault）が発生する。
+# typing_extensions: torch が 4.x の新機能を使用するため、古いバージョンでは
+#         from torch.amp import autocast が失敗する。
 
 
 def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
