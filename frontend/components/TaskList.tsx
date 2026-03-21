@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Job } from '../types';
 import { PROVIDER_LABELS } from '../constants';
 import TasksIcon from './icons/TasksIcon';
@@ -17,15 +17,6 @@ interface TaskListProps {
 }
 
 const SPRING_GREEN = '#6db33f';
-
-// ── モジュールレベルキャッシュ：unmount 後もログを保持 ─────────────────────
-type SmokeResult = Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }>;
-const _cache: {
-  smokeLog: string[];
-  smokeSummary: SmokeResult;
-  smoke2Log: string[];
-  smoke2Summary: SmokeResult;
-} = { smokeLog: [], smokeSummary: [], smoke2Log: [], smoke2Summary: [] };
 
 function Spinner() {
   return (
@@ -104,260 +95,38 @@ function fmtDateTime(ts: number): string {
 export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, outputDir, downloadDir, addInstantJobResult }: TaskListProps) {
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'running');
 
-  // ── 烟雾测试（キャッシュから初期化、更新時にキャッシュ同期）───────────────
+  // ── 烟雾测试（fire-and-forget，结果写入 task.log）──────────────────────────
   const [smokeRunning, setSmokeRunning] = useState(false);
-  const [smokeLog, _setSmokeLog] = useState<string[]>(() => _cache.smokeLog);
-  const [smokeSummary, _setSmokeSummary] = useState<SmokeResult>(() => _cache.smokeSummary);
-  const smokeLogRef = useRef<HTMLDivElement>(null);
-
   const [smoke2Running, setSmoke2Running] = useState(false);
-  const [smoke2Log, _setSmoke2Log] = useState<string[]>(() => _cache.smoke2Log);
-  const [smoke2Summary, _setSmoke2Summary] = useState<SmokeResult>(() => _cache.smoke2Summary);
-  const smoke2LogRef = useRef<HTMLDivElement>(null);
 
-  const setSmokeLog: typeof _setSmokeLog = (v) => { _setSmokeLog(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smokeLog = next; return next; }); };
-  const setSmokeSummary: typeof _setSmokeSummary = (v) => { _setSmokeSummary(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smokeSummary = next; return next; }); };
-  const setSmoke2Log: typeof _setSmoke2Log = (v) => { _setSmoke2Log(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smoke2Log = next; return next; }); };
-  const setSmoke2Summary: typeof _setSmoke2Summary = (v) => { _setSmoke2Summary(prev => { const next = typeof v === 'function' ? v(prev) : v; _cache.smoke2Summary = next; return next; }); };
-
-  useEffect(() => {
-    const el = smokeLogRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [smokeLog]);
-
-  useEffect(() => {
-    const el = smoke2LogRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [smoke2Log]);
-
-  async function runSmokeTests() {
-    setSmokeRunning(true);
-    setSmokeLog([]);
-    setSmokeSummary([]);
-
-    const allLines: string[] = [];
-    const log = (msg: string) => { allLines.push(msg); setSmokeLog(prev => [...prev, msg]); };
-    let hasError = false;
-
+  async function runSmokeTest(endpoint: string, setRunning: (v: boolean) => void) {
+    setRunning(true);
     try {
-      log('═══════════════════════════════════════════════════════════');
-      log(`烟雾测试 1 启动… [${new Date().toLocaleString('zh-CN')}]`);
-      log('═══════════════════════════════════════════════════════════');
-      log('');
-
-      const response = await fetch(`${backendBaseUrl}/smoketest/run`, {
-        method: 'POST',
-        headers: { 'Accept': 'text/event-stream' },
-      });
-
-      if (!response.ok) {
-        log(`✗ 请求失败: HTTP ${response.status}`);
-        const err = await response.text();
-        if (err) log(err);
-        hasError = true;
-        setSmokeSummary([{ name: '烟雾测试 1', status: 'failed' }]);
-        setSmokeRunning(false);
-        return;
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        log('✗ 无法读取响应流');
-        setSmokeSummary([{ name: '烟雾测试 1', status: 'failed' }]);
-        setSmokeRunning(false);
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines[lines.length - 1];
-
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i];
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.log) {
-                log(data.log);
-                if (data.log.includes('执行失败')) hasError = true;
-              }
-            } catch { /**/ }
-          }
+      const r = await fetch(`${backendBaseUrl}/${endpoint}`, { method: 'POST' });
+      if (r.ok && r.body) {
+        const reader = r.body.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
         }
       }
-
-      if (buffer.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(buffer.slice(6));
-          if (data.log) {
-            log(data.log);
-            if (data.log.includes('执行失败')) hasError = true;
-          }
-        } catch { /**/ }
-      }
-
-    } catch (e: any) {
-      log(`✗ 执行异常: ${e.message}`);
-      hasError = true;
-    }
-
-    // 从日志解析 ✅/❌ 结果（仅解析最终汇总区域，避免与逐项日志重复）
-    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = [];
-    const summaryIdx = allLines.findIndex(l => l.includes('📊 测试结果汇总'));
-    const linesToParse = summaryIdx >= 0 ? allLines.slice(summaryIdx) : allLines;
-    for (const line of linesToParse) {
-      const passMatch = line.match(/[✅✓]\s*(?:通过\s*—?\s*)?(.+)/);
-      const failMatch = line.match(/[❌✗]\s*(?:失败\s*—?\s*)?(.+)/);
-      if (passMatch) results.push({ name: passMatch[1].trim().split('：')[0].split(' [')[0], status: 'passed' });
-      else if (failMatch && !line.includes('总计')) results.push({ name: failMatch[1].trim().split('：')[0].split(' [')[0], status: 'failed' });
-    }
-
-    if (results.length === 0) {
-      results.push({ name: '烟雾测试 1', status: hasError ? 'failed' : 'passed' });
-    }
-
-    setSmokeSummary(results);
+    } catch { /**/ }
     onFetchJobs();
-    setSmokeRunning(false);
+    setRunning(false);
   }
 
-  async function runSmokeTests2() {
-    setSmoke2Running(true);
-    setSmoke2Log([]);
-    setSmoke2Summary([]);
+  // ── 历史记录区域：运行记录 / 日志 切换 ──────────────────────────────────────
+  const [historyView, setHistoryView] = useState<'jobs' | 'log'>('jobs');
+  const [taskLogContent, setTaskLogContent] = useState<string | null>(null);
 
-    const allLines: string[] = [];
-    const log = (msg: string) => { allLines.push(msg); setSmoke2Log(prev => [...prev, msg]); };
-    let hasError = false;
-    const smoke2Names = ['RAG创建知识库', 'RAG知识库提问', 'Agent', 'LoRA'] as const;
-
+  async function loadTaskLog() {
     try {
-      log('═══════════════════════════════════════════════════════════');
-      log(`烟雾测试 2 启动… [${new Date().toLocaleString('zh-CN')}]`);
-      log('═══════════════════════════════════════════════════════════');
-      log('');
-
-      const response = await fetch(`${backendBaseUrl}/smoketest2/run`, {
-        method: 'POST',
-        headers: { 'Accept': 'text/event-stream' },
-      });
-
-      if (!response.ok) {
-        log(`✗ 请求失败: HTTP ${response.status}`);
-        const err = await response.text();
-        if (err) log(err);
-        hasError = true;
-        setSmoke2Summary([{ name: 'RAG/Agent/LoRA 测试', status: 'failed' }]);
-        setSmoke2Running(false);
-        return;
-      }
-
-      // 解析 SSE 流
-      const reader = response.body?.getReader();
-      if (!reader) {
-        log('✗ 无法读取响应流');
-        hasError = true;
-        setSmoke2Summary([{ name: 'RAG/Agent/LoRA 测试', status: 'failed' }]);
-        setSmoke2Running(false);
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines[lines.length - 1];
-
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i];
-          if (line.startsWith('data: ')) {
-            try {
-              const jsonStr = line.slice(6);
-              const data = JSON.parse(jsonStr);
-              if (data.log) {
-                log(data.log);
-                // 只检测最终的失败状态（不检测中途的警告❌）
-                if (data.log.includes('烟雾测试 2 执行失败')) {
-                  hasError = true;
-                }
-              }
-            } catch (e) {
-              // 忽略 JSON 解析错误
-            }
-          }
-        }
-      }
-
-      // 处理剩余 buffer
-      if (buffer.startsWith('data: ')) {
-        try {
-          const jsonStr = buffer.slice(6);
-          const data = JSON.parse(jsonStr);
-          if (data.log) {
-            log(data.log);
-            if (data.log.includes('烟雾测试 2 执行失败')) {
-              hasError = true;
-            }
-          }
-        } catch (e) {
-          // 忽略
-        }
-      }
-
-    } catch (e: any) {
-      log(`✗ 执行异常: ${e.message}`);
-      hasError = true;
+      const r = await fetch(`${backendBaseUrl}/system/logs/task.log`);
+      const d = await r.json();
+      setTaskLogContent(d?.content ?? '（暂无日志）');
+    } catch {
+      setTaskLogContent('（加载失败）');
     }
-
-    // 从日志中解析结果汇总（使用本地 allLines，避免 stale closure）
-    const statusMap = new Map<string, 'passed' | 'failed'>();
-    const summaryStart = allLines.findIndex(line => line.includes('📊 测试结果汇总'));
-    if (summaryStart >= 0) {
-      for (let i = summaryStart + 2; i < allLines.length; i++) {
-        const line = allLines[i];
-        if (line.includes('✅ 通过')) {
-          const match = line.match(/✅ 通过\s*—\s*(.+)$/);
-          if (match) statusMap.set(match[1].trim(), 'passed');
-        } else if (line.includes('❌ 失败')) {
-          const match = line.match(/❌ 失败\s*—\s*(.+)$/);
-          if (match) statusMap.set(match[1].trim(), 'failed');
-        }
-      }
-    }
-
-    // 汇总缺失时，尝试从逐项日志回填
-    for (const line of allLines) {
-      if (line.includes('✅ RAG 创建知识库测试成功')) statusMap.set('RAG创建知识库', 'passed');
-      else if (line.includes('❌ RAG 创建知识库测试失败')) statusMap.set('RAG创建知识库', 'failed');
-      else if (line.includes('✅ RAG 知识库提问测试成功')) statusMap.set('RAG知识库提问', 'passed');
-      else if (line.includes('❌ RAG 知识库提问测试失败')) statusMap.set('RAG知识库提问', 'failed');
-      else if (line.includes('✅ Agent ReAct 循环执行成功')) statusMap.set('Agent', 'passed');
-      else if (line.includes('❌ Agent 测试失败') || line.includes('❌ Agent 请求失败')) statusMap.set('Agent', 'failed');
-      else if (line.includes('✅ LoRA 微调测试通过')) statusMap.set('LoRA', 'passed');
-      else if (line.includes('❌ LoRA 测试失败') || line.includes('❌ 训练失败') || line.includes('❌ 提交失败')) statusMap.set('LoRA', 'failed');
-    }
-
-    const results: Array<{ name: string; status: 'passed' | 'failed' | 'skipped' }> = smoke2Names.map(name => ({
-      name,
-      status: statusMap.get(name) ?? (hasError ? 'failed' : 'skipped'),
-    }));
-    setSmoke2Summary(results);
-
-    onFetchJobs();
-
-    setSmoke2Running(false);
   }
   const doneJobs = jobs.filter(j => j.status === 'completed' || j.status === 'failed');
   const now = Date.now() / 1000;
@@ -569,7 +338,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       <header className="flex items-center gap-3.5 pb-1">
         <TasksIcon size={36} badge={activeJobs.length} />
         <div className="flex-1">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">任务列表</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">管理页面</h1>
           <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT · 图像生成 · 图像处理 · 视频生成 · OCR · 口型同步 · 文档转换 · 媒体转换</p>
         </div>
         <button className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors" onClick={onFetchJobs}>刷新</button>
@@ -578,6 +347,7 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             onClick={async () => {
               await fetch(`${backendBaseUrl}/jobs?status=done`, { method: 'DELETE' }).catch(() => {});
               setJobs(prev => prev.filter(j => j.status === 'queued' || j.status === 'running'));
+              setTaskLogContent(null);
             }}>清空已完成</button>
         )}
       </header>
@@ -600,81 +370,68 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
               {activeJobs.map(j => <JobRow key={j.id} job={j} />)}
             </section>
           )}
-          {doneJobs.length > 0 && (
-            <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-xs font-semibold text-slate-400">历史记录（{doneJobs.length}）</span>
+          {/* 历史记录：运行记录 / 日志 两个按钮 */}
+          <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
+              <button
+                className={`text-xs font-semibold transition-colors ${historyView === 'jobs' ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                onClick={() => setHistoryView('jobs')}>
+                运行记录{doneJobs.length > 0 ? `（${doneJobs.length}）` : ''}
+              </button>
+              <button
+                className={`text-xs font-semibold transition-colors ${historyView === 'log' ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                onClick={() => { setHistoryView('log'); loadTaskLog(); }}>
+                日志
+              </button>
+              {historyView === 'log' && (
+                <>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">task.log</span>
+                  <button className="ml-auto text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                    onClick={loadTaskLog}>
+                    刷新
+                  </button>
+                </>
+              )}
+            </div>
+            {historyView === 'jobs' && doneJobs.length > 0 && (
+              <div>{doneJobs.map(j => <JobRow key={j.id} job={j} />)}</div>
+            )}
+            {historyView === 'jobs' && doneJobs.length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">暂无历史记录</div>
+            )}
+            {historyView === 'log' && (
+              <div className="px-5 py-3">
+                <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
+                  style={{ maxHeight: '24rem' }}>
+                  {taskLogContent ?? '（加载中…）'}
+                </pre>
               </div>
-              {doneJobs.map(j => <JobRow key={j.id} job={j} />)}
-            </section>
-          )}
+            )}
+          </section>
         </>
       )}
       {/* 烟雾测试 */}
       <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试</span>
-              {downloadDir && (
-                <span className="text-[11px] text-slate-400 dark:text-slate-500" title={downloadDir}>
-                  缓存目录：{downloadDir}
-                </span>
-              )}
-            </div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试</span>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">7 大引擎 13 项测试（1.Fish Speech · 2.GPT-SoVITS · 3.Seed-VC · 4.RVC · 5.Faster Whisper · 6.FaceFusion · 7.FFmpeg）</p>
           </div>
           <button
             className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
             style={{ backgroundColor: SPRING_GREEN }}
             disabled={smokeRunning || !backendBaseUrl}
-            onClick={runSmokeTests}
+            onClick={() => runSmokeTest('smoketest/run', setSmokeRunning)}
           >
             {smokeRunning ? <><Spinner />运行中…</> : '运行烟雾测试'}
           </button>
         </div>
-        {smokeLog.length > 0 && (
-          <div
-            ref={smokeLogRef}
-            className="px-5 py-3 bg-slate-950 text-green-400 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap"
-            style={{ maxHeight: '10rem' }}
-          >
-            {smokeLog.join('\n')}
-          </div>
-        )}
-        {smokeSummary.length > 0 && (
-          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2">测试结果汇总</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {smokeSummary.map(r => (
-                <div key={r.name} className="flex items-center gap-1.5 text-xs">
-                  {r.status === 'passed'  && <span className="text-emerald-500 font-bold shrink-0">✓</span>}
-                  {r.status === 'failed'  && <span className="text-rose-500 font-bold shrink-0">✗</span>}
-                  {r.status === 'skipped' && <span className="text-amber-500 font-bold shrink-0">⚠</span>}
-                  <span className={
-                    r.status === 'passed'  ? 'text-emerald-700 dark:text-emerald-400' :
-                    r.status === 'failed'  ? 'text-rose-600 dark:text-rose-400' :
-                    'text-amber-600 dark:text-amber-400'
-                  }>{r.name}</span>
-                  {r.status === 'skipped' && <span className="text-slate-400 text-[10px]">跳过</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </section>
       {/* 烟雾测试 2 */}
       <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 dark:border-slate-700/80 shadow-panel overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试 2</span>
-              {downloadDir && (
-                <span className="text-[11px] text-slate-400 dark:text-slate-500" title={downloadDir}>
-                  缓存目录：{downloadDir}
-                </span>
-              )}
-            </div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试 2</span>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">高级功能测试（RAG 知识库 · Agent 智能体 · LoRA 微调）</p>
             <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-1 font-mono">
               <p>📥 会自动拉取的资源：</p>
@@ -690,40 +447,11 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
             style={{ backgroundColor: SPRING_GREEN }}
             disabled={smoke2Running || !backendBaseUrl}
-            onClick={runSmokeTests2}
+            onClick={() => runSmokeTest('smoketest2/run', setSmoke2Running)}
           >
             {smoke2Running ? <><Spinner />运行中…</> : '运行烟雾测试 2'}
           </button>
         </div>
-        {smoke2Log.length > 0 && (
-          <div
-            ref={smoke2LogRef}
-            className="px-5 py-3 bg-slate-950 text-green-400 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap"
-            style={{ maxHeight: '10rem' }}
-          >
-            {smoke2Log.join('\n')}
-          </div>
-        )}
-        {smoke2Summary.length > 0 && (
-          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2">测试结果汇总</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {smoke2Summary.map(r => (
-                <div key={r.name} className="flex items-center gap-1.5 text-xs">
-                  {r.status === 'passed'  && <span className="text-emerald-500 font-bold shrink-0">✓</span>}
-                  {r.status === 'failed'  && <span className="text-rose-500 font-bold shrink-0">✗</span>}
-                  {r.status === 'skipped' && <span className="text-amber-500 font-bold shrink-0">⚠</span>}
-                  <span className={
-                    r.status === 'passed'  ? 'text-emerald-700 dark:text-emerald-400' :
-                    r.status === 'failed'  ? 'text-rose-600 dark:text-rose-400' :
-                    'text-amber-600 dark:text-amber-400'
-                  }>{r.name}</span>
-                  {r.status === 'skipped' && <span className="text-slate-400 text-[10px]">跳过</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </section>
       {/* 健康检查 */}
       <HealthCheck backendBaseUrl={backendBaseUrl} />

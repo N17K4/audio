@@ -72,9 +72,31 @@ def _emit(obj: dict, json_progress: bool) -> None:
             print(f"\n=== {obj.get('label', '')} ===", flush=True)
 
 
+def _eval_platform_marker(pkg: str) -> bool:
+    """评估包的平台标记（如 '; sys_platform != "win32"'），返回当前平台是否应安装。"""
+    if ";" not in pkg:
+        return True
+    marker_part = pkg.split(";", 1)[1].strip()
+    # 简单解析 sys_platform 条件
+    if "sys_platform" in marker_part:
+        current = sys.platform
+        if "!=" in marker_part:
+            val = re.search(r"!=\s*['\"]([^'\"]+)['\"]", marker_part)
+            if val:
+                return current != val.group(1)
+        elif "==" in marker_part:
+            val = re.search(r"==\s*['\"]([^'\"]+)['\"]", marker_part)
+            if val:
+                return current == val.group(1)
+    return True
+
+
 def _dedup_packages(packages: list[str]) -> list[str]:
     seen: dict[str, str] = {}
     for pkg in packages:
+        # 评估平台标记，跳过不适用当前平台的包
+        if not _eval_platform_marker(pkg):
+            continue
         name = re.split(r"[>=<!\[;\s]", pkg)[0].lower().replace("-", "_")
         # 嵌入式 Python 自带的包不需要装到 --target，跳过
         if name in _EMBEDDED_PROTECTED_PACKAGES:
@@ -210,10 +232,12 @@ _EMBEDDED_PROTECTED_PACKAGES = {
     "fastapi", "starlette",
     "uvicorn", "httpx", "httpcore",
     "anyio", "sniffio",
-    "typing_extensions",
     "annotated_types",
     "numpy",
 }
+# 注意: typing_extensions は torch が必要とするバージョン（4.x）と
+# 嵌入式 Python 同梱バージョンが異なる場合があるため、ここに含めない。
+# target 側の新しいバージョンを維持し、torch の import が壊れるのを防ぐ。
 
 
 def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
@@ -567,6 +591,15 @@ def main():
         _emit({"type": "log", "message": f"嵌入式 Python：{py}"}, args.json_progress)
     if args.pypi_mirror:
         _emit({"type": "log", "message": f"PyPI 镜像：{args.pypi_mirror}"}, args.json_progress)
+
+    # Windows 前置依赖：loguru が win32-setctime を要求するため、先にインストール
+    if platform.system() == "Windows":
+        _emit({"type": "log", "message": "安装 Windows 前置依赖: win32-setctime"}, args.json_progress)
+        pre_cmd = [py, "-m", "pip", "install", "win32-setctime>=1.0.0",
+                   "--target", args.target, "--no-warn-script-location", "-q"]
+        if args.pypi_mirror:
+            pre_cmd += ["-i", args.pypi_mirror]
+        subprocess.run(pre_cmd, capture_output=True, text=True, timeout=120)
 
     all_pkgs: list[str] = []
     for cfg in engines.values():

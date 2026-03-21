@@ -426,7 +426,7 @@ export default function AppShell() {
             {/* Tasks + Settings tabs */}
             {showTasks && (() => {
               const TASKS_TABS = [
-                { id: 'tasks',  label: '任务列表' },
+                { id: 'tasks',  label: '管理页面' },
                 { id: 'about',  label: '功能说明' },
                 { id: 'models', label: '模型管理' },
               ] as const;

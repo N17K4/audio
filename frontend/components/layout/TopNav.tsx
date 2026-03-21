@@ -71,7 +71,7 @@ export default function TopNav({ currentPage, jobs, isDark, setIsDark, onNavigat
         {/* Tasks */}
         <button
           onClick={() => onNavigate('tasks')}
-          title="任务列表"
+          title="管理页面"
           className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
             currentPage === 'tasks' || currentPage === 'system'
               ? 'bg-blue-50 dark:bg-blue-950/30 text-[#1A8FE3]'

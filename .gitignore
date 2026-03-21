@@ -51,6 +51,7 @@ runtime/*
 
 # ─── 无独立源码的引擎（rvc 通过 rvc-python pip 包推理，无需引擎目录）────────
 runtime/engine/rvc/
+runtime/engine/*_tmp/
 # ─── 不可再分发的引擎（OpenRAIL-AS 许可证，setup 时 git clone）──────────────
 runtime/engine/facefusion/
 

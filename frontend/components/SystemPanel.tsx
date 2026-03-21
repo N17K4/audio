@@ -173,12 +173,8 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     setStageStatus(s => ({ ...s, [stage]: 'idle' }));
   }
 
-  // ── 查看日志（按需加载 logs/download-{stage}.log）──────────────────────────
+  // ── 加载日志（按需加载 logs/download-{stage}.log）──────────────────────────
   async function toggleStageLog(stage: string) {
-    if (stageLogContent[stage] != null) {
-      setStageLogContent(s => { const next = { ...s }; delete next[stage]; return next; });
-      return;
-    }
     try {
       const r = await fetch(`${backendBaseUrl}/system/logs/download-${stage}.log`);
       const d = await r.json();
@@ -188,9 +184,19 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     }
   }
 
-  // ── 折叠状态 ─────────────────────────────────────────────────────────────────
+  // ── 折叠状态（全量重置 / 缓存区域用原有 collapsed） ───────────────────────────
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleCollapse = (key: string) => setCollapsed(s => ({ ...s, [key]: !s[key] }));
+
+  // ── 各阶段面板：'info'=介绍（默认） / 'log'=日志 / null=关闭 ──────────────
+  const [stagePanel, setStagePanel] = useState<Record<string, 'info' | 'log' | null>>({});
+  function toggleStagePanel(stage: string, panel: 'info' | 'log') {
+    setStagePanel(s => ({ ...s, [stage]: s[stage] === panel ? null : panel }));
+    // 点日志时按需加载
+    if (panel === 'log' && stageLogContent[stage] == null) {
+      toggleStageLog(stage);
+    }
+  }
 
   // ── sections ─────────────────────────────────────────────────────────────────
 
@@ -401,31 +407,28 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
           )}
         </div>
 
-        {/* 5 个安装阶段卡片（可折叠） */}
+        {/* 5 个安装阶段卡片 */}
         {STAGE_ORDER.map(stage => {
           const meta = STAGE_META[stage];
           const rows = stageMap.get(stage) ?? [];
           const stageSize = rows.reduce((s, r) => s + Math.max(0, r.size), 0);
           const isBusy = (stageStatus[stage] ?? 'idle') !== 'idle';
-          const isOpen = !collapsed[stage];
+          const panel = stagePanel[stage] ?? 'info';
 
           return (
             <div key={stage} className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-              {/* 可折叠标题栏 */}
+              {/* 标题栏 */}
               <div className="flex items-center gap-2 px-5 py-3">
-                <button className="flex items-center gap-2 flex-1 min-w-0 text-left" onClick={() => toggleCollapse(stage)}>
-                  <span className="text-slate-400"><ChevronIcon open={isOpen} /></span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{meta.label}</h3>
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono leading-none bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-                        {meta.cmd}
-                      </span>
-                      <span className="text-xs text-slate-400">预计 {meta.estimatedSize}</span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{meta.desc}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{meta.label}</h3>
+                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono leading-none bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                      {meta.cmd}
+                    </span>
+                    <span className="text-xs text-slate-400">预计 {meta.estimatedSize}</span>
                   </div>
-                </button>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{meta.desc}</p>
+                </div>
                 <span className="text-sm font-bold text-slate-600 dark:text-slate-300 tabular-nums shrink-0">{fmtSize(stageSize)}</span>
                 {stage !== 'setup' && (
                   isBusy && stageStatus[stage] === 'reinstalling' ? (
@@ -449,11 +452,28 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 )}
               </div>
 
-              {/* 展开内容：子项列表 */}
-              {isOpen && rows.length > 0 && (
+              {/* 介绍 / 日志 按钮栏 */}
+              <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-2 flex items-center gap-3">
+                <button
+                  className={`text-xs transition-colors ${panel === 'info' ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                  onClick={() => toggleStagePanel(stage, 'info')}>
+                  介绍
+                </button>
+                <button
+                  className={`text-xs transition-colors ${panel === 'log' ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                  onClick={() => toggleStagePanel(stage, 'log')}>
+                  日志
+                </button>
+                {panel === 'log' && (
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">download-{stage}.log</span>
+                )}
+              </div>
+
+              {/* 介绍面板：子项列表 */}
+              {panel === 'info' && rows.length > 0 && (
                 <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
                   {rows.map(r => (
-                    <div key={r.key} className="flex items-center gap-4 px-5 py-2.5 pl-12 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                    <div key={r.key} className="flex items-center gap-4 px-5 py-2.5 pl-8 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
                       <div className="flex-1 min-w-0 text-left">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
@@ -480,19 +500,13 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 </div>
               )}
 
-              {/* 查看日志按钮（按需加载 logs/download-{stage}.log） */}
-              <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-2 flex items-center">
-                <button className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                  onClick={() => toggleStageLog(stage)}>
-                  {stageLogContent[stage] != null ? '收起日志' : '查看日志'}
-                </button>
-              </div>
-              {stageLogContent[stage] != null && (
-                <div className="px-5 pb-3">
+              {/* 日志面板 */}
+              {panel === 'log' && (
+                <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
                   <pre
                     className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
                     style={{ maxHeight: '14rem' }}>
-                    {stageLogContent[stage]}
+                    {stageLogContent[stage] ?? '（加载中…）'}
                   </pre>
                 </div>
               )}

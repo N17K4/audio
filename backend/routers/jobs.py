@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from job_queue import JOBS, _job_public, _cleanup_old_jobs
+from routers.health import _clear_task_log
 
 router = APIRouter()
 
@@ -42,4 +43,5 @@ async def clear_jobs(status: str = "done"):
         for jid in to_del:
             JOBS.pop(jid, None)
         removed = len(to_del)
+    _clear_task_log()
     return {"ok": True, "removed": removed}
