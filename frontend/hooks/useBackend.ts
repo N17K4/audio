@@ -27,7 +27,7 @@ export function useBackend() {
     }
     const origin = window.location.origin;
     fetch(`${origin}/health`).then(r => {
-      if (r.ok) { setBackendBaseUrl(origin); setIsDocker(true); rlog('INFO', '后端地址(同源):', origin); }
+      if (r.ok) { setBackendBaseUrl(origin); rlog('INFO', '后端地址(同源):', origin); }
       else setBackendBaseUrl('http://127.0.0.1:8000');
     }).catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
   }, []);
@@ -53,6 +53,7 @@ export function useBackend() {
       if (!r.ok) return;
       const d = await r.json();
       if (d?.download_dir) setDownloadDir(d.download_dir);
+      if (d?.is_docker) setIsDocker(true);
     } catch { /**/ }
   }
 

@@ -5,6 +5,7 @@ import json
 import threading
 import queue as _queue
 
+import os
 from config import BACKEND_HOST, BACKEND_PORT, USER_DATA_ROOT, TASK_CAPABILITIES, _MANIFEST, DOWNLOAD_DIR, load_settings, save_settings, APP_ROOT, RESOURCES_ROOT, RUNTIME_ROOT, ML_PACKAGES_DIR, LOGS_DIR
 from utils.engine import get_checkpoint_dir, detect_ffmpeg_hwaccel
 from utils.voices import list_voices
@@ -55,6 +56,7 @@ async def health():
         "user_data_root": str(USER_DATA_ROOT),
         "download_dir": str(DOWNLOAD_DIR),
         "voices_count": len(list_voices()),
+        "is_docker": os.environ.get("RESOURCES_ROOT") == "/app",
     }
 
 

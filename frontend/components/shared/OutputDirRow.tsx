@@ -137,7 +137,7 @@ export default function OutputDirRow({ required, outputDir, setOutputDir, fieldC
             )}
 
             {/* ── ディレクトリリスト ── */}
-            <div className="flex-1 overflow-y-auto px-3 py-2 min-h-[320px]">
+            <div className="flex-1 overflow-y-auto px-3 py-2 min-h-0">
               {loading && <div className="text-center text-sm text-slate-400 py-12">加载中…</div>}
               {error && <div className="text-center text-sm text-red-500 py-12">{error}</div>}
               {!loading && !error && browseResult && (
