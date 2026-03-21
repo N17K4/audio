@@ -35,6 +35,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="转录文本输出路径")
     parser.add_argument("--model", default="large-v3", help="Whisper 模型（默认 large-v3）")
     parser.add_argument("--checkpoint_dir", default="", help="模型缓存目录（覆盖 manifest 默认值）")
+    parser.add_argument("--language", default="", help="语言代码（空=自动检测）")
+    parser.add_argument("--beam_size", type=int, default=5, help="Beam search 大小（默认 5）")
+    parser.add_argument("--compute_type", default="auto", help="计算类型（auto/int8/float16/float32）")
     return parser.parse_args()
 
 
@@ -96,7 +99,25 @@ def detect_engine_cmd() -> str:
     return ""
 
 
-def run_with_faster_whisper(input_path: Path, output_path: Path, model: str, checkpoint_dir: str = "") -> int:
+def _detect_compute_type(compute_type: str) -> tuple[str, str]:
+    """自动检测最佳设备和计算类型，返回 (device, compute_type)。"""
+    if compute_type != "auto":
+        return "cpu", compute_type
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda", "float16"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "cpu", "float32"  # faster-whisper 不直接支持 MPS
+    except Exception:
+        pass
+    return "cpu", "int8"
+
+
+def run_with_faster_whisper(
+    input_path: Path, output_path: Path, model: str, checkpoint_dir: str = "",
+    language: str = "", beam_size: int = 5, compute_type: str = "auto",
+) -> int:
     """使用本地已下载的 faster-whisper 模型进行转录。
 
     模型必须通过 pnpm run checkpoints 预先下载到 checkpoint_dir/{model}/ 目录下。
@@ -132,14 +153,17 @@ def run_with_faster_whisper(input_path: Path, output_path: Path, model: str, che
 
     try:
         model_path = str(local_model_dir)
-        print(f"[faster-whisper] 使用本地模型: {model_path}", file=sys.stderr)
-        # CPU + int8：macOS/Windows 兼容性最好，速度比 float16 快
+        device, ct = _detect_compute_type(compute_type)
+        print(f"[faster-whisper] 使用本地模型: {model_path} (device={device}, compute_type={ct})", file=sys.stderr)
         wm = WhisperModel(
             model_path,
-            device="cpu",
-            compute_type="int8",
+            device=device,
+            compute_type=ct,
         )
-        segments, info = wm.transcribe(str(input_path), beam_size=5)
+        transcribe_kwargs: dict = {"beam_size": beam_size}
+        if language:
+            transcribe_kwargs["language"] = language
+        segments, info = wm.transcribe(str(input_path), **transcribe_kwargs)
         text = "".join(segment.text for segment in segments).strip()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(text, encoding="utf-8")
@@ -166,7 +190,10 @@ def main() -> int:
     cmd_template = load_cmd_template()
     if not cmd_template:
         # Fallback：直接使用 faster-whisper 库
-        return run_with_faster_whisper(input_path, output_path, args.model, checkpoint_dir)
+        return run_with_faster_whisper(
+            input_path, output_path, args.model, checkpoint_dir,
+            language=args.language, beam_size=args.beam_size, compute_type=args.compute_type,
+        )
 
     cmd = (
         cmd_template

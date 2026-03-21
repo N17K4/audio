@@ -114,7 +114,10 @@ async def task_tts(
 
     async def _do_tts():
         if p == "fish_speech":
-            return await run_fish_speech_tts(text=text, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint)
+            return await run_fish_speech_tts(
+                text=text, voice_refs=voice_refs_list, api_key=api_key, endpoint=cloud_endpoint,
+                top_p=top_p, temperature=temperature, repetition_penalty=repetition_penalty,
+            )
         elif p == "openai":
             return await run_openai_tts(text=text, api_key=api_key, model=model or "gpt-4o-mini-tts", voice=voice or "alloy")
         elif p == "gemini":

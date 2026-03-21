@@ -137,19 +137,26 @@ async def run_smoketest():
     import sys
     import os
 
+    logger.info("[smoketest] ========== 收到 /smoketest/run 请求 ==========")
+
     test_file = APP_ROOT / "tests" / "smoke_test.py"
+    logger.info("[smoketest] APP_ROOT=%s  test_file=%s  exists=%s", APP_ROOT, test_file, test_file.exists())
 
     if not test_file.exists():
+        logger.error("[smoketest] 测试文件不存在: %s", test_file)
         return {"ok": False, "error": f"测试文件不存在：{test_file}"}
 
     from utils.engine import get_embedded_python as _get_py
     try:
         py_cmd = _get_py()
-    except RuntimeError:
+        logger.info("[smoketest] 嵌入式 Python: %s", py_cmd)
+    except RuntimeError as e:
         py_cmd = sys.executable
+        logger.warning("[smoketest] 嵌入式 Python 未找到 (%s)，回退 sys.executable: %s", e, py_cmd)
 
     def generate():
         try:
+            logger.info("[smoketest] generate() 开始执行")
             env = os.environ.copy()
             paths_to_add = [str(APP_ROOT), str(ML_PACKAGES_DIR)]
             existing = env.get("PYTHONPATH", "")
@@ -163,14 +170,17 @@ async def run_smoketest():
 
             cmd = [py_cmd, "-u", str(test_file)]
             logger.info("[smoketest] Python: %s", py_cmd)
+            logger.info("[smoketest] Python 可执行文件存在: %s", Path(py_cmd).exists())
             logger.info("[smoketest] 测试文件: %s (存在: %s)", test_file, test_file.exists())
             logger.info("[smoketest] PYTHONPATH: %s", env["PYTHONPATH"])
             logger.info("[smoketest] ML_PACKAGES_DIR: %s (存在: %s)", ML_PACKAGES_DIR, Path(str(ML_PACKAGES_DIR)).exists())
+            logger.info("[smoketest] BACKEND_PORT: %s", env["BACKEND_PORT"])
             logger.info("[smoketest] 命令: %s", " ".join(cmd))
             yield f"data: {json.dumps({'log': f'[调试] Python: {py_cmd}'})}\n\n"
             yield f"data: {json.dumps({'log': f'[调试] 测试文件: {test_file} (存在: {test_file.exists()})'})}\n\n"
             yield f"data: {json.dumps({'log': '[调试] PYTHONPATH: ' + env['PYTHONPATH']})}\n\n"
 
+            logger.info("[smoketest] 准备启动子进程...")
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -180,25 +190,29 @@ async def run_smoketest():
                 env=env,
                 encoding="utf-8", errors="replace",
             )
+            logger.info("[smoketest] 子进程已启动 PID=%s", proc.pid)
             yield f"data: {json.dumps({'log': f'[调试] 进程已启动 (PID: {proc.pid})'})}\n\n"
 
             returncode = None
+            line_count = 0
             for item in _stream_subprocess(proc):
                 if isinstance(item, int):
                     returncode = item
                 else:
+                    line_count += 1
                     yield f"data: {item}\n\n"
 
-            logger.info("[smoketest] 进程结束，退出码: %s", returncode)
+            logger.info("[smoketest] 进程结束，退出码: %s，输出行数: %s", returncode, line_count)
             if returncode == 0:
                 yield f"data: {json.dumps({'log': '─── 烟雾测试 1 执行完成 ✅'})}\n\n"
             else:
                 yield f"data: {json.dumps({'log': f'─── 烟雾测试 1 执行失败（退出码：{returncode}）'})}\n\n"
 
         except Exception as e:
-            logger.error(f"运行 smoke_test 失败: {e}", exc_info=True)
+            logger.error("[smoketest] 异常: %s", e, exc_info=True)
             yield f"data: {json.dumps({'log': f'❌ 异常：{str(e)}'})}\n\n"
 
+    logger.info("[smoketest] 返回 StreamingResponse")
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
@@ -208,20 +222,27 @@ async def run_smoketest2():
     import sys
     import os
 
+    logger.info("[smoketest2] ========== 收到 /smoketest2/run 请求 ==========")
+
     test_file = APP_ROOT / "tests" / "smoke_test2.py"
+    logger.info("[smoketest2] APP_ROOT=%s  test_file=%s  exists=%s", APP_ROOT, test_file, test_file.exists())
 
     if not test_file.exists():
+        logger.error("[smoketest2] 测试文件不存在: %s", test_file)
         return {"ok": False, "error": f"测试文件不存在：{test_file}"}
 
     from utils.engine import get_embedded_python as _get_py
     try:
         py_cmd = _get_py()
-    except RuntimeError:
+        logger.info("[smoketest2] 嵌入式 Python: %s", py_cmd)
+    except RuntimeError as e:
         py_cmd = sys.executable
+        logger.warning("[smoketest2] 嵌入式 Python 未找到 (%s)，回退 sys.executable: %s", e, py_cmd)
 
     def generate():
         """流式输出测试结果。"""
         try:
+            logger.info("[smoketest2] generate() 开始执行")
             env = os.environ.copy()
             paths_to_add = [str(APP_ROOT), str(ML_PACKAGES_DIR)]
             existing = env.get("PYTHONPATH", "")
@@ -235,14 +256,17 @@ async def run_smoketest2():
 
             cmd = [py_cmd, "-u", str(test_file)]
             logger.info("[smoketest2] Python: %s", py_cmd)
+            logger.info("[smoketest2] Python 可执行文件存在: %s", Path(py_cmd).exists())
             logger.info("[smoketest2] 测试文件: %s (存在: %s)", test_file, test_file.exists())
             logger.info("[smoketest2] PYTHONPATH: %s", env["PYTHONPATH"])
             logger.info("[smoketest2] ML_PACKAGES_DIR: %s (存在: %s)", ML_PACKAGES_DIR, Path(str(ML_PACKAGES_DIR)).exists())
+            logger.info("[smoketest2] BACKEND_PORT: %s", env["BACKEND_PORT"])
             logger.info("[smoketest2] 命令: %s", " ".join(cmd))
             yield f"data: {json.dumps({'log': f'[调试] Python: {py_cmd}'})}\n\n"
             yield f"data: {json.dumps({'log': f'[调试] 测试文件: {test_file} (存在: {test_file.exists()})'})}\n\n"
             yield f"data: {json.dumps({'log': '[调试] PYTHONPATH: ' + env['PYTHONPATH']})}\n\n"
 
+            logger.info("[smoketest2] 准备启动子进程...")
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -252,16 +276,19 @@ async def run_smoketest2():
                 env=env,
                 encoding="utf-8", errors="replace",
             )
+            logger.info("[smoketest2] 子进程已启动 PID=%s", proc.pid)
             yield f"data: {json.dumps({'log': f'[调试] 进程已启动 (PID: {proc.pid})'})}\n\n"
 
             returncode = None
+            line_count = 0
             for item in _stream_subprocess(proc):
                 if isinstance(item, int):
                     returncode = item
                 else:
+                    line_count += 1
                     yield f"data: {item}\n\n"
 
-            logger.info("[smoketest2] 进程结束，退出码: %s", returncode)
+            logger.info("[smoketest2] 进程结束，退出码: %s，输出行数: %s", returncode, line_count)
             if returncode == 0:
                 yield f"data: {json.dumps({'log': '─── 烟雾测试 2 执行完成 ✅'})}\n\n"
             else:

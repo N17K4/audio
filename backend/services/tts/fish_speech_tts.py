@@ -18,7 +18,11 @@ from utils.engine import get_fish_speech_command_template, build_engine_env
 from utils.audit import log_ai_call, log_ai_error
 
 
-def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_refs: list = []) -> None:
+def run_local_fish_speech_tts_cmd(
+    text: str, output_path: Path, voice_refs: list = [],
+    top_p: float = 0.7, temperature: float = 0.7,
+    repetition_penalty: float = 1.2, max_new_tokens: int = 1024,
+) -> None:
     cmd_tpl = get_fish_speech_command_template()
     if not cmd_tpl:
         raise HTTPException(
@@ -38,6 +42,14 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_refs: list
         .replace("{output}", str(output_path.resolve()))
         .replace("{voice_ref}", refs_arg)
     )
+    if top_p != 0.7:
+        cmd += f" --top_p {top_p}"
+    if temperature != 0.7:
+        cmd += f" --temperature {temperature}"
+    if repetition_penalty != 1.2:
+        cmd += f" --repetition_penalty {repetition_penalty}"
+    if max_new_tokens != 1024:
+        cmd += f" --max_new_tokens {max_new_tokens}"
     log_ai_call("fish_speech", {"text": text, "output": str(output_path), "voice_refs": voice_refs}, command=cmd)
     try:
         completed = subprocess.run(
@@ -64,14 +76,21 @@ def run_local_fish_speech_tts_cmd(text: str, output_path: Path, voice_refs: list
         raise HTTPException(status_code=500, detail="Fish Speech finished but output file is missing/empty")
 
 
-async def run_fish_speech_tts(text: str, voice: str = "", voice_refs: list = [], api_key: str = "", endpoint: str = "") -> Dict:
+async def run_fish_speech_tts(
+    text: str, voice: str = "", voice_refs: list = [], api_key: str = "", endpoint: str = "",
+    top_p: float = 0.7, temperature: float = 0.7, repetition_penalty: float = 1.2, max_new_tokens: int = 1024,
+) -> Dict:
     # Try local Fish Speech CLI first
     local_cmd = get_fish_speech_command_template()
     if local_cmd:
         task_id = str(uuid.uuid4())
         output_path = DOWNLOAD_DIR / f"{task_id}_tts_fish_speech.wav"
         effective_refs = voice_refs if voice_refs else ([voice] if voice else [])
-        await asyncio.to_thread(run_local_fish_speech_tts_cmd, text, output_path, effective_refs)
+        await asyncio.to_thread(
+            run_local_fish_speech_tts_cmd, text, output_path, effective_refs,
+            top_p=top_p, temperature=temperature,
+            repetition_penalty=repetition_penalty, max_new_tokens=max_new_tokens,
+        )
         return {
             "status": "success",
             "task": "tts",

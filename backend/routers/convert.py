@@ -31,7 +31,7 @@ async def convert(
     # 通用
     pitch_shift: int = Form(0),
     # SeedVC 专属
-    diffusion_steps: int = Form(8),
+    diffusion_steps: int = Form(10),
     f0_condition: bool = Form(False),
     cfg_rate: float = Form(0.7),
     enable_postprocess: bool = Form(True),

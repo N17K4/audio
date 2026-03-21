@@ -1,19 +1,25 @@
 """基础功能烟雾测试
 
-测试项目（7 大引擎 13 项测试）：
-  1.   Fish Speech TTS
+测试项目（7 大引擎 19 项测试）：
+  1-1. Fish Speech TTS
+  1-2. Fish Speech TTS 高级参数（top_p / temperature / repetition_penalty）
   2-1. GPT-SoVITS TTS 合成
-  2-2. GPT-SoVITS 创建音色
-  2-3. GPT-SoVITS 高级参数
+  2-2. GPT-SoVITS TTS 高级参数
+  2-3. GPT-SoVITS 训练
+  2-4. GPT-SoVITS 训练高级参数（epochs / batch_size / learning_rate）
   3-1. Seed-VC 音色转换
   3-2. Seed-VC 高级参数（pitch_shift / diffusion_steps / f0_condition / cfg_rate）
   4-1. RVC 音色转换
   4-2. RVC 转换高级参数（pitch_shift / f0_method / filter_radius / index_rate / protect）
   4-3. RVC 训练（创建音色）
   4-4. RVC 训练高级参数（epochs / f0_method / sample_rate）
-  5.   Faster Whisper STT
-  6.   FaceFusion 换脸
-  7.   FFmpeg 媒体转换
+  5-1. Faster Whisper STT
+  5-2. Faster Whisper 高级参数（language / beam_size）
+  6-1. FaceFusion 换脸
+  6-2. FaceFusion 高级参数（face_enhancer / many_faces）
+  7-1. FFmpeg WAV→MP3
+  7-2. FFmpeg WAV→FLAC
+  7-3. FFmpeg clip 截取
 
 運行：
   cd test001 && python tests/smoke_test.py
@@ -112,16 +118,18 @@ def _fail(tag: str, name: str, status: int, text: str):
 # 1. Fish Speech TTS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_1_fish_speech_tts():
+def test_1_1_fish_speech_tts():
     import httpx
-    TAG = "[1]"
+    TAG = "[1-1]"
     print(f"\n{TAG} Fish Speech TTS")
 
+    wav_data = create_test_wav(duration_sec=3)
     with httpx.Client(timeout=30) as client:
-        data = {"text": "烟雾测试文本合成", "provider": "fish_speech"}
-        print(f"  📤 POST /tasks/tts  参数：{data}")
+        data = {"text": "[1-1]Fish Speech", "provider": "fish_speech"}
+        files = {"reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav")}
+        print(f"  📤 POST /tasks/tts  参数：{data}  + reference_audio")
 
-        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data)
+        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data, files=files)
         print(f"     HTTP {resp.status_code}")
 
         if resp.status_code == 200:
@@ -129,8 +137,31 @@ def test_1_fish_speech_tts():
         _fail(TAG, "Fish Speech TTS", resp.status_code, resp.text)
 
 
+def test_1_2_fish_speech_advanced():
+    import httpx
+    TAG = "[1-2]"
+    print(f"\n{TAG} Fish Speech TTS 高级参数")
+
+    wav_data = create_test_wav(duration_sec=3)
+    with httpx.Client(timeout=30) as client:
+        data = {
+            "text": "[1-2]Fish Speech 高级", "provider": "fish_speech",
+            "top_p": "0.8", "temperature": "0.9", "repetition_penalty": "1.5",
+        }
+        files = {"reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav")}
+        param_summary = {k: v for k, v in data.items() if k != "text"}
+        print(f"  📤 POST /tasks/tts  参数：{param_summary}  + reference_audio")
+
+        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            return _ok(TAG, "Fish Speech TTS（高级参数）", resp.json())
+        _fail(TAG, "Fish Speech TTS（高级参数）", resp.status_code, resp.text)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# 2. GPT-SoVITS（2-1 TTS / 2-2 创建音色 / 2-3 高级参数）
+# 2. GPT-SoVITS（2-1 TTS / 2-2 训练 / 2-3 创建音色 / 2-4 高级参数）
 # ──────────────────────────────────────────────────────────────────────────────
 
 def test_2_1_gpt_sovits_tts():
@@ -140,7 +171,7 @@ def test_2_1_gpt_sovits_tts():
 
     wav_data = create_test_wav(duration_sec=5)
     with httpx.Client(timeout=30) as client:
-        data = {"text": "烟雾测试文本合成", "provider": "gpt_sovits"}
+        data = {"text": "[2-1]GPT-SoVITS", "provider": "gpt_sovits"}
         print(f"  📤 POST /tasks/tts  参数：{data}")
 
         resp = client.post(
@@ -154,55 +185,72 @@ def test_2_1_gpt_sovits_tts():
         _fail(TAG, "GPT-SoVITS TTS", resp.status_code, resp.text)
 
 
-def test_2_2_gpt_sovits_create_voice():
+def test_2_2_gpt_sovits_train():
     import httpx
+    import zipfile
     TAG = "[2-2]"
-    print(f"\n{TAG} GPT-SoVITS 创建音色")
+    print(f"\n{TAG} GPT-SoVITS 训练")
+
+    wav_data = create_test_wav(duration_sec=3)
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr("train_sample.wav", wav_data)
+    zip_buf.seek(0)
 
     with httpx.Client(timeout=30) as client:
-        files = {
-            "gpt_model_file": ("test_gpt.ckpt", BytesIO(b"\x00" * 1024), "application/octet-stream"),
-            "sovits_model_file": ("test_sovits.pth", BytesIO(b"\x00" * 1024), "application/octet-stream"),
-            "reference_audio": ("test_ref.wav", BytesIO(create_test_wav()), "audio/wav"),
+        files = {"dataset": ("dataset.zip", zip_buf, "application/zip")}
+        data = {
+            "voice_id": "smoke_test_gpt_sovits", "voice_name": "[2-3]GPT-SoVITS 训练",
+            "engine": "gpt_sovits", "epochs": "1", "batch_size": "2",
         }
-        data = {"voice_name": "smoke_test_gpt_sovits", "engine": "gpt_sovits", "ref_text": "这是参考音频的文本"}
-        print(f"  📤 POST /voices/create  engine=gpt_sovits")
+        print(f"  📤 POST /train  engine=gpt_sovits, voice_id={data['voice_id']}, epochs={data['epochs']}")
 
-        resp = client.post(f"{_BASE_URL}/voices/create", data=data, files=files)
+        resp = client.post(f"{_BASE_URL}/train", data=data, files=files)
         print(f"     HTTP {resp.status_code}")
 
         if resp.status_code == 200:
-            body = resp.json()
-            voice_id = body.get("voice_id", "")
-            print(f"     voice_id: {voice_id}")
-
-            # 验证引擎类型
-            voices_resp = client.get(f"{_BASE_URL}/voices")
-            if voices_resp.status_code == 200:
-                voices = voices_resp.json().get("voices", [])
-                matched = [v for v in voices if v.get("voice_id") == voice_id]
-                if matched:
-                    assert matched[0].get("engine") == "gpt_sovits", f"引擎类型错误：{matched[0].get('engine')}"
-                    print(f"     ✓ 引擎类型正确：gpt_sovits")
-
-            # 清理
-            del_resp = client.delete(f"{_BASE_URL}/voices/{voice_id}")
-            if del_resp.status_code == 200:
-                print(f"     🧹 清理：删除测试音色 {voice_id}")
-
-            return _ok(TAG, "GPT-SoVITS 创建音色", body)
-        _fail(TAG, "GPT-SoVITS 创建音色", resp.status_code, resp.text)
+            return _ok(TAG, "GPT-SoVITS 训练", resp.json())
+        _fail(TAG, "GPT-SoVITS 训练", resp.status_code, resp.text)
 
 
-def test_2_3_gpt_sovits_advanced():
+def test_2_3_gpt_sovits_train_advanced():
     import httpx
+    import zipfile
     TAG = "[2-3]"
+    print(f"\n{TAG} GPT-SoVITS 训练高级参数")
+
+    wav_data = create_test_wav(duration_sec=3)
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr("train_sample.wav", wav_data)
+    zip_buf.seek(0)
+
+    with httpx.Client(timeout=30) as client:
+        files = {"dataset": ("dataset.zip", zip_buf, "application/zip")}
+        data = {
+            "voice_id": "smoke_test_gpt_sovits_adv", "voice_name": "[2-4]GPT-SoVITS 训练高级",
+            "engine": "gpt_sovits", "epochs": "2", "batch_size": "4", "learning_rate": "0.0002",
+        }
+        param_summary = {k: v for k, v in data.items() if k != "voice_name"}
+        print(f"  📤 POST /train  高级参数：{param_summary}")
+
+        resp = client.post(f"{_BASE_URL}/train", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            return _ok(TAG, "GPT-SoVITS 训练（高级参数）", resp.json())
+        _fail(TAG, "GPT-SoVITS 训练（高级参数）", resp.status_code, resp.text)
+
+
+def test_2_4_gpt_sovits_tts_advanced():
+    import httpx
+    TAG = "[2-4]"
     print(f"\n{TAG} GPT-SoVITS TTS 高级参数")
 
     wav_data = create_test_wav(duration_sec=5)
     with httpx.Client(timeout=60) as client:
         data = {
-            "text": "高级参数烟雾测试", "provider": "gpt_sovits",
+            "text": "[2-2]GPT-SoVITS TTS 高级", "provider": "gpt_sovits",
             "text_lang": "zh", "prompt_lang": "zh", "ref_text": "这是参考音频对应的文本",
             "top_k": "10", "top_p": "0.9", "temperature": "0.8", "speed": "1.2",
             "repetition_penalty": "1.5", "seed": "42", "text_split_method": "cut3",
@@ -241,7 +289,7 @@ def test_3_1_seed_vc():
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
         files = {
-            "file": ("[3-1]test.wav", BytesIO(wav_data), "audio/wav"),
+            "file": ("[3-1]Seed-VC.wav", BytesIO(wav_data), "audio/wav"),
             "reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav"),
         }
         data = _seed_vc_base_data()
@@ -263,7 +311,7 @@ def test_3_2_seed_vc_advanced():
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
         files = {
-            "file": ("[3-2]test.wav", BytesIO(wav_data), "audio/wav"),
+            "file": ("[3-2]Seed-VC 高级.wav", BytesIO(wav_data), "audio/wav"),
             "reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav"),
         }
         data = {
@@ -326,7 +374,7 @@ def test_4_1_rvc_convert():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("[4-1]test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[4-1]RVC.wav", BytesIO(wav_data), "audio/wav")}
         data = _rvc_convert_base_data(voice_id)
         print(f"  📤 POST /convert  参数：{data}")
 
@@ -351,7 +399,7 @@ def test_4_2_rvc_convert_advanced():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("[4-2]test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[4-2]RVC 高级.wav", BytesIO(wav_data), "audio/wav")}
         data = {
             **_rvc_convert_base_data(voice_id),
             "pitch_shift": "3",
@@ -387,7 +435,7 @@ def test_4_3_rvc_train():
     with httpx.Client(timeout=30) as client:
         files = {"dataset": ("dataset.zip", zip_buf, "application/zip")}
         data = {
-            "voice_id": "smoke_test_rvc", "voice_name": "烟雾测试RVC",
+            "voice_id": "smoke_test_rvc", "voice_name": "[4-3]RVC",
             "epochs": "1", "f0_method": "harvest", "sample_rate": "40000",
         }
         print(f"  📤 POST /train  voice_id={data['voice_id']}, epochs={data['epochs']}")
@@ -415,7 +463,7 @@ def test_4_4_rvc_train_advanced():
     with httpx.Client(timeout=30) as client:
         files = {"dataset": ("dataset.zip", zip_buf, "application/zip")}
         data = {
-            "voice_id": "smoke_test_rvc_adv", "voice_name": "烟雾测试RVC高级",
+            "voice_id": "smoke_test_rvc_adv", "voice_name": "[4-4]RVC 高级",
             "epochs": "2", "f0_method": "rmvpe", "sample_rate": "48000",
         }
         param_summary = {k: v for k, v in data.items() if k != "voice_name"}
@@ -440,7 +488,7 @@ def test_5_faster_whisper():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("[5]test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[5]Faster Whisper.wav", BytesIO(wav_data), "audio/wav")}
         data = {"provider": "faster_whisper", "model": "large-v3"}
         print(f"  📤 POST /tasks/stt  参数：{data}")
 
@@ -468,8 +516,8 @@ def test_6_facefusion():
     png_data = create_test_png()
     with httpx.Client(timeout=30) as client:
         files = {
-            "source_image": ("[6]source.png", BytesIO(png_data), "image/png"),
-            "reference_image": ("[6]ref.png", BytesIO(png_data), "image/png"),
+            "source_image": ("[6]FaceFusion.png", BytesIO(png_data), "image/png"),
+            "reference_image": ("ref.png", BytesIO(png_data), "image/png"),
         }
         data = {"provider": "facefusion"}
         print(f"  📤 POST /tasks/image-i2i  参数：{data}")
@@ -493,7 +541,7 @@ def test_7_ffmpeg():
 
     wav_data = create_test_wav()
     with httpx.Client(timeout=30) as client:
-        files = {"file": ("[7]test.wav", BytesIO(wav_data), "audio/wav")}
+        files = {"file": ("[7-1]WAV→MP3.wav", BytesIO(wav_data), "audio/wav")}
         data = {"action": "convert", "output_format": "mp3"}
         print(f"  📤 POST /tasks/media-convert  参数：{data}")
 
@@ -503,6 +551,104 @@ def test_7_ffmpeg():
         if resp.status_code == 200:
             return _ok(TAG, "FFmpeg", resp.json())
         _fail(TAG, "FFmpeg", resp.status_code, resp.text)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 5-2. Faster Whisper 高级参数
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_5_2_faster_whisper_advanced():
+    import httpx
+    TAG = "[5-2]"
+    print(f"\n{TAG} Faster Whisper STT 高级参数")
+
+    wav_data = create_test_wav()
+    with httpx.Client(timeout=30) as client:
+        files = {"file": ("[5-2]Faster Whisper 高级.wav", BytesIO(wav_data), "audio/wav")}
+        data = {
+            "provider": "faster_whisper", "model": "large-v3",
+            "language": "zh", "beam_size": "3",
+        }
+        print(f"  📤 POST /tasks/stt  参数：{data}")
+
+        resp = client.post(f"{_BASE_URL}/tasks/stt", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            body = resp.json()
+            text = body.get("text", body.get("result_text", ""))
+            if text:
+                print(f"     识别结果：{text}")
+            return _ok(TAG, "Faster Whisper STT（高级参数）", body)
+        _fail(TAG, "Faster Whisper STT（高级参数）", resp.status_code, resp.text)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6-2. FaceFusion 高级参数
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_6_2_facefusion_advanced():
+    import httpx
+    TAG = "[6-2]"
+    print(f"\n{TAG} FaceFusion 高级参数")
+
+    png_data = create_test_png()
+    with httpx.Client(timeout=30) as client:
+        files = {
+            "source_image": ("[6-2]FaceFusion 高级.png", BytesIO(png_data), "image/png"),
+            "reference_image": ("ref.png", BytesIO(png_data), "image/png"),
+        }
+        data = {"provider": "facefusion", "face_enhancer": "true", "many_faces": "true"}
+        print(f"  📤 POST /tasks/image-i2i  参数：{data}")
+
+        resp = client.post(f"{_BASE_URL}/tasks/image-i2i", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            return _ok(TAG, "FaceFusion（高级参数）", resp.json())
+        _fail(TAG, "FaceFusion（高级参数）", resp.status_code, resp.text)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 7-2. FFmpeg 多格式转换
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_7_2_ffmpeg_flac():
+    import httpx
+    TAG = "[7-2]"
+    print(f"\n{TAG} FFmpeg WAV→FLAC")
+
+    wav_data = create_test_wav()
+    with httpx.Client(timeout=30) as client:
+        files = {"file": ("[7-2]WAV→FLAC.wav", BytesIO(wav_data), "audio/wav")}
+        data = {"action": "convert", "output_format": "flac"}
+        print(f"  📤 POST /tasks/media-convert  参数：{data}")
+
+        resp = client.post(f"{_BASE_URL}/tasks/media-convert", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            return _ok(TAG, "FFmpeg WAV→FLAC", resp.json())
+        _fail(TAG, "FFmpeg WAV→FLAC", resp.status_code, resp.text)
+
+
+def test_7_3_ffmpeg_clip():
+    import httpx
+    TAG = "[7-3]"
+    print(f"\n{TAG} FFmpeg clip 截取")
+
+    wav_data = create_test_wav(duration_sec=3)
+    with httpx.Client(timeout=30) as client:
+        files = {"file": ("[7-3]WAV截取.wav", BytesIO(wav_data), "audio/wav")}
+        data = {"action": "clip", "output_format": "wav", "start_time": "00:00:00", "duration": "00:00:01"}
+        print(f"  📤 POST /tasks/media-convert  参数：{data}")
+
+        resp = client.post(f"{_BASE_URL}/tasks/media-convert", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            return _ok(TAG, "FFmpeg clip", resp.json())
+        _fail(TAG, "FFmpeg clip", resp.status_code, resp.text)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -524,19 +670,25 @@ if __name__ == "__main__":
 
     # 编号结构：主编号为引擎，子编号为子任务
     tests = {
-        "[1]   Fish Speech TTS":         test_1_fish_speech_tts,
-        "[2-1] GPT-SoVITS TTS":          test_2_1_gpt_sovits_tts,
-        "[2-2] GPT-SoVITS 创建音色":     test_2_2_gpt_sovits_create_voice,
-        "[2-3] GPT-SoVITS 高级参数":     test_2_3_gpt_sovits_advanced,
-        "[3-1] Seed-VC 音色转换":         test_3_1_seed_vc,
-        "[3-2] Seed-VC 高级参数":         test_3_2_seed_vc_advanced,
-        "[4-1] RVC 音色转换":             test_4_1_rvc_convert,
-        "[4-2] RVC 转换高级参数":         test_4_2_rvc_convert_advanced,
-        "[4-3] RVC 训练":                 test_4_3_rvc_train,
-        "[4-4] RVC 训练高级参数":         test_4_4_rvc_train_advanced,
-        "[5]   Faster Whisper STT":       test_5_faster_whisper,
-        "[6]   FaceFusion 换脸":          test_6_facefusion,
-        "[7]   FFmpeg 媒体转换":          test_7_ffmpeg,
+        "[1-1] Fish Speech TTS":                test_1_1_fish_speech_tts,
+        "[1-2] Fish Speech TTS 高级参数":      test_1_2_fish_speech_advanced,
+        "[2-1] GPT-SoVITS TTS":               test_2_1_gpt_sovits_tts,
+        "[2-2] GPT-SoVITS TTS 高级参数":      test_2_4_gpt_sovits_tts_advanced,
+        "[2-3] GPT-SoVITS 训练":              test_2_2_gpt_sovits_train,
+        "[2-4] GPT-SoVITS 训练高级参数":      test_2_3_gpt_sovits_train_advanced,
+        "[3-1] Seed-VC 音色转换":              test_3_1_seed_vc,
+        "[3-2] Seed-VC 音色转换高级参数":      test_3_2_seed_vc_advanced,
+        "[4-1] RVC 音色转换":                  test_4_1_rvc_convert,
+        "[4-2] RVC 音色转换高级参数":          test_4_2_rvc_convert_advanced,
+        "[4-3] RVC 训练":                      test_4_3_rvc_train,
+        "[4-4] RVC 训练高级参数":              test_4_4_rvc_train_advanced,
+        "[5-1] Faster Whisper STT":            test_5_faster_whisper,
+        "[5-2] Faster Whisper STT 高级参数":   test_5_2_faster_whisper_advanced,
+        "[6-1] FaceFusion 换脸":               test_6_facefusion,
+        "[6-2] FaceFusion 换脸高级参数":       test_6_2_facefusion_advanced,
+        "[7-1] FFmpeg WAV→MP3":                test_7_ffmpeg,
+        "[7-2] FFmpeg WAV→FLAC":               test_7_2_ffmpeg_flac,
+        "[7-3] FFmpeg WAV 截取":               test_7_3_ffmpeg_clip,
     }
 
     results = {}

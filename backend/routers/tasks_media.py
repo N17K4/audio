@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import time as _time
 import traceback
 import uuid
 from pathlib import Path
@@ -13,6 +14,7 @@ except Exception:
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from config import DOWNLOAD_DIR, BACKEND_HOST, BACKEND_PORT
+from job_queue import _make_job
 from logging_setup import logger
 from services.llm.gemini_llm import run_gemini_audio_understanding, run_gemini_realtime_bootstrap
 from services.llm.openai_audio import run_openai_audio_understanding, run_openai_realtime_bootstrap
@@ -151,6 +153,13 @@ async def task_media_convert(
     if fmt not in ("mp3", "wav", "m4a", "flac", "ogg", "aac", "opus", "mp4", "webm", "mkv", "mov"):
         raise HTTPException(status_code=400, detail=f"不支持的输出格式: {fmt}")
 
+    filename_stem = Path(file.filename or "media").stem
+    action_label = {"convert": "格式转换", "extract_audio": "提取音频", "clip": "截取片段"}.get(act, act)
+    job = _make_job("media_convert", f"{action_label} · {filename_stem}", "FFmpeg", is_local=False, params={"action": act, "output_format": fmt})
+    job_id = job["id"]
+    job["status"] = "running"
+    job["started_at"] = _time.time()
+
     task_id = str(uuid.uuid4())
     in_ext = os.path.splitext(file.filename or "")[1] or ".bin"
     input_path = DOWNLOAD_DIR / f"{task_id}_mc_input{in_ext}"
@@ -203,6 +212,9 @@ async def task_media_convert(
 
         copy_to_output_dir(output_path, output_dir)
         result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{output_path.name}"
+
+        job["status"] = "completed"
+        job["result_url"] = result_url
         return {
             "status": "success",
             "task": "media_convert",
@@ -210,13 +222,19 @@ async def task_media_convert(
             "output_format": fmt,
             "result_url": result_url,
             "size_bytes": output_path.stat().st_size,
+            "job_id": job_id,
         }
     except HTTPException:
+        job["status"] = "failed"
+        job["error"] = "处理失败"
         raise
     except Exception as exc:
         logger.error("[media-convert] 异常:\n%s", traceback.format_exc())
+        job["status"] = "failed"
+        job["error"] = str(exc)
         raise HTTPException(status_code=500, detail=f"媒体转换失败: {exc}")
     finally:
+        job["completed_at"] = _time.time()
         if input_path.exists():
             try:
                 input_path.unlink()

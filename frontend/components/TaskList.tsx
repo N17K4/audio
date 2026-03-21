@@ -391,7 +391,9 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       job.type === 'train'            ? 'bg-amber-600'  :
       job.type === 'image_gen'        ? 'bg-purple-600' :
       job.type === 'image_understand' ? 'bg-fuchsia-600' :
-      job.type === 'translate'        ? 'bg-emerald-600' : 'bg-slate-600';
+      job.type === 'translate'        ? 'bg-emerald-600' :
+      job.type === 'voice_create'     ? 'bg-pink-600'    :
+      job.type === 'media_convert'    ? 'bg-teal-600'    : 'bg-slate-600';
     const abbr =
       job.type === 'tts'              ? 'TTS' :
       job.type === 'vc'               ? 'VC'  :
@@ -402,7 +404,9 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
       job.type === 'train'            ? 'TRN' :
       job.type === 'image_gen'        ? 'IMG' :
       job.type === 'image_understand' ? 'VIS' :
-      job.type === 'translate'        ? 'TRL' : job.type.toUpperCase().slice(0, 3);
+      job.type === 'translate'        ? 'TRL' :
+      job.type === 'voice_create'     ? 'VOC' :
+      job.type === 'media_convert'    ? 'FMT' : job.type.toUpperCase().slice(0, 3);
     return <span className={`rounded-lg ${color} px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide`}>{abbr}</span>;
   }
 

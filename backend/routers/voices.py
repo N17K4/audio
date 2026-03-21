@@ -1,5 +1,6 @@
 import json
 import shutil
+import time as _time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -7,6 +8,7 @@ from typing import Dict, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from config import get_voices_dir, get_user_voices_dir, RVC_VOICES_DIR, RVC_USER_VOICES_DIR, SEED_VC_VOICES_DIR, SEED_VC_USER_VOICES_DIR
+from job_queue import JOBS, _make_job
 from logging_setup import logger
 from utils.voices import list_voices, read_voice_meta
 
@@ -44,65 +46,85 @@ async def create_voice(
     ref_text: Optional[str] = Form(None),
 ):
     """创建音色包：RVC 上传 .pth（+可选 .index），Fish Speech / Seed-VC 上传参考音频。"""
-    safe = "".join(ch for ch in voice_name.strip().lower() if ch.isalnum() or ch in ["_", "-"])
-    if not safe:
-        raise HTTPException(status_code=400, detail="voice_name 包含无效字符")
+    engine_label = {"rvc": "RVC", "fish_speech": "Fish Speech", "seed_vc": "Seed-VC", "gpt_sovits": "GPT-SoVITS"}.get(engine, engine)
+    job = _make_job("voice_create", f"创建音色 · {voice_name.strip()}", engine_label, is_local=False, params={"engine": engine, "voice_name": voice_name.strip()})
+    job_id = job["id"]
+    job["status"] = "running"
+    job["started_at"] = _time.time()
 
-    voice_id = f"{safe}_{int(datetime.utcnow().timestamp())}"
-    user_dir = get_user_voices_dir(engine)
-    user_dir.mkdir(parents=True, exist_ok=True)
-    voice_dir = user_dir / voice_id
-    voice_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        safe = "".join(ch for ch in voice_name.strip().lower() if ch.isalnum() or ch in ["_", "-"])
+        if not safe:
+            raise HTTPException(status_code=400, detail="voice_name 包含无效字符")
 
-    meta: Dict = {
-        "voice_id": voice_id,
-        "name": voice_name.strip(),
-        "engine": engine,
-        "sample_rate": 44100,
-    }
+        voice_id = f"{safe}_{int(datetime.utcnow().timestamp())}"
+        user_dir = get_user_voices_dir(engine)
+        user_dir.mkdir(parents=True, exist_ok=True)
+        voice_dir = user_dir / voice_id
+        voice_dir.mkdir(parents=True, exist_ok=True)
 
-    if model_file and model_file.filename:
-        ext = Path(model_file.filename).suffix or ".pth"
-        dst = voice_dir / f"model{ext}"
-        dst.write_bytes(await model_file.read())
-        meta["model_file"] = dst.name
-        # RVC 有模型文件时启用命令推理模式
-        if engine == "rvc":
-            meta["inference_mode"] = "command"
+        meta: Dict = {
+            "voice_id": voice_id,
+            "name": voice_name.strip(),
+            "engine": engine,
+            "sample_rate": 44100,
+        }
 
-    if index_file and index_file.filename:
-        ext = Path(index_file.filename).suffix or ".index"
-        dst = voice_dir / f"index{ext}"
-        dst.write_bytes(await index_file.read())
-        meta["index_file"] = dst.name
+        if model_file and model_file.filename:
+            ext = Path(model_file.filename).suffix or ".pth"
+            dst = voice_dir / f"model{ext}"
+            dst.write_bytes(await model_file.read())
+            meta["model_file"] = dst.name
+            # RVC 有模型文件时启用命令推理模式
+            if engine == "rvc":
+                meta["inference_mode"] = "command"
 
-    if reference_audio and reference_audio.filename:
-        ext = Path(reference_audio.filename).suffix or ".wav"
-        dst = voice_dir / f"reference{ext}"
-        dst.write_bytes(await reference_audio.read())
-        meta["reference_audio"] = dst.name
+        if index_file and index_file.filename:
+            ext = Path(index_file.filename).suffix or ".index"
+            dst = voice_dir / f"index{ext}"
+            dst.write_bytes(await index_file.read())
+            meta["index_file"] = dst.name
 
-    if gpt_model_file and gpt_model_file.filename:
-        ext = Path(gpt_model_file.filename).suffix or ".ckpt"
-        dst = voice_dir / f"gpt_model{ext}"
-        dst.write_bytes(await gpt_model_file.read())
-        meta["gpt_model"] = dst.name
+        if reference_audio and reference_audio.filename:
+            ext = Path(reference_audio.filename).suffix or ".wav"
+            dst = voice_dir / f"reference{ext}"
+            dst.write_bytes(await reference_audio.read())
+            meta["reference_audio"] = dst.name
 
-    if sovits_model_file and sovits_model_file.filename:
-        ext = Path(sovits_model_file.filename).suffix or ".pth"
-        dst = voice_dir / f"sovits_model{ext}"
-        dst.write_bytes(await sovits_model_file.read())
-        meta["sovits_model"] = dst.name
+        if gpt_model_file and gpt_model_file.filename:
+            ext = Path(gpt_model_file.filename).suffix or ".ckpt"
+            dst = voice_dir / f"gpt_model{ext}"
+            dst.write_bytes(await gpt_model_file.read())
+            meta["gpt_model"] = dst.name
 
-    if ref_text and ref_text.strip():
-        meta["ref_text"] = ref_text.strip()
+        if sovits_model_file and sovits_model_file.filename:
+            ext = Path(sovits_model_file.filename).suffix or ".pth"
+            dst = voice_dir / f"sovits_model{ext}"
+            dst.write_bytes(await sovits_model_file.read())
+            meta["sovits_model"] = dst.name
 
-    (voice_dir / "meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    logger.info("创建音色: voice_id=%s engine=%s inference_mode=%s", voice_id, engine, meta.get("inference_mode", "copy"))
+        if ref_text and ref_text.strip():
+            meta["ref_text"] = ref_text.strip()
 
-    return {"status": "ok", "voice_id": voice_id, "voice_name": voice_name.strip()}
+        (voice_dir / "meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        logger.info("创建音色: voice_id=%s engine=%s inference_mode=%s", voice_id, engine, meta.get("inference_mode", "copy"))
+
+        job["status"] = "completed"
+        job["result_text"] = f"音色已创建：{voice_id}"
+        return {"status": "ok", "voice_id": voice_id, "voice_name": voice_name.strip(), "job_id": job_id}
+
+    except HTTPException:
+        job["status"] = "failed"
+        job["error"] = "参数错误"
+        raise
+    except Exception as exc:
+        job["status"] = "failed"
+        job["error"] = str(exc)
+        raise
+    finally:
+        job["completed_at"] = _time.time()
 
 
 @router.patch("/voices/{voice_id}")

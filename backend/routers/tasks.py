@@ -130,6 +130,9 @@ async def task_image_i2i(
     cloud_endpoint: str = Form(""),
     model: str = Form(""),
     strength: float = Form(0.75),
+    face_enhancer: bool = Form(False),
+    frame_enhancer: bool = Form(False),
+    many_faces: bool = Form(False),
 ):
     if not source_image or not source_image.filename:
         raise HTTPException(status_code=400, detail="source_image is required")
@@ -155,11 +158,16 @@ async def task_image_i2i(
         "provider": p,
         "prompt": prompt,
         "model": model,
-        "strength": strength,
         "source_image": source_image.filename,
         "reference_image": reference_image.filename if reference_image else None,
         "api_key": "***" if api_key else "",
     }
+    if p == "comfyui":
+        params["strength"] = strength
+    if p == "facefusion":
+        params["face_enhancer"] = face_enhancer
+        params["frame_enhancer"] = frame_enhancer
+        params["many_faces"] = many_faces
     job = _make_job("image_i2i", f"换脸换图 · {label}", p, is_local=is_local, params=params)
     job_id = job["id"]
     job["_source_tmp"] = str(source_tmp)
@@ -189,6 +197,9 @@ async def task_image_i2i(
                     target_image_path=norm_target,
                     output_path=str(output_path),
                     model=model,
+                    face_enhancer=face_enhancer,
+                    frame_enhancer=frame_enhancer,
+                    many_faces=many_faces,
                 )
             if p == "comfyui":
                 comfy_url = cloud_endpoint.strip() or "http://127.0.0.1:8188"

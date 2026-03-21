@@ -16,6 +16,7 @@ from utils.engine import get_embedded_python, build_engine_env
 router = APIRouter()
 
 _TRAIN_SCRIPT = WRAPPERS_ROOT / "rvc" / "train.py"
+_GPT_SOVITS_TRAIN_SCRIPT = WRAPPERS_ROOT / "gpt_sovits" / "train.py"
 
 
 def _sync_jobs_status(job_id: str, status: str, **extra) -> None:
@@ -174,18 +175,167 @@ async def run_rvc_training(
     logger.info("[train] 训练完成 job_id=%s voice_id=%s", job_id, voice_id)
 
 
+async def run_gpt_sovits_training(
+    job_id: str,
+    voice_id: str,
+    voice_name: str,
+    dataset_path: Path,
+    epochs: int,
+    batch_size: int,
+    learning_rate: float,
+) -> None:
+    """调用 wrappers/gpt_sovits/train.py 子进程执行 GPT-SoVITS 训练。"""
+    TRAIN_JOBS[job_id]["status"] = "running"
+    TRAIN_JOBS[job_id]["started_at"] = datetime.utcnow().isoformat()
+    _sync_jobs_status(job_id, "running", started_at=_time.time())
+
+    voice_dir = get_user_voices_dir("gpt_sovits") / voice_id
+
+    if not _GPT_SOVITS_TRAIN_SCRIPT.exists():
+        err = f"训练脚本不存在: {_GPT_SOVITS_TRAIN_SCRIPT}"
+        TRAIN_JOBS[job_id]["status"] = "failed"
+        TRAIN_JOBS[job_id]["finished_at"] = datetime.utcnow().isoformat()
+        TRAIN_JOBS[job_id]["error"] = err
+        _sync_jobs_status(job_id, "failed", completed_at=_time.time(), error=err)
+        return
+
+    try:
+        py = get_embedded_python()
+    except RuntimeError as e:
+        err = f"嵌入式 Python 未找到: {e}"
+        TRAIN_JOBS[job_id]["status"] = "failed"
+        TRAIN_JOBS[job_id]["finished_at"] = datetime.utcnow().isoformat()
+        TRAIN_JOBS[job_id]["error"] = err
+        _sync_jobs_status(job_id, "failed", completed_at=_time.time(), error=err)
+        return
+
+    cmd = [
+        py, str(_GPT_SOVITS_TRAIN_SCRIPT),
+        "--dataset", str(dataset_path),
+        "--voice-dir", str(voice_dir),
+        f"--voice-id={voice_id}",
+        f"--voice-name={voice_name}",
+        "--epochs", str(epochs),
+        "--batch-size", str(batch_size),
+        "--learning-rate", str(learning_rate),
+    ]
+
+    env = build_engine_env("gpt_sovits")
+    env.pop("HF_HUB_OFFLINE", None)
+    env.pop("TRANSFORMERS_OFFLINE", None)
+
+    logger.info("[train/gpt_sovits] 启动训练子进程: job_id=%s voice_id=%s", job_id, voice_id)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+
+        stderr_lines: list[str] = []
+
+        async def _drain_stderr():
+            assert proc.stderr
+            async for line in proc.stderr:
+                decoded = line.decode(errors="replace").rstrip()
+                stderr_lines.append(decoded)
+                logger.debug("[train/gpt_sovits][stderr] %s", decoded)
+
+        stderr_task = asyncio.create_task(_drain_stderr())
+
+        assert proc.stdout
+        async for raw_line in proc.stdout:
+            line_str = raw_line.decode(errors="replace").strip()
+            if not line_str:
+                continue
+            try:
+                msg = json.loads(line_str)
+                progress = msg.get("progress", 0)
+                step = msg.get("step", "")
+                message = msg.get("message", "")
+                TRAIN_JOBS[job_id]["progress"] = progress
+                TRAIN_JOBS[job_id]["step"] = step
+                TRAIN_JOBS[job_id]["message"] = message
+                if job_id in JOBS:
+                    JOBS[job_id]["progress"] = progress
+                    JOBS[job_id]["step"] = step
+                    JOBS[job_id]["step_msg"] = message
+                logger.info("[train/gpt_sovits] 进度 %s%%: %s", progress, message)
+            except json.JSONDecodeError:
+                logger.debug("[train/gpt_sovits][stdout] %s", line_str)
+
+        await stderr_task
+        rc = await proc.wait()
+
+        if rc != 0:
+            err_tail = "\n".join(stderr_lines[-80:])
+            if len(err_tail) > 20000:
+                err_tail = "...\n" + err_tail[-20000:]
+            msg_text = TRAIN_JOBS[job_id].get("message", "")
+            err = (
+                f"训练失败 (code={rc})"
+                + (f": {msg_text}" if msg_text else "")
+                + (f"\n{err_tail}" if err_tail else "")
+            )
+            TRAIN_JOBS[job_id]["status"] = "failed"
+            TRAIN_JOBS[job_id]["finished_at"] = datetime.utcnow().isoformat()
+            TRAIN_JOBS[job_id]["error"] = err
+            _sync_jobs_status(job_id, "failed", completed_at=_time.time(), error=err)
+            logger.error("[train/gpt_sovits] 训练失败 code=%d job_id=%s", rc, job_id)
+            return
+
+    except asyncio.CancelledError:
+        TRAIN_JOBS[job_id]["status"] = "failed"
+        TRAIN_JOBS[job_id]["finished_at"] = datetime.utcnow().isoformat()
+        TRAIN_JOBS[job_id]["error"] = "已中断"
+        _sync_jobs_status(job_id, "failed", completed_at=_time.time(), error="已中断")
+        raise
+    except Exception as exc:
+        err = str(exc)
+        TRAIN_JOBS[job_id]["status"] = "failed"
+        TRAIN_JOBS[job_id]["finished_at"] = datetime.utcnow().isoformat()
+        TRAIN_JOBS[job_id]["error"] = err
+        _sync_jobs_status(job_id, "failed", completed_at=_time.time(), error=err)
+        logger.error("[train/gpt_sovits] 训练异常: %s", traceback.format_exc())
+        return
+    finally:
+        try:
+            dataset_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    TRAIN_JOBS[job_id]["status"] = "completed"
+    TRAIN_JOBS[job_id]["finished_at"] = datetime.utcnow().isoformat()
+    TRAIN_JOBS[job_id]["voice_id"] = voice_id
+    TRAIN_JOBS[job_id]["result"] = {
+        "message": "训练完成",
+        "voice_dir": str(get_user_voices_dir("gpt_sovits") / voice_id),
+    }
+    _sync_jobs_status(job_id, "completed", completed_at=_time.time(), result_text=f"训练完成，音色 ID：{voice_id}")
+    logger.info("[train/gpt_sovits] 训练完成 job_id=%s voice_id=%s", job_id, voice_id)
+
+
 @router.post("/train")
 async def train_voice(
     dataset: UploadFile = File(...),
     voice_id: str = Form(...),
     voice_name: str = Form(""),
+    engine: str = Form("rvc"),
     epochs: int = Form(0),
     f0_method: str = Form("harvest"),
     sample_rate: int = Form(40000),
+    batch_size: int = Form(4),
+    learning_rate: float = Form(0.0001),
     voice_subdir: str = Form(""),
 ):
     if not voice_id.strip():
         raise HTTPException(status_code=400, detail="voice_id 不能为空")
+
+    eng = engine.strip().lower()
+    if eng not in ("rvc", "gpt_sovits"):
+        raise HTTPException(status_code=400, detail=f"不支持的训练引擎: {eng}")
 
     safe_voice_id = "".join(
         ch for ch in voice_id.strip().lower() if ch.isalnum() or ch in ("_", "-")
@@ -205,6 +355,7 @@ async def train_voice(
     with open(dataset_path, "wb") as f:
         f.write(await dataset.read())
 
+    engine_label = {"rvc": "RVC", "gpt_sovits": "GPT-SoVITS"}.get(eng, eng)
     now_ts = _time.time()
     TRAIN_JOBS[job_id] = {
         "job_id": job_id,
@@ -214,6 +365,7 @@ async def train_voice(
         "message": "",
         "voice_id": safe_voice_id,
         "voice_name": safe_voice_name,
+        "engine": eng,
         "dataset": str(dataset_path),
         "created_at": datetime.utcnow().isoformat(),
     }
@@ -221,7 +373,7 @@ async def train_voice(
         "id": job_id,
         "type": "train",
         "label": f"训练 · {safe_voice_name}",
-        "provider": "local_rvc",
+        "provider": f"local_{eng}",
         "is_local": True,
         "status": "queued",
         "created_at": now_ts,
@@ -232,14 +384,22 @@ async def train_voice(
         "error": None,
     }
 
-    asyncio.create_task(
-        run_rvc_training(
-            job_id, safe_voice_id, safe_voice_name,
-            dataset_path, epochs, f0_method, sample_rate, safe_subdir,
+    if eng == "gpt_sovits":
+        asyncio.create_task(
+            run_gpt_sovits_training(
+                job_id, safe_voice_id, safe_voice_name,
+                dataset_path, epochs or 5, batch_size, learning_rate,
+            )
         )
-    )
+    else:
+        asyncio.create_task(
+            run_rvc_training(
+                job_id, safe_voice_id, safe_voice_name,
+                dataset_path, epochs, f0_method, sample_rate, safe_subdir,
+            )
+        )
 
-    return {"status": "accepted", "job_id": job_id, "message": "训练任务已提交"}
+    return {"status": "accepted", "job_id": job_id, "message": f"{engine_label} 训练任务已提交"}
 
 
 @router.get("/train/{job_id}")

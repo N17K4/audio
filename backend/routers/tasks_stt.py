@@ -28,6 +28,9 @@ async def task_stt(
     cloud_endpoint: str = Form(""),
     model: str = Form(""),
     output_dir: str = Form(""),
+    language: str = Form(""),
+    beam_size: int = Form(5),
+    compute_type: str = Form("auto"),
 ):
     content = await file.read()
     if not content:
@@ -39,15 +42,21 @@ async def task_stt(
     # ── ローカル推理：ジョブキューに入れる ──
     if p in _LOCAL_STT_PROVIDERS:
         label_map = {"faster_whisper": "Faster Whisper", "whisper": "Whisper"}
-        label = f"STT · {label_map.get(p, p)}"
-        job = _make_job("stt", label, p, is_local=True, params={"model": model or "base"})
+        fname_stem = Path(filename).stem
+        label = f"STT · {fname_stem}"
+        default_model = "large-v3" if p == "faster_whisper" else "base"
+        effective_model = model or default_model
+        job = _make_job("stt", label, p, is_local=True, params={"model": effective_model})
         job_id = job["id"]
 
         async def _do_stt():
             if p == "faster_whisper":
-                result = await run_faster_whisper_stt(content=content, filename=filename, model=model or "base")
+                result = await run_faster_whisper_stt(
+                    content=content, filename=filename, model=effective_model,
+                    language=language, beam_size=beam_size, compute_type=compute_type,
+                )
             else:
-                result = await run_whisper_stt(content=content, filename=filename, model=model or "base")
+                result = await run_whisper_stt(content=content, filename=filename, model=effective_model)
             if out_dir and result.get("text"):
                 try:
                     dest = Path(out_dir)

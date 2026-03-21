@@ -92,8 +92,47 @@ function patchWindowsPythonPath(context) {
   }
 }
 
+function verifyEngineResources(context) {
+  const platform = context.electronPlatformName;
+  const resourcesDir = platform === 'darwin'
+    ? path.join(context.appOutDir, 'AI Workshop.app', 'Contents', 'Resources')
+    : path.join(context.appOutDir, 'resources');
+
+  const engineDir = path.join(resourcesDir, 'runtime', 'engine');
+  console.log(`[afterPack] ── 验证 extraResources (${platform}) ──`);
+
+  if (!fs.existsSync(engineDir)) {
+    console.log(`[afterPack] ✗ runtime/engine 目录不存在: ${engineDir}`);
+    return;
+  }
+
+  // 列出 engine/ 下的顶层目录
+  const engines = fs.readdirSync(engineDir);
+  console.log(`[afterPack] runtime/engine/ 子目录: [${engines.join(', ')}]`);
+
+  // 详细检查 facefusion
+  const ffDir = path.join(engineDir, 'facefusion');
+  if (!fs.existsSync(ffDir)) {
+    console.log(`[afterPack] ✗ facefusion 目录不存在!`);
+  } else {
+    const ffEntries = fs.readdirSync(ffDir);
+    console.log(`[afterPack] facefusion/ 内容: [${ffEntries.join(', ')}]`);
+    const sentinel = path.join(ffDir, 'facefusion', '__init__.py');
+    console.log(`[afterPack] facefusion/facefusion/__init__.py 存在: ${fs.existsSync(sentinel)}`);
+  }
+
+  // 检查源码目录（打包前）
+  const projectRoot = path.resolve(__dirname, '..');
+  const srcEngineDir = path.join(projectRoot, 'runtime', 'engine', 'facefusion');
+  if (fs.existsSync(srcEngineDir)) {
+    const srcEntries = fs.readdirSync(srcEngineDir);
+    console.log(`[afterPack] 源 facefusion/ 内容: [${srcEntries.join(', ')}]`);
+  }
+}
+
 exports.default = async function afterPack(context) {
   patchWindowsPythonPath(context);
+  verifyEngineResources(context);
 
   if (context.electronPlatformName === 'win32') {
     patchFairseqPy312(path.join(context.appOutDir, 'resources', 'runtime', 'python', 'win', 'Lib', 'site-packages'));

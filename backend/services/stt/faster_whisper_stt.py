@@ -11,7 +11,10 @@ from utils.engine import get_faster_whisper_command_template, build_engine_env
 from utils.audit import log_ai_call, log_ai_error
 
 
-async def run_faster_whisper_stt(content: bytes, filename: str, model: str = "large-v3") -> Dict:
+async def run_faster_whisper_stt(
+    content: bytes, filename: str, model: str = "large-v3",
+    language: str = "", beam_size: int = 5, compute_type: str = "auto",
+) -> Dict:
     cmd_tpl = get_faster_whisper_command_template()
     if not cmd_tpl:
         raise HTTPException(
@@ -36,6 +39,12 @@ async def run_faster_whisper_stt(content: bytes, filename: str, model: str = "la
             .replace("{output}", txt_tmp_path)
             .replace("{model}", model)
         )
+        if language:
+            cmd += f" --language {language}"
+        if beam_size != 5:
+            cmd += f" --beam_size {beam_size}"
+        if compute_type != "auto":
+            cmd += f" --compute_type {compute_type}"
         log_ai_call("faster_whisper", {"input": audio_tmp_path, "model": model}, command=cmd)
         try:
             import asyncio

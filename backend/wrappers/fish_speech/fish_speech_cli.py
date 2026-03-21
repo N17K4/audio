@@ -43,6 +43,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="输出 WAV 路径")
     parser.add_argument("--voice_ref", default="", help="参考音频路径（可选，用于声音克隆）")
     parser.add_argument("--checkpoint_dir", required=True, help="模型权重目录")
+    parser.add_argument("--top_p", type=float, default=0.7, help="Top-P 核采样（默认 0.7）")
+    parser.add_argument("--temperature", type=float, default=0.7, help="采样温度（默认 0.7）")
+    parser.add_argument("--repetition_penalty", type=float, default=1.2, help="重复惩罚（默认 1.2）")
+    parser.add_argument("--max_new_tokens", type=int, default=1024, help="最大生成 token 数（默认 1024）")
     return parser.parse_args()
 
 
@@ -196,6 +200,10 @@ def main() -> int:
         references=references,
         streaming=False,
         format="wav",
+        top_p=args.top_p,
+        temperature=args.temperature,
+        repetition_penalty=args.repetition_penalty,
+        max_new_tokens=args.max_new_tokens,
     )
 
     print(f"[fish_speech_cli] {_ts()} 开始推理 ({len(args.text)} 字): {args.text[:60]}{'...' if len(args.text) > 60 else ''}", file=sys.stderr)
