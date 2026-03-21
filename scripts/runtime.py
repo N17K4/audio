@@ -119,7 +119,7 @@ def _download_pbs_python(dest_dir: Path) -> None:
     runtime_dir.mkdir(parents=True, exist_ok=True)
     tmp_tar = runtime_dir / "_python_tmp.tar.gz"
 
-    print(f"  下载: {url}")
+    print(f"  下载: cpython-{PBS_PY_VERSION} ({triple})")
     urllib.request.urlretrieve(url, str(tmp_tar), _reporthook)
     if _IS_TTY:
         print()
@@ -632,7 +632,7 @@ def setup_fish_speech_engine(project_root: Path) -> bool:
         print(f"  ✓ fish_speech engine 已存在（{sentinel}）")
         return True
 
-    print(f"  [fish_speech] 克隆 {_FISH_SPEECH_REPO} @ {_FISH_SPEECH_TAG} ...")
+    print(f"  [fish_speech] 克隆 @ {_FISH_SPEECH_TAG} ...")
     tmp_dir = project_root / "runtime" / "engine" / "fish_speech_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
@@ -765,7 +765,7 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
         print(f"  ✓ seed_vc engine 已存在（{sentinel}）")
         return True
 
-    print(f"  [seed_vc] 获取 {_SEED_VC_REPO} @ {_SEED_VC_COMMIT[:8]} ...")
+    print(f"  [seed_vc] 获取 @ {_SEED_VC_COMMIT[:8]} ...")
     tmp_dir = project_root / "runtime" / "engine" / "seed_vc_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
@@ -848,7 +848,7 @@ def setup_gpt_sovits_engine(project_root: Path) -> bool:
         print(f"  ✓ gpt_sovits engine 已存在（{sentinel}）")
         return True
 
-    print(f"  [gpt_sovits] 克隆 {_GPT_SOVITS_REPO} @ {_GPT_SOVITS_TAG} ...")
+    print(f"  [gpt_sovits] 克隆 @ {_GPT_SOVITS_TAG} ...")
     tmp_dir = project_root / "runtime" / "engine" / "gpt_sovits_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
@@ -908,7 +908,7 @@ def setup_facefusion_engine(project_root: Path) -> bool:
         print(f"  ✓ facefusion engine 已存在（{sentinel}）")
         return True
 
-    print(f"  [facefusion] 克隆 {_FACEFUSION_REPO} @ {_FACEFUSION_TAG} ...")
+    print(f"  [facefusion] 克隆 @ {_FACEFUSION_TAG} ...")
     tmp_dir = project_root / "runtime" / "engine" / "facefusion_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
@@ -967,7 +967,7 @@ def setup_liveportrait_engine(project_root: Path) -> bool:
         print(f"  ✓ liveportrait engine 已存在（{sentinel}）")
         return True
 
-    print(f"  [liveportrait] 克隆 {_LIVEPORTRAIT_REPO} @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
+    print(f"  [liveportrait] 克隆 @ {_LIVEPORTRAIT_COMMIT[:8]} ...")
     sys.stdout.flush()
     tmp_dir = project_root / "runtime" / "engine" / "liveportrait_tmp"
     if tmp_dir.exists():
@@ -1088,7 +1088,7 @@ def download_ffmpeg(project_root: Path) -> bool:
                 dest.chmod(0o755)
             return True
 
-    print(f"  ✗ FFmpeg 未找到，下载中（~50-80 MB）: {url}")
+    print(f"  ✗ FFmpeg 未找到，下载中（~50-80 MB）...")
     bin_dir.mkdir(parents=True, exist_ok=True)
     tmp_archive = bin_dir / "_ffmpeg_tmp"
 
@@ -1184,7 +1184,7 @@ def download_pandoc(project_root: Path) -> bool:
             dest.chmod(0o755)
         return True
 
-    print(f"  ✗ pandoc 未找到，下载中（~100-130 MB）: {url}")
+    print(f"  ✗ pandoc 未找到，下载中（~100-130 MB）...")
     bin_dir.mkdir(parents=True, exist_ok=True)
     tmp_archive = bin_dir / "_pandoc_tmp.zip"
 

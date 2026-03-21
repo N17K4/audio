@@ -42,6 +42,19 @@ if not _IS_TTY:
 HF_ENDPOINT: str = os.getenv("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
 
 
+def _mask_url(url: str) -> str:
+    """隐藏 URL / repo_id，避免个人 HF/GitHub 地址泄露到日志。
+    例: "https://huggingface.co/user/repo/resolve/main/file.pt" → "https://hf/***/file.pt"
+        "N17K4/ai-workshop-assets" → "***/***"
+    """
+    if url.startswith(("http://", "https://")):
+        # 提取文件名用于提示
+        basename = url.rstrip("/").rsplit("/", 1)[-1] if "/" in url else url
+        return f"<hidden-url>/{basename}"
+    # repo_id 形式
+    return "<hidden-repo>"
+
+
 def apply_hf_endpoint(url: str) -> str:
     """将 URL 中的 huggingface.co 替换为配置的镜像端点。"""
     if HF_ENDPOINT != "https://huggingface.co":
@@ -161,7 +174,7 @@ def ensure_hf_login() -> bool:
 def download_via_hf_hub(repo_id: str, filename: str, dest_dir: Path, revision: str = "main") -> Path:
     from huggingface_hub import hf_hub_download
     token = get_hf_token()
-    print(f"  [HF] {repo_id}/{filename}  revision={revision}"
+    print(f"  [HF] {_mask_url(repo_id)}/{filename}  revision={revision}"
           + ("  (已登录)" if token else "  (未登录)"))
     local_path = hf_hub_download(
         repo_id=repo_id,
@@ -181,10 +194,12 @@ def download_via_requests(url: str, dest_path: Path) -> None:
     # 断点续传：如果文件已存在，从当前字节位置继续
     resume_pos = dest_path.stat().st_size if dest_path.exists() else 0
     headers = {"Range": f"bytes={resume_pos}-"} if resume_pos > 0 else {}
+    # 日志中只显示文件名，隐藏完整 URL
+    _basename = url.rstrip("/").rsplit("/", 1)[-1] if "/" in url else url
     if resume_pos > 0:
-        msg = f"  [HTTP] 续传（已有 {resume_pos/1024/1024:.1f} MB）→ {url}"
+        msg = f"  [HTTP] 续传（已有 {resume_pos/1024/1024:.1f} MB）→ {_basename}"
     else:
-        msg = f"  [HTTP] {url}"
+        msg = f"  [HTTP] {_basename}"
     emit("log", message=msg)
 
     resp = requests.get(url, stream=True, timeout=60, headers=headers)
@@ -302,7 +317,7 @@ def check_and_download(
             if repo_id_field and filename_field and not url:
                 from huggingface_hub import hf_hub_download as _hf_dl
                 token = get_hf_token()
-                print(f"  [HF {repo_type_field}] {repo_id_field}/{filename_field}")
+                print(f"  [HF {repo_type_field}] {_mask_url(repo_id_field)}/{filename_field}")
                 downloaded = _hf_dl(
                     repo_id=repo_id_field,
                     filename=filename_field,
@@ -448,7 +463,7 @@ def download_hf_cache(
 
         required: bool = item.get("required", True)
         size_str = f"~{size_mb:.0f} MB" if size_mb else "未知大小"
-        label = f"{repo_id}/{filename}" if filename else repo_id
+        label = f"{_mask_url(repo_id)}/{filename}" if filename else _mask_url(repo_id)
 
         marker_dir = cache_dir / f"models--{repo_id.replace('/', '--')}"
         blobs_dir = marker_dir / "blobs"
@@ -501,7 +516,7 @@ def download_hf_cache(
 
         # 门控仓库：提前检查 token
         if hf_token_required and not token:
-            warn = (f"    ⚠ {repo_id} 是门控仓库（gated），需要 HuggingFace token。\n"
+            warn = (f"    ⚠ {_mask_url(repo_id)} 是门控仓库（gated），需要 HuggingFace token。\n"
                     f"    请前往 https://huggingface.co/settings/tokens 生成 token，\n"
                     f"    然后设置环境变量 HF_TOKEN=hf_xxx 后重新安装。")
             print(warn)
@@ -509,6 +524,8 @@ def download_hf_cache(
             all_ok = False
             continue
 
+        # Windows で相対パスだと HF Hub 内部の DLL ロードやキャッシュ参照が失敗するため絶対パスに変換
+        cache_dir = cache_dir.resolve()
         cache_dir.mkdir(parents=True, exist_ok=True)
         revision: str = item.get("revision", "main")
 
@@ -541,7 +558,7 @@ def download_hf_cache(
                         except Exception:
                             pass
                 # 统一优先 hf_hub_download（支持镜像、CDN），失败时回退 HTTP 直连
-                msg2 = f"  [HF单文件] {repo_id}  {filename}  revision={revision}  cache_dir={cache_dir}"
+                msg2 = f"  [HF单文件] {_mask_url(repo_id)}  {filename}  revision={revision}"
                 print(msg2)
                 emit("log", message=msg2)
                 try:
@@ -560,7 +577,7 @@ def download_hf_cache(
                     raise FileNotFoundError(f"下载完成后目标文件不存在: {final_dest}")
             else:
                 ignore_patterns: list[str] = item.get("ignore_patterns", [])
-                msg2 = (f"  [HF快照] {repo_id}  revision={revision}  cache_dir={cache_dir}"
+                msg2 = (f"  [HF快照] {_mask_url(repo_id)}  revision={revision}"
                         + (f"\n    忽略文件: {ignore_patterns}" if ignore_patterns else "")
                         + f"\n    预计大小: {size_str}，请耐心等待（可能需要几分钟）…")
                 print(msg2)
@@ -594,6 +611,15 @@ def download_hf_cache(
                         link_target.symlink_to(os.path.relpath(marker_dir, hf_cache_dir))
                 except FileExistsError:
                     pass
+                except OSError:
+                    # Windows では管理者権限なしで symlink 作成できない場合がある。
+                    # junction（ディレクトリジャンクション）またはコピーで代替する。
+                    if os.name == "nt" and not os.path.lexists(link_target):
+                        try:
+                            import _winapi
+                            _winapi.CreateJunction(str(marker_dir), str(link_target))
+                        except Exception:
+                            shutil.copytree(marker_dir, link_target, dirs_exist_ok=True)
         except Exception as e:
             err_str = str(e)
             err_msg = f"    ✗ 下载失败: {err_str[:300]}"
@@ -601,13 +627,13 @@ def download_hf_cache(
             is_gated = "gated" in err_str.lower() or "access to model" in err_str.lower()
             is_auth = "401" in err_str or "403" in err_str
             if is_gated and (is_auth or token):
-                hint = (f"    提示：{repo_id} 是受限模型（gated repo），需先同意使用条款后才能下载。\n"
-                        f"    请前往 https://huggingface.co/{repo_id} 登录并点击 \"Agree and access repository\"，\n"
+                hint = (f"    提示：{_mask_url(repo_id)} 是受限模型（gated repo），需先同意使用条款后才能下载。\n"
+                        f"    请前往模型页面登录并点击 \"Agree and access repository\"，\n"
                         f"    然后确保已设置有效的 HF_TOKEN 环境变量后重试。")
                 print(hint)
                 emit("log", message=hint)
             elif is_auth:
-                hint = f"    提示：{repo_id} 需要 HF token，请设置 HF_TOKEN 环境变量后重试"
+                hint = f"    提示：{_mask_url(repo_id)} 需要 HF token，请设置 HF_TOKEN 环境变量后重试"
                 print(hint)
                 emit("log", message=hint)
             emit("file_done", engine=engine_name, file=label, ok=False, error=err_str[:200], idx=_idx)
@@ -628,10 +654,11 @@ def get_facefusion_packages_dir(project_root: Path, checkpoints_base: "Path | No
     FaceFusion packages 与引擎源码同级，避免 runtime 根目录污染。
     """
     if checkpoints_base is not None:
-        return checkpoints_base.parent.parent / "runtime" / "engine" / "facefusion" / ".packages"
+        # checkpoints_base = <USER_DATA_BASE>/checkpoints → .parent = <USER_DATA_BASE>
+        return checkpoints_base.parent / "runtime" / "engine" / "facefusion" / ".packages"
     checkpoints_dir_env = os.getenv("CHECKPOINTS_DIR", "").strip()
     if checkpoints_dir_env:
-        return Path(checkpoints_dir_env).resolve().parent.parent / "runtime" / "engine" / "facefusion" / ".packages"
+        return Path(checkpoints_dir_env).resolve().parent / "runtime" / "engine" / "facefusion" / ".packages"
     return project_root / "runtime" / "engine" / "facefusion" / ".packages"
 
 

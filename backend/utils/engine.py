@@ -374,6 +374,15 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     existing_pypath = merged.get("PYTHONPATH", "")
     if os.path.isdir(ml_dir) and ml_dir not in existing_pypath.split(os.pathsep):
         merged["PYTHONPATH"] = ml_dir + (os.pathsep + existing_pypath if existing_pypath else "")
+    # Windows: --target でインストールした numpy の C 拡張（.pyd）が依存する DLL は
+    # numpy.libs/ に格納される。Python 3.8+ では DLL 検索パスが制限されているため、
+    # PATH に追加しないと「numpy._core has no attribute 'multiarray'」エラーになる。
+    if os.name == "nt" and os.path.isdir(ml_dir):
+        numpy_libs = os.path.join(ml_dir, "numpy.libs")
+        torch_lib = os.path.join(ml_dir, "torch", "lib")
+        for dll_dir in (numpy_libs, torch_lib):
+            if os.path.isdir(dll_dir):
+                merged["PATH"] = dll_dir + os.pathsep + merged.get("PATH", "")
     # backend/wrappers/ を PYTHONPATH に追加（_common.py を import するため）
     # backend/ 全体を入れると backend/models.py が GPT-SoVITS engine の models パッケージと衝突する
     wrappers_dir = str(WRAPPERS_ROOT)
@@ -381,8 +390,15 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     if wrappers_dir not in existing_pypath.split(os.pathsep):
         merged["PYTHONPATH"] = wrappers_dir + (os.pathsep + existing_pypath if existing_pypath else "")
     if engine == "facefusion":
-        # FaceFusion 独立 site-packages（与引擎源码同级，避免 runtime 根目录污染）
+        # FaceFusion 独立 site-packages：
+        #   dev:  runtime/engine/facefusion/.packages/
+        #   prod: _USER_DATA_BASE/runtime/engine/facefusion/.packages/
+        # _checkpoint_download.py の get_facefusion_packages_dir() と同じロジック。
         facefusion_pkgs = RUNTIME_ROOT / "engine" / "facefusion" / ".packages"
+        if not facefusion_pkgs.is_dir():
+            # prod: CHECKPOINTS_ROOT = <USER_DATA_BASE>/checkpoints
+            #       → .parent = <USER_DATA_BASE> → runtime/engine/facefusion/.packages
+            facefusion_pkgs = CHECKPOINTS_ROOT.parent / "runtime" / "engine" / "facefusion" / ".packages"
         merged["PYTHONPATH"] = str(facefusion_pkgs) + os.pathsep + merged.get("PYTHONPATH", "")
         merged["PYTHONNOUSERSITE"] = "1"
     return merged

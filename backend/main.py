@@ -22,6 +22,13 @@ if _ml_dir.is_dir():
     if _ml_str not in sys.path:
         sys.path.append(_ml_str)
         logger.info("sys.path に ML パッケージディレクトリを追加: %s", _ml_str)
+    # Windows: --target インストールした numpy/torch の C 拡張 DLL を読み込むため、
+    # numpy.libs/ と torch/lib/ を DLL 検索パスに追加する。
+    if os.name == "nt":
+        for _dll_subdir in ("numpy.libs", os.path.join("torch", "lib")):
+            _dll_path = _ml_dir / _dll_subdir
+            if _dll_path.is_dir():
+                os.add_dll_directory(str(_dll_path))
 
 # ---------------------------------------------------------------------------
 # ML パッケージの衝突防止クリーンアップ

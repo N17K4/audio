@@ -710,7 +710,7 @@
         "trl",
         "datasets",
         "bitsandbytes",
-        "accelerate"
+        "accelerate>=1.2.0,<2.0"
       ]
     },
     "sd": {

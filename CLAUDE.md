@@ -306,6 +306,79 @@ pkill -f "uvicorn main:app"
 
 ---
 
+## Docker / Web 版架构
+
+### 文件一览
+
+| 文件 | 用途 |
+|------|------|
+| `Dockerfile.backend` | 后端镜像（多阶段构建：builder + runtime） |
+| `Dockerfile.frontend` | 前端镜像（Node 构建 + nginx 托管） |
+| `docker/Dockerfile.frontend.dev` | 前端开发用镜像（next dev + HMR） |
+| `docker-compose.yml` | 本番用编排（backend + backend-gpu + frontend） |
+| `docker-compose.dev.yml` | 开发用覆盖（源码挂载 + hot reload） |
+| `docker/nginx.conf` | nginx 配置（静态文件 + API 反向代理到 backend:8000） |
+| `.dockerignore` | 排除 runtime/、模型权重、electron/、node_modules 等 |
+| `.github/workflows/build-docker.yml` | CI：构建并推送 Docker 镜像到 DockerHub |
+
+### 后端镜像（Dockerfile.backend）
+
+- **多阶段构建**：builder（含编译器）→ runtime（slim，无编译器）
+- Stage 1（builder）：`requirements.txt` + manifest.json 的 `runtime_pip_packages` + fairseq/rvc 特殊安装
+- Stage 2（runtime）：系统依赖（ffmpeg/pandoc/git/libsndfile1/libgl1）+ builder 的 Python 包 + 引擎源码 clone（`runtime.py --engines-only`）
+- **Checkpoints 不打入镜像**，通过 volume 挂载：`/app/runtime/checkpoints`、`/app/user_data`、`/app/cache`、`/app/logs`
+- 基础镜像：`python:3.12-slim`
+- 入口：`python backend/main.py`
+
+### 前端镜像（Dockerfile.frontend）
+
+- Stage 1：`node:20-alpine` + pnpm build → 静态文件 `out/`
+- Stage 2：`nginx:alpine`，静态文件 + `docker/nginx.conf`
+- nginx 逻辑：静态文件优先，未命中转发 `http://backend:8000`（`@backend`）
+- `client_max_body_size 500M`（音频/视频上传）
+
+### docker-compose.yml（本番）
+
+- **backend**：端口 8000，4 个 named volume（checkpoints/user_data/cache/logs）
+- **backend-gpu**：extends backend + NVIDIA GPU，需 `--profile gpu` 启用
+- **frontend**：端口 3000→80，depends_on backend healthy
+- 镜像名：`${DOCKERHUB_USERNAME}/ai-workshop-{backend,frontend}:${TAG:-latest}`
+
+### docker-compose.dev.yml（开发覆盖）
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+- backend：源码挂载 `./backend:/app/backend` + `uvicorn --reload`
+- frontend：使用 `Dockerfile.frontend.dev`，源码挂载 + `pnpm dev`（HMR）
+- 独立 volume `frontend_node_modules` 避免覆盖宿主 node_modules
+
+### CI（build-docker.yml）
+
+- 触发：`d*` tag push 或手动 workflow_dispatch
+- 双平台构建：`linux/amd64` + `linux/arm64`（QEMU + buildx）
+- 推送到 DockerHub，tag 策略：`latest` + 版本号（`d1.0.0` → `1.0.0`）+ commit SHA
+- GHA cache 加速构建
+
+### Docker 启动命令
+
+```bash
+# 本番模式
+docker-compose up
+
+# GPU 模式
+docker-compose --profile gpu up
+
+# 开发模式（源码热更新）
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+# 首次需要下载 checkpoints（volume 挂载后在容器内执行）
+docker-compose exec backend python scripts/checkpoints_base.py
+```
+
+---
+
 ## 权限规范
 
 执行脚本、读取文件、运行只读 shell 命令（grep、bash、cat、cd、ls、find 等）无需确认。

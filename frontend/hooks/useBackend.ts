@@ -16,7 +16,7 @@ export function useBackend() {
   const [isDocker, setIsDocker] = useState(false);
 
   useEffect(() => {
-    // 优先级：URL 参数（Electron 注入）→ 同源探测（Docker nginx）→ 直连 127.0.0.1:8000
+    // 优先级：URL 参数（Electron 注入）→ 同源探测（Docker nginx）→ 同主机直连 :8000
     if (typeof window === 'undefined') { setBackendBaseUrl('http://127.0.0.1:8000'); return; }
     const params = new URLSearchParams(window.location.search);
     const fromParam = params.get('backendUrl');
@@ -26,10 +26,12 @@ export function useBackend() {
       return;
     }
     const origin = window.location.origin;
+    // Docker dev 模式无 nginx 代理，同源探测会 404 → 回退到同主机 :8000（支持远程访问）
+    const directUrl = `http://${window.location.hostname}:8000`;
     fetch(`${origin}/health`).then(r => {
       if (r.ok) { setBackendBaseUrl(origin); rlog('INFO', '后端地址(同源):', origin); }
-      else setBackendBaseUrl('http://127.0.0.1:8000');
-    }).catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
+      else { setBackendBaseUrl(directUrl); rlog('INFO', '后端地址(直连):', directUrl); }
+    }).catch(() => { setBackendBaseUrl(directUrl); rlog('INFO', '后端地址(直连):', directUrl); });
   }, []);
 
   useEffect(() => {

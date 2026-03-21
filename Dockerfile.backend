@@ -1,11 +1,11 @@
 # ── AI Workshop Backend（Docker 用） ──────────────────────────────────────────
 # 设计思路：マルチステージビルド
-#   builder: C コンパイラ等でネイティブ拡張をビルド → wheel 生成
-#   runtime: slim イメージに wheel だけコピー（コンパイラ不要、イメージ軽量）
+#   builder: venv 内で全依存をビルド（コンパイラ付き）
+#   runtime: slim イメージに venv だけコピー（コンパイラ不要、イメージ軽量）
 #   checkpoints 不打入镜像，通过 volume 挂载
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Stage 1: builder — コンパイラ付き、wheel をビルド
+# Stage 1: builder — コンパイラ付き、venv 内で全依存をインストール
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FROM python:3.12-slim AS builder
 
@@ -17,13 +17,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
     && rm -rf /var/lib/apt/lists/*
 
-# backend Python 依赖 + 引擎 pip_packages
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir --prefix=/install -r backend/requirements.txt
+# venv を作成（全 pip install が同じ環境を共有 → 依存解決が正確）
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# backend Python 依赖（poetry export → pip install）
+RUN pip install --no-cache-dir poetry
+COPY backend/pyproject.toml backend/poetry.lock ./backend/
+RUN cd backend && poetry export -f requirements.txt --without-hashes -o requirements.txt \
+    && pip install --no-cache-dir -r requirements.txt
 
 # 引擎 runtime_pip_packages（ML 重型包）
 COPY backend/wrappers/manifest.json ./backend/wrappers/manifest.json
-RUN python <<'PYEOF' && pip install --no-cache-dir --prefix=/install -r /tmp/engine_reqs.txt
+RUN python <<'PYEOF' && pip install --no-cache-dir -r /tmp/engine_reqs.txt
 import json
 m = json.load(open('backend/wrappers/manifest.json'))
 engines = m.get('engines', {})
@@ -40,10 +46,10 @@ open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs))
 PYEOF
 
 # RVC 特殊安装（fairseq + rvc-python）
-RUN pip install --no-cache-dir --prefix=/install setuptools'<72' \
-    && pip install --no-cache-dir --prefix=/install --no-deps fairseq==0.12.2 \
-    && pip install --no-cache-dir --prefix=/install bitarray \
-    && pip install --no-cache-dir --prefix=/install --no-deps rvc-python==0.1.5
+RUN pip install --no-cache-dir setuptools'<72' \
+    && pip install --no-cache-dir --no-deps fairseq==0.12.2 \
+    && pip install --no-cache-dir bitarray \
+    && pip install --no-cache-dir --no-deps rvc-python==0.1.5
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Stage 2: runtime — コンパイラなし、軽量イメージ
@@ -62,8 +68,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ── builder からインストール済み Python パッケージをコピー ───────────────────────
-COPY --from=builder /install /usr/local
+# ── builder の venv をコピー（全パッケージが正しく解決済み） ──────────────────
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # ── 引擎源码 clone（通过 runtime.py --engines-only） ─────────────────────────
 COPY backend/wrappers/ ./backend/wrappers/

@@ -25,7 +25,7 @@ function detectBackendUrl(): string {
   const params = new URLSearchParams(window.location.search);
   const fromParam = params.get('backendUrl');
   if (fromParam) return fromParam;
-  return 'http://127.0.0.1:8000';
+  return `http://${window.location.hostname}:8000`;
 }
 
 export default function OutputDirRow({ required, outputDir, setOutputDir, fieldCls, labelCls, btnSec }: OutputDirRowProps) {
@@ -42,8 +42,8 @@ export default function OutputDirRow({ required, outputDir, setOutputDir, fieldC
     if (typeof window !== 'undefined' && !new URLSearchParams(window.location.search).get('backendUrl')) {
       const origin = window.location.origin;
       fetch(`${origin}/health`).then(r => {
-        if (r.ok) setBackendUrl(origin);
-        else setBackendUrl(detected);
+        if (r.ok) setBackendUrl(origin);   // Docker nginx 同源代理
+        else setBackendUrl(detected);      // Docker dev 直连 :8000
       }).catch(() => setBackendUrl(detected));
     } else {
       setBackendUrl(detected);

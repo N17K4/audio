@@ -605,6 +605,106 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     return all_ok
 
 
+def _install_rvc_to_target(py: str, target: str, pypi_mirror: str, json_progress: bool) -> bool:
+    """fairseq + rvc-python を --target に安装する（RVC 用）。
+
+    fairseq は C 拡張ビルドが困難（特に Windows）なため、
+    ソースから C 拡張を無効化してインストールする。
+    """
+    mirror_args = ["-i", pypi_mirror] if pypi_mirror else []
+    target_args = ["--target", target, "--no-warn-script-location"] if target else []
+
+    # fairseq がインストール済みか確認
+    if _is_importable_in_target(target, "fairseq") if target else False:
+        _emit({"type": "log", "message": "  ✓ fairseq 已存在，跳过"}, json_progress)
+    else:
+        _emit({"type": "log", "message": "  安装 fairseq==0.12.2（纯 Python 模式）…"}, json_progress)
+        # setuptools<72 は fairseq ビルドに必要
+        subprocess.run(
+            [py, "-m", "pip", "install", "setuptools<72", *target_args, *mirror_args, "-q"],
+            capture_output=True, text=True, timeout=300,
+        )
+        # fairseq ソースをダウンロードして C 拡張を無効化してインストール
+        _FAIRSEQ_SDIST = "https://files.pythonhosted.org/packages/source/f/fairseq/fairseq-0.12.2.tar.gz"
+        _INJECT = (
+            "# === 安装器注入：强制纯 Python 安装 ===\n"
+            "import setuptools as _st_inject\n"
+            "_orig_st_setup = _st_inject.setup\n"
+            "def _no_ext_setup(**kw):\n"
+            "    kw.pop('ext_modules', None)\n"
+            "    return _orig_st_setup(**kw)\n"
+            "_st_inject.setup = _no_ext_setup\n"
+            "def cythonize(*_a, **_kw): return []\n"
+            "class Extension:\n"
+            "    def __init__(self, *_a, **_kw): pass\n"
+            "try:\n"
+            "    import numpy as _np_check\n"
+            "except ImportError:\n"
+            "    import types as _types, sys as _sys\n"
+            "    _np_fake = _types.ModuleType('numpy')\n"
+            "    _np_fake.get_include = lambda: ''\n"
+            "    _sys.modules['numpy'] = _np_fake\n"
+            "# === 注入结束 ===\n"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tarball = Path(tmpdir) / "fairseq.tar.gz"
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(_FAIRSEQ_SDIST, str(tarball))
+                with __import__("tarfile").open(tarball, "r:gz") as tf:
+                    tf.extractall(tmpdir)
+                candidates = [p for p in Path(tmpdir).iterdir() if p.is_dir() and p.name.startswith("fairseq")]
+                if not candidates:
+                    _emit({"type": "log", "message": "  ✗ fairseq 解压后目录未找到"}, json_progress)
+                    return False
+                fairseq_src = candidates[0]
+                setup_py = fairseq_src / "setup.py"
+                if setup_py.exists():
+                    original = setup_py.read_text(encoding="utf-8")
+                    patched = re.sub(r"^(from|import)\s+Cython[^\n]*\n", "", original, flags=re.MULTILINE)
+                    setup_py.write_text(_INJECT + patched, encoding="utf-8")
+                r = subprocess.run(
+                    [py, "-m", "pip", "install", str(fairseq_src),
+                     "--no-build-isolation", "--no-deps", *target_args, "-q"],
+                    capture_output=True, text=True, timeout=600,
+                )
+                if r.returncode != 0:
+                    _emit({"type": "log", "message": f"  ✗ fairseq 安装失败: {r.stderr.strip()[-300:]}"}, json_progress)
+                    return False
+                _emit({"type": "log", "message": "  ✓ fairseq 安装成功"}, json_progress)
+            except Exception as e:
+                _emit({"type": "log", "message": f"  ✗ fairseq 安装异常: {e}"}, json_progress)
+                return False
+
+        # fairseq Python 3.12 兼容パッチ
+        try:
+            from runtime import _patch_fairseq_for_py312
+            _patch_fairseq_for_py312(py)
+        except ImportError:
+            pass  # runtime.py が見つからない場合はスキップ（パッチは afterPack でも適用される）
+
+    # bitarray（fairseq 依赖）
+    subprocess.run(
+        [py, "-m", "pip", "install", "bitarray", *target_args, *mirror_args, "--no-deps", "-q"],
+        capture_output=True, text=True, timeout=300,
+    )
+
+    # rvc-python
+    if _is_importable_in_target(target, "rvc") if target else False:
+        _emit({"type": "log", "message": "  ✓ rvc-python 已存在，跳过"}, json_progress)
+    else:
+        r = subprocess.run(
+            [py, "-m", "pip", "install", "rvc-python==0.1.5", "--no-deps", *target_args, *mirror_args, "-q"],
+            capture_output=True, text=True, timeout=300,
+        )
+        if r.returncode != 0:
+            _emit({"type": "log", "message": f"  ✗ rvc-python 安装失败: {r.stderr.strip()[-200:]}"}, json_progress)
+            return False
+        _emit({"type": "log", "message": "  ✓ rvc-python 安装成功"}, json_progress)
+
+    return True
+
+
 def main():
     """安装基础 ML 包。"""
     parser = argparse.ArgumentParser(description="安装基础 ML 运行库")
@@ -680,6 +780,16 @@ def main():
             ["xattr", "-dr", "com.apple.quarantine", args.target],
             capture_output=True, timeout=60,
         )
+
+    # ── RVC 特殊依赖：fairseq + rvc-python（--no-deps 安装） ────────────────
+    # runtime.py の pip_packages 段階で嵌入式 Python にインストールされるはずだが、
+    # macOS CI からのクロスビルドでは Windows 嵌入式 Python に入らないため、
+    # ユーザー初回起動の ML インストール段階でも --target に入れる。
+    if "rvc" in engines:
+        _emit({"type": "log", "message": "安装 RVC 依赖（fairseq + rvc-python）…"}, args.json_progress)
+        _rvc_ok = _install_rvc_to_target(py, args.target, args.pypi_mirror, args.json_progress)
+        if not _rvc_ok:
+            ok = False
 
     # NLTK データダウンロード（GPT-SoVITS の英語テキスト処理に必要）
     _emit({"type": "log", "message": "下载 NLTK 数据…"}, args.json_progress)
