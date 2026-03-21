@@ -8,10 +8,10 @@ interface UseNavigationParams {
   backendBaseUrl: string;
   setMiscSubPage: (page: MiscSubPage) => void;
   fetchJobs: () => void;
-  isElectron?: boolean;
+  isDocker?: boolean;
 }
 
-export function useNavigation({ backendBaseUrl, setMiscSubPage, fetchJobs, isElectron }: UseNavigationParams) {
+export function useNavigation({ backendBaseUrl, setMiscSubPage, fetchJobs, isDocker }: UseNavigationParams) {
   const [taskType, setTaskType] = useState<TaskType>('tts');
   const [showHome, setShowHome] = useState(true);
   const [showTasks, setShowTasks] = useState(false);
@@ -42,7 +42,7 @@ export function useNavigation({ backendBaseUrl, setMiscSubPage, fetchJobs, isEle
     };
     if (page === 'home') { resetAll(); setShowHome(true); }
     else if (page === 'tasks') { resetAll(); setShowTasks(true); setTasksTab('tasks'); fetchJobs(); }
-    else if (page === 'system') { resetAll(); setShowTasks(true); setTasksTab(isElectron ? 'models' : 'about'); }
+    else if (page === 'system') { resetAll(); setShowTasks(true); setTasksTab(isDocker ? 'about' : 'models'); }
     else if (page === 'audio_tools') {
       resetAll(); setShowAudioTools(true);
       if (subPage && ['tts', 'vc', 'asr', 'voice_chat'].includes(subPage)) setTaskType(subPage as TaskType);

@@ -25,7 +25,8 @@
     "dist:win": "bash scripts/dist.sh --win",
     "dist:both": "bash scripts/dist.sh --mac && bash scripts/dist.sh --win",
     "dist2:win": "pnpm run setup && pnpm run runtime && pnpm run ml && pnpm run checkpoints && bash scripts/dist.sh --win --full",
-    "docker": "docker compose up --build"
+    "docker": "docker compose up --build",
+    "d:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

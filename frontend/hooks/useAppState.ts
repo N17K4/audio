@@ -19,7 +19,7 @@ export function useAppState() {
 
   // ─── 运行环境检测 ──────────────────────────────────────────────────────────
   const [isElectron, setIsElectron] = useState(false);
-  useEffect(() => { setIsElectron(!!window.electronAPI); }, []);
+  useEffect(() => { setIsElectron(typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent)); }, []);
 
   // ─── 共享设置 ─────────────────────────────────────────────────────────────
   const [providerMap, setProviderMap] = useState<Record<string, string>>({

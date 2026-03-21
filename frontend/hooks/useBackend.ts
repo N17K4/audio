@@ -13,6 +13,7 @@ export function useBackend() {
   const [downloadDir, setDownloadDir] = useState('');
   const [selectedVoiceId, setSelectedVoiceId] = useState('');
   const [vchatVoiceId, setVchatVoiceId] = useState('');
+  const [isDocker, setIsDocker] = useState(false);
 
   useEffect(() => {
     // 优先级：URL 参数（Electron 注入）→ 同源探测（Docker nginx）→ 直连 127.0.0.1:8000
@@ -26,7 +27,7 @@ export function useBackend() {
     }
     const origin = window.location.origin;
     fetch(`${origin}/health`).then(r => {
-      if (r.ok) { setBackendBaseUrl(origin); rlog('INFO', '后端地址(同源):', origin); }
+      if (r.ok) { setBackendBaseUrl(origin); setIsDocker(true); rlog('INFO', '后端地址(同源):', origin); }
       else setBackendBaseUrl('http://127.0.0.1:8000');
     }).catch(() => setBackendBaseUrl('http://127.0.0.1:8000'));
   }, []);
@@ -98,6 +99,7 @@ export function useBackend() {
   return {
     backendBaseUrl,
     backendReady,
+    isDocker,
     capabilities,
     voices,
     engineVersions,
