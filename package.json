@@ -26,7 +26,9 @@
     "dist:both": "bash scripts/dist.sh --mac && bash scripts/dist.sh --win",
     "dist2:win": "pnpm run setup && pnpm run runtime && pnpm run ml && pnpm run checkpoints && bash scripts/dist.sh --win --full",
     "docker": "docker compose up --build",
-    "d:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build"
+    "dd": "pkill -f 'next dev' 2>/dev/null; docker compose -f docker-compose.yml -f docker-compose.dev.yml up",
+    "ddd": "pkill -f 'next dev' 2>/dev/null; docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "dds": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
