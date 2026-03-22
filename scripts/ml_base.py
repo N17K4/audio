@@ -670,26 +670,51 @@ def _verify_numpy_pyd(py: str, target: str, mirror: str, json_progress: bool) ->
 
 
 def _patch_torchaudio_torchcodec(target: str, json_progress: bool) -> None:
-    """torchaudio 2.10+ の torchcodec デフォルト呼び出しを soundfile fallback に置換。
+    """torchaudio 2.6+ の torchcodec デフォルト呼び出しを soundfile fallback に置換。
 
-    torchaudio.__init__.py の load() / save() が torchcodec を直接呼ぶため、
-    FFmpeg shared DLL がない Windows 環境ではハングする。
-    ソースレベルで torchcodec 呼び出しを _load_impl / _save_impl に置換する。
+    torchaudio._torchcodec.load_with_torchcodec() が torchcodec を import して失敗するため、
+    ImportError 時に soundfile で読み込むフォールバックを注入する。
+    __init__.py は書き換えない（_load_impl 等の存在しない関数への参照を避ける）。
     """
-    ta_init = Path(target) / "torchaudio" / "__init__.py"
-    if not ta_init.exists():
+    tc_py = Path(target) / "torchaudio" / "_torchcodec.py"
+    if not tc_py.exists():
         return
-    text = ta_init.read_text(encoding="utf-8")
-    changed = False
-    if "return load_with_torchcodec(" in text:
-        text = text.replace("return load_with_torchcodec(", "return _load_impl(")
-        changed = True
-    if "return save_with_torchcodec(" in text:
-        text = text.replace("return save_with_torchcodec(", "return _save_impl(")
-        changed = True
-    if changed:
-        ta_init.write_text(text, encoding="utf-8")
+    text = tc_py.read_text(encoding="utf-8")
+    if "soundfile fallback" in text:
+        return  # 既にパッチ済み
+
+    # load_with_torchcodec の ImportError raise を soundfile fallback に置換
+    old = (
+        'raise ImportError(\n'
+        '            "TorchCodec is required for load_with_torchcodec.'
+    )
+    new = (
+        '# soundfile fallback（torchcodec unavailable）\n'
+        '            import soundfile as _sf, torch as _torch, numpy as _np\n'
+        '            _data, _sr = _sf.read(str(filepath))\n'
+        '            if _data.ndim == 1: _data = _data.reshape(1, -1)\n'
+        '            else: _data = _data.T\n'
+        '            return _torch.from_numpy(_np.array(_data, copy=True)).float(), _sr  # soundfile fallback'
+    )
+    if old in text:
+        text = text.replace(old, new)
+        tc_py.write_text(text, encoding="utf-8")
         _emit({"type": "log", "message": "  ✓ torchaudio: torchcodec → soundfile fallback パッチ適用"}, json_progress)
+    else:
+        # 既に壊れた _load_impl パッチが __init__.py に適用されている場合を修復
+        ta_init = Path(target) / "torchaudio" / "__init__.py"
+        if ta_init.exists():
+            init_text = ta_init.read_text(encoding="utf-8")
+            fixed = False
+            if "return _load_impl(" in init_text:
+                init_text = init_text.replace("return _load_impl(", "return load_with_torchcodec(")
+                fixed = True
+            if "return _save_impl(" in init_text:
+                init_text = init_text.replace("return _save_impl(", "return save_with_torchcodec(")
+                fixed = True
+            if fixed:
+                ta_init.write_text(init_text, encoding="utf-8")
+                _emit({"type": "log", "message": "  ✓ torchaudio: 壊れた _load_impl パッチを修復"}, json_progress)
 
 
 def _patch_fairseq_in_target(target: str, json_progress: bool) -> None:

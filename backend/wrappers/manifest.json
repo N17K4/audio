@@ -6,6 +6,7 @@
     "torchaudio",
     "torchvision",
     "transformers>=4.43,<=4.50",
+    "tokenizers>=0.21,<0.22",
     "numpy>=2.2,<2.3",
     "einops",
     "scipy",
