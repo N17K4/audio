@@ -54,11 +54,12 @@ def get_engine_dir(engine: str) -> Path:
 
 def patch_torchaudio():
     """torchaudio 2.6+ が torchcodec を要求するが、未インストール環境では ImportError になる。
-    torchaudio.load 自体を monkey-patch し、torchcodec 失敗時は soundfile にフォールバック。
+    torchaudio.load / torchaudio.save を monkey-patch し、soundfile にフォールバック。
     """
     try:
         import torchaudio
         _orig_load = torchaudio.load
+        _orig_save = torchaudio.save
 
         def _safe_load(filepath, *args, **kwargs):
             try:
@@ -74,7 +75,18 @@ def patch_torchaudio():
                     _data = _data.T
                 return _torch.from_numpy(_np.array(_data, copy=True)).float(), _sr
 
+        def _safe_save(filepath, src, sample_rate, *args, **kwargs):
+            try:
+                return _orig_save(filepath, src, sample_rate, *args, **kwargs)
+            except (ImportError, NameError):
+                import soundfile as _sf
+                _data = src.cpu().numpy()
+                if _data.ndim == 2:
+                    _data = _data.T  # (channels, samples) → (samples, channels)
+                _sf.write(str(filepath), _data, sample_rate)
+
         torchaudio.load = _safe_load
+        torchaudio.save = _safe_save
     except Exception:
         pass
 

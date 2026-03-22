@@ -151,45 +151,44 @@ def _fail(tag: str, name: str, status: int, text: str):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def test_1_1_fish_speech_tts():
+    """Fish Speech zero-shot TTS（无参考音频，CPU 环境可在 120s 内完成）"""
     import httpx
     TAG = "[1-1]"
-    print(f"\n{TAG} Fish Speech TTS")
+    print(f"\n{TAG} Fish Speech TTS（zero-shot）")
 
-    wav_data = create_test_wav(duration_sec=3)
     with httpx.Client(timeout=30) as client:
         data = {"text": "[1-1]Fish Speech", "provider": "fish_speech"}
-        files = {"reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav")}
-        print(f"  📤 POST /tasks/tts  参数：{data}  + reference_audio")
+        print(f"  📤 POST /tasks/tts  参数：{data}（无参考音频）")
 
-        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data, files=files)
+        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data)
         print(f"     HTTP {resp.status_code}")
 
         if resp.status_code == 200:
-            return _ok(TAG, "Fish Speech TTS", resp.json())
-        _fail(TAG, "Fish Speech TTS", resp.status_code, resp.text)
+            return _ok(TAG, "Fish Speech TTS（zero-shot）", resp.json())
+        _fail(TAG, "Fish Speech TTS（zero-shot）", resp.status_code, resp.text)
 
 
 def test_1_2_fish_speech_advanced():
+    """Fish Speech zero-shot + 高级参数（CPU 环境可在 120s 内完成）"""
     import httpx
     TAG = "[1-2]"
-    print(f"\n{TAG} Fish Speech TTS 高级参数")
+    print(f"\n{TAG} Fish Speech TTS 高级参数（zero-shot）")
 
-    wav_data = create_test_wav(duration_sec=3)
     with httpx.Client(timeout=30) as client:
         data = {
             "text": "[1-2]Fish Speech 高级", "provider": "fish_speech",
             "top_p": "0.8", "temperature": "0.9", "repetition_penalty": "1.5",
         }
-        files = {"reference_audio": ("ref.wav", BytesIO(wav_data), "audio/wav")}
         param_summary = {k: v for k, v in data.items() if k != "text"}
-        print(f"  📤 POST /tasks/tts  参数：{param_summary}  + reference_audio")
+        print(f"  📤 POST /tasks/tts  参数：{param_summary}（无参考音频）")
 
-        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data, files=files)
+        resp = client.post(f"{_BASE_URL}/tasks/tts", data=data)
         print(f"     HTTP {resp.status_code}")
 
         if resp.status_code == 200:
-            return _ok(TAG, "Fish Speech TTS（高级参数）", resp.json())
-        _fail(TAG, "Fish Speech TTS（高级参数）", resp.status_code, resp.text)
+            return _ok(TAG, "Fish Speech TTS 高级参数（zero-shot）", resp.json())
+        _fail(TAG, "Fish Speech TTS 高级参数（zero-shot）", resp.status_code, resp.text)
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -702,7 +701,7 @@ if __name__ == "__main__":
 
     # 编号结构：主编号为引擎，子编号为子任务
     tests = {
-        "[1-1] Fish Speech TTS":                test_1_1_fish_speech_tts,
+        "[1-1] Fish Speech TTS（zero-shot）":    test_1_1_fish_speech_tts,
         "[1-2] Fish Speech TTS 高级参数":      test_1_2_fish_speech_advanced,
         "[2-1] GPT-SoVITS TTS":               test_2_1_gpt_sovits_tts,
         "[2-2] GPT-SoVITS TTS 高级参数":      test_2_4_gpt_sovits_tts_advanced,

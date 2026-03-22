@@ -109,6 +109,14 @@ def main() -> int:
     if nltk_data_dir.exists():
         os.environ.setdefault("NLTK_DATA", str(nltk_data_dir))
 
+    # fast_langdetect キャッシュ: Windows で pretrained_models junction 失敗時の対策
+    # checkpoint_dir 内の fast_langdetect/ にフォールバック
+    if checkpoint_dir:
+        fl_cache = Path(checkpoint_dir) / "fast_langdetect"
+        if not fl_cache.exists():
+            fl_cache.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("FTLANG_CACHE", str(fl_cache))
+
     engine_dir = _detect_engine_dir()
     if not engine_dir:
         print("[gpt_sovits] engine 目录不存在，请先运行 pnpm run setup 安装 GPT-SoVITS", file=sys.stderr)
@@ -261,26 +269,21 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
     try:
         # TTS_Config は configs_.get("custom", configs_["v2"]) で config を読む。
         # "custom" キーの下に全パラメータを入れなければ v2 にフォールバックする。
-        # V3 は prompt_text（ref_text）必須。未指定時は V2 にフォールバック。
+        # V3 は prompt_text（ref_text）必須。未指定時はテキストの先頭をデフォルト値として使用。
         ref_text = args.ref_text.strip() if args.ref_text else ""
-        use_v3 = bool(ref_text) and os.path.isfile(os.path.join(checkpoint_dir, "s1v3.ckpt"))
-
-        if use_v3:
-            version, t2s, vits = "v3", "s1v3.ckpt", "s2Gv3.pth"
-        else:
-            version, t2s, vits = "v2", "s1bert25hz-5kh-longer.ckpt", "s2G2333k.pth"
-            if ref_text == "" and args.voice_ref:
-                print("[gpt_sovits] ref_text 未指定 → V2 モードにフォールバック", file=sys.stderr)
+        if not ref_text and args.voice_ref:
+            ref_text = args.text[:20] if args.text else "。"
+            print(f"[gpt_sovits] ref_text 未指定 → テキスト先頭をデフォルト使用: {ref_text!r}", file=sys.stderr)
 
         config_dict = {
             "custom": {
-                "version": version,
+                "version": "v3",
                 "device": "cpu",
                 "is_half": False,
                 "cnhuhbert_base_path": os.path.join(checkpoint_dir, "chinese-hubert-base"),
                 "bert_base_path": os.path.join(checkpoint_dir, "chinese-roberta-wwm-ext-large"),
-                "t2s_weights_path": os.path.join(checkpoint_dir, t2s),
-                "vits_weights_path": os.path.join(checkpoint_dir, vits),
+                "t2s_weights_path": os.path.join(checkpoint_dir, "s1v3.ckpt"),
+                "vits_weights_path": os.path.join(checkpoint_dir, "s2Gv3.pth"),
             }
         }
 
