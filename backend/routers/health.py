@@ -146,8 +146,12 @@ def _open_task_log() -> "IO":
     return open(_TASK_LOG, "a", encoding="utf-8")
 
 
+_smoketest_proc: subprocess.Popen | None = None
+
+
 def _run_smoketest_gen(task_name: str, test_file: Path, py_cmd: str):
     """通用烟雾测试 SSE 生成器：写入 task.log + 流式输出 + 最终返回 summary。"""
+    global _smoketest_proc
     import os
     from datetime import datetime
 
@@ -188,6 +192,7 @@ def _run_smoketest_gen(task_name: str, test_file: Path, py_cmd: str):
             env=env,
             encoding="utf-8", errors="replace",
         )
+        _smoketest_proc = proc
         yield _emit(f"[调试] 进程已启动 (PID: {proc.pid})")
 
         returncode = None
@@ -208,6 +213,7 @@ def _run_smoketest_gen(task_name: str, test_file: Path, py_cmd: str):
         yield _emit(f"❌ 异常：{str(e)}")
 
     finally:
+        _smoketest_proc = None
         yield _emit("")  # 空行分隔
         log_fp.close()
 
@@ -233,6 +239,22 @@ def _clear_task_log():
             _TASK_LOG.write_text("", encoding="utf-8")
     except Exception:
         pass
+
+
+@router.post("/smoketest/abort")
+async def abort_smoketest():
+    """实行中の烟雾测试プロセスを中止する。"""
+    global _smoketest_proc
+    proc = _smoketest_proc
+    if proc is None or proc.poll() is not None:
+        return {"ok": False, "error": "没有正在运行的烟雾测试"}
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    _smoketest_proc = None
+    return {"ok": True, "message": "烟雾测试已中止"}
 
 
 @router.post("/smoketest/run")

@@ -127,6 +127,12 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
     setRunning(false);
   }
 
+  async function abortSmokeTest() {
+    try {
+      await fetch(`${backendBaseUrl}/smoketest/abort`, { method: 'POST' });
+    } catch { /**/ }
+  }
+
   // ── 历史记录区域：运行记录 / 日志 切换 ──────────────────────────────────────
   const [historyView, setHistoryView] = useState<'jobs' | 'log'>('jobs');
   const [taskLogContent, setTaskLogContent] = useState<string | null>(null);
@@ -458,14 +464,24 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">烟雾测试</span>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">7 大引擎 13 项测试（1.Fish Speech · 2.GPT-SoVITS · 3.Seed-VC · 4.RVC · 5.Faster Whisper · 6.FaceFusion · 7.FFmpeg）</p>
           </div>
-          <button
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
-            style={{ backgroundColor: SPRING_GREEN }}
-            disabled={smokeRunning || !backendBaseUrl}
-            onClick={() => runSmokeTest('smoketest/run', setSmokeRunning)}
-          >
-            {smokeRunning ? <><Spinner />运行中…</> : '运行烟雾测试'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {smokeRunning && (
+              <button
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-all"
+                onClick={abortSmokeTest}
+              >
+                中止
+              </button>
+            )}
+            <button
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: SPRING_GREEN }}
+              disabled={smokeRunning || !backendBaseUrl}
+              onClick={() => runSmokeTest('smoketest/run', setSmokeRunning)}
+            >
+              {smokeRunning ? <><Spinner />运行中…</> : '运行烟雾测试'}
+            </button>
+          </div>
         </div>
       </section>
       {/* 烟雾测试 2 */}
@@ -484,14 +500,24 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             <p className="text-[11px] text-slate-400 dark:text-slate-500 ml-3">• pnpm run ml 已执行</p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">💡 需要网络连接（首次拉取较慢，可能 5-10 分钟）</p>
           </div>
-          <button
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
-            style={{ backgroundColor: SPRING_GREEN }}
-            disabled={smoke2Running || !backendBaseUrl}
-            onClick={() => runSmokeTest('smoketest2/run', setSmoke2Running)}
-          >
-            {smoke2Running ? <><Spinner />运行中…</> : '运行烟雾测试 2'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {smoke2Running && (
+              <button
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-all"
+                onClick={abortSmokeTest}
+              >
+                中止
+              </button>
+            )}
+            <button
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: SPRING_GREEN }}
+              disabled={smoke2Running || !backendBaseUrl}
+              onClick={() => runSmokeTest('smoketest2/run', setSmoke2Running)}
+            >
+              {smoke2Running ? <><Spinner />运行中…</> : '运行烟雾测试 2'}
+            </button>
+          </div>
         </div>
       </section>
       {/* 健康检查 */}

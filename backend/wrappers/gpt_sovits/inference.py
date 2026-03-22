@@ -208,13 +208,13 @@ def main() -> int:
         os.chdir(original_cwd)
 
 
-def _patch_bigvgan_from_pretrained():
+def _patch_bigvgan_from_pretrained(checkpoint_dir: str):
     """Windows パス問題を回避: BigVGAN.from_pretrained に渡されるローカルパスを正規化。
 
     GPT-SoVITS が `"%s/GPT_SoVITS/pretrained_models/..." % now_dir` で
-    パスを組み立てるため、Windows では `C:\\...\\engine/GPT_SoVITS/...` と
-    混在パスになり os.path.isdir() が False → HF repo ID 検証エラーになる。
-    パスを os.path.normpath で正規化して解決する。
+    パスを組み立てるため、Windows では混在パスになり os.path.isdir() が False。
+    さらに pretrained_models → checkpoint_dir の junction 作成が Windows で失敗しうる。
+    パスを正規化し、存在しなければ checkpoint_dir にフォールバックする。
     """
     try:
         from BigVGAN.bigvgan import BigVGAN
@@ -223,6 +223,13 @@ def _patch_bigvgan_from_pretrained():
         @classmethod
         def _patched(cls, model_id, *args, **kwargs):
             normalized = os.path.normpath(str(model_id))
+            if not os.path.isdir(normalized) and checkpoint_dir:
+                # junction 失敗時: checkpoint_dir 内の同名ディレクトリにフォールバック
+                basename = os.path.basename(normalized)
+                alt = os.path.join(checkpoint_dir, basename)
+                if os.path.isdir(alt):
+                    print(f"[gpt_sovits] BigVGAN: {normalized} → {alt} にフォールバック", file=sys.stderr)
+                    normalized = alt
             return _original(cls, normalized, *args, **kwargs)
 
         BigVGAN.from_pretrained = _patched
@@ -236,7 +243,7 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
 
     # Windows パス混在問題を回避（BigVGAN.from_pretrained monkey-patch）
     if os.name == "nt":
-        _patch_bigvgan_from_pretrained()
+        _patch_bigvgan_from_pretrained(checkpoint_dir)
 
     # torchaudio 2.6+: torchcodec 未インストール時のフォールバック
     from _common import patch_torchaudio

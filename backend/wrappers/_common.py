@@ -67,7 +67,7 @@ def patch_torchaudio():
                 import soundfile as _sf
                 import torch as _torch
                 import numpy as _np
-                _data, _sr = _sf.read(str(filepath))
+                _data, _sr = _sf.read(filepath)
                 if _data.ndim == 1:
                     _data = _data.reshape(1, -1)
                 else:
