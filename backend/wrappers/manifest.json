@@ -211,7 +211,7 @@
       "runtime_pip_packages": [
         "torch",
         "torchaudio",
-        "torchcodec; sys_platform != 'win32'",
+        "torchcodec",
         "numpy>=2.2,<2.3",
         "scipy",
         "librosa==0.10.2",

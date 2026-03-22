@@ -307,7 +307,16 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             <pre className="whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2 leading-relaxed mt-1.5">{job.result_text}</pre>
           )}
           {job.status === 'failed' && job.error && (
-            <pre className="whitespace-pre-wrap break-words text-xs text-rose-500 pt-1">{job.error}</pre>
+            <div className="relative group/err pt-1">
+              <button
+                className="absolute top-2 right-1 opacity-0 group-hover/err:opacity-100 transition-opacity rounded px-1.5 py-0.5 text-[10px] font-medium bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-800"
+                onClick={() => navigator.clipboard?.writeText(job.error!).then(() => {
+                  const btn = document.activeElement as HTMLButtonElement;
+                  if (btn) { const orig = btn.textContent; btn.textContent = '已复制'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+                })}
+              >复制</button>
+              <pre className="whitespace-pre-wrap break-words text-xs text-rose-500">{job.error}</pre>
+            </div>
           )}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1.5">
@@ -606,9 +615,18 @@ function LogViewer({ backendBaseUrl }: { backendBaseUrl: string }) {
           ))}
         </div>
         {logContent && (
-          <pre className="mt-3 rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed" style={{ maxHeight: '24rem' }}>
-            {logContent.content || '（空）'}
-          </pre>
+          <div className="mt-3 relative group">
+            <button
+              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded px-2 py-1 text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
+              onClick={() => navigator.clipboard?.writeText(logContent.content || '').then(() => {
+                const btn = document.activeElement as HTMLButtonElement;
+                if (btn) { const orig = btn.textContent; btn.textContent = '已复制'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+              })}
+            >复制全部</button>
+            <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed" style={{ maxHeight: '24rem' }}>
+              {logContent.content || '（空）'}
+            </pre>
+          </div>
         )}
       </div>
     </section>

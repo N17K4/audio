@@ -871,11 +871,6 @@ def main():
     if args.pypi_mirror:
         _emit({"type": "log", "message": f"PyPI 镜像：{args.pypi_mirror}"}, args.json_progress)
 
-    # Windows: torchcodec は FFmpeg shared DLL を要求するが、アプリは static FFmpeg をバンドル。
-    # manifest で sys_platform != 'win32' にしても既存インストールは残るため、明示的に削除。
-    if platform.system() == "Windows" and args.target:
-        _remove_pkg_from_target(args.target, "torchcodec", args.json_progress)
-
     # Windows 前置依赖：loguru が win32-setctime を要求するため、先にインストール
     if platform.system() == "Windows":
         _emit({"type": "log", "message": "安装 Windows 前置依赖: win32-setctime"}, args.json_progress)

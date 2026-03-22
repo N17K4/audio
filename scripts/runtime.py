@@ -1072,7 +1072,9 @@ def download_ffmpeg(project_root: Path) -> bool:
     elif system == "Windows":
         bin_dir = project_root / "runtime" / "bin" / "win"
         dest = bin_dir / "ffmpeg.exe"
-        url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        # shared ビルド: ffmpeg.exe + DLL (avcodec, avformat 等) を含む。
+        # torchcodec (torchaudio 2.6+) が FFmpeg shared DLL を要求するため必須。
+        url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
     else:
         print(f"  [ffmpeg] 不支持的平台: {system}，跳过")
         return True
@@ -1083,10 +1085,15 @@ def download_ffmpeg(project_root: Path) -> bool:
             print(f"  ✗ FFmpeg 文件异常（{size_mb:.1f} MB），重新下载")
             dest.unlink()
         else:
-            print(f"  ✓ FFmpeg 已存在（{size_mb:.1f} MB）: {dest}")
-            if system != "Windows":
-                dest.chmod(0o755)
-            return True
+            # Windows: shared DLL が必要（torchcodec 用）。なければ再ダウンロード
+            if system == "Windows" and not list(bin_dir.glob("av*.dll")):
+                print(f"  ✗ FFmpeg DLL 未找到，重新下载（shared ビルド）")
+                dest.unlink()
+            else:
+                print(f"  ✓ FFmpeg 已存在（{size_mb:.1f} MB）: {dest}")
+                if system != "Windows":
+                    dest.chmod(0o755)
+                return True
 
     print(f"  ✗ FFmpeg 未找到，下载中（~50-80 MB）...")
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -1122,6 +1129,16 @@ def download_ffmpeg(project_root: Path) -> bool:
 
             if not _extract_from_zip(tmp_archive, dest):
                 return False
+            # Windows shared ビルド: DLL も抽出（torchcodec が FFmpeg shared DLL を要求）
+            if system == "Windows":
+                with zipfile.ZipFile(tmp_archive, "r") as zf:
+                    for entry in zf.namelist():
+                        if entry.endswith(".dll") and "/bin/" in entry:
+                            dll_name = Path(entry).name
+                            dll_dest = bin_dir / dll_name
+                            if not dll_dest.exists():
+                                with zf.open(entry) as src_f, open(dll_dest, "wb") as dst_f:
+                                    dst_f.write(src_f.read())
         else:
             with tarfile.open(tmp_archive) as tf:
                 found_member = next(

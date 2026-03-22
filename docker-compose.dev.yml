@@ -10,7 +10,7 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./tests:/app/tests
-      - checkpoints:/app/runtime/checkpoints
+      - ./runtime/checkpoints:/app/runtime/checkpoints
       - user_data:/app/user_data
       - cache:/app/cache
       - ./logs:/app/logs

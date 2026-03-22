@@ -49,11 +49,41 @@ PYEOF
 # poetry export で入る numpy 1.x を強制的に 2.2.x へ上げる
 RUN pip install --no-cache-dir "numpy>=2.2,<2.3"
 
+# torchaudio 2.6+ が torchcodec を要求するため追加
+RUN pip install --no-cache-dir torchcodec
+
 # RVC 特殊安装（fairseq + rvc-python）
 RUN pip install --no-cache-dir setuptools'<72' \
     && pip install --no-cache-dir --no-deps fairseq==0.12.2 \
     && pip install --no-cache-dir bitarray \
     && pip install --no-cache-dir --no-deps rvc-python==0.1.5
+
+# fairseq 0.12.2 + Python 3.12 互換パッチ（dataclass / hydra の _MISSING_TYPE エラー回避）
+RUN python <<'PYEOF'
+import pathlib, re, sys
+venv = pathlib.Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+fairseq_dir = venv / "fairseq"
+if not fairseq_dir.exists():
+    print("[patch] fairseq not found, skip"); sys.exit(0)
+# 1) __init__.py: hydra_init() を try/except で囲む
+init_py = fairseq_dir / "__init__.py"
+if init_py.exists():
+    t = init_py.read_text()
+    if "hydra_init()" in t and "pass  # Py3.12" not in t:
+        t = t.replace("hydra_init()", "try:\n    hydra_init()\nexcept Exception:\n    pass  # Py3.12")
+        init_py.write_text(t)
+# 2) mutable default を field(default_factory=...) に置換
+for f in [fairseq_dir / "dataclass" / "configs.py",
+          fairseq_dir / "models" / "transformer" / "transformer_config.py"]:
+    if not f.exists(): continue
+    t = f.read_text()
+    t = re.sub(r'^(\s+\w+:\s+\w+)\s*=\s*([A-Z]\w+)\(\)$',
+               lambda m: f'{m.group(1)} = field(default_factory={m.group(2)})' if m.group(2) not in ('Optional','List','Dict','Tuple','Any') else m.group(0),
+               t, flags=re.MULTILINE)
+    t = re.sub(r'field\(default=([A-Z]\w+)\(\)\)', r'field(default_factory=\1)', t)
+    f.write_text(t)
+print("[patch] fairseq Python 3.12 patch applied")
+PYEOF
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Stage 2: runtime — コンパイラなし、軽量イメージ
@@ -67,6 +97,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         pandoc \
         git \
+        curl \
         libsndfile1 \
         libgl1 \
         libglib2.0-0 \
