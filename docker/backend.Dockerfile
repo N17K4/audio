@@ -37,6 +37,8 @@ m = json.load(open('backend/wrappers/manifest.json'))
 engines = m.get('engines', {})
 SKIP = {'rvc-python', 'fairseq'}
 pkgs = set()
+for p in m.get('shared_runtime_pip_packages', []):
+    pkgs.add(p)
 for e in engines.values():
     for p in e.get('runtime_pip_packages', []):
         name = p.split('==')[0].split('>=')[0].split('<=')[0].split('<')[0].split('>')[0]
@@ -47,9 +49,29 @@ print(f'安装 {len(pkgs)} 个运行时 ML 依赖...')
 open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs))
 PYEOF
 
-# ── Layer 2: ML 追加依存（torchcodec / gradio 等、変更少） ─────────────────
+# ── Layer 2: ML 追加依存（gradio 等、変更少） ─────────────────────────────
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install "torchcodec>=0.10,<1.0" gradio sacrebleu
+    pip install gradio sacrebleu soundfile
+
+# torchaudio 2.6+ は torchcodec をデフォルトで要求するが、
+# linux/arm64 に torchcodec wheel がないためパッチで soundfile に回避
+RUN python <<'PYEOF'
+import pathlib, sys
+ta = pathlib.Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "torchaudio" / "__init__.py"
+if not ta.exists():
+    print("[patch] torchaudio not found, skip"); sys.exit(0)
+t = ta.read_text()
+if "load_with_torchcodec" in t:
+    # load() 内の torchcodec 呼び出しを soundfile fallback に置換
+    t = t.replace(
+        "return load_with_torchcodec(",
+        "return _load_impl("  # _load_impl は sox/soundfile backend を使う
+    )
+    ta.write_text(t)
+    print("[patch] torchaudio: torchcodec → soundfile fallback applied")
+else:
+    print("[patch] torchaudio: no torchcodec call found, skip")
+PYEOF
 
 # ── Layer 3: RVC 特殊安装 + fairseq patch（変更少） ────────────────────────
 RUN --mount=type=cache,target=/root/.cache/pip \

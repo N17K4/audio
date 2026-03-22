@@ -1,6 +1,19 @@
 {
   "_comment": "产物固化清单（Artifact Pinning Manifest）。pip_packages 在构建期装入 embedded Python；runtime_pip_packages 在首次启动时装入 userData/python-packages/。",
   "manifest_version": "1",
+  "shared_runtime_pip_packages": [
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "transformers>=4.43,<=4.50",
+    "numpy>=2.2,<2.3",
+    "einops",
+    "scipy",
+    "soundfile",
+    "librosa==0.10.2",
+    "Pillow",
+    "av"
+  ],
   "network_deps": [
     {
       "name": "PyPI — 运行时 ML 依赖",
@@ -151,12 +164,8 @@
       "checkpoint_dir": "runtime/checkpoints/fish_speech",
       "pip_packages": [],
       "runtime_pip_packages": [
-        "torch",
-        "torchaudio",
         "hydra-core",
-        "transformers",
         "huggingface_hub>=0.26.0,<1.0",
-        "einops",
         "vector-quantize-pytorch"
       ],
       "checkpoint_files": [
@@ -209,16 +218,8 @@
       "checkpoint_dir": "runtime/checkpoints/seed_vc",
       "pip_packages": [],
       "runtime_pip_packages": [
-        "torch",
-        "torchaudio",
         "torchcodec",
-        "numpy>=2.2,<2.3",
-        "scipy",
-        "librosa==0.10.2",
-        "soundfile",
-        "einops",
         "omegaconf",
-        "transformers",
         "descript-audio-codec"
       ],
       "checkpoint_files": [
@@ -314,9 +315,6 @@
         "setuptools"
       ],
       "runtime_pip_packages": [
-        "torch",
-        "torchaudio",
-        "av",
         "faiss-cpu",
         "ffmpeg-python",
         "praat-parselmouth",
@@ -375,11 +373,7 @@
       "code_dir": "runtime/engine/got_ocr",
       "checkpoint_dir": "runtime/checkpoints/got_ocr",
       "pip_packages": [],
-      "runtime_pip_packages": [
-        "torch",
-        "torchvision",
-        "Pillow"
-      ],
+      "runtime_pip_packages": [],
       "hf_cache_downloads": [
         {
           "repo_id": "stepfun-ai/GOT-OCR-2.0-hf",
@@ -402,11 +396,7 @@
       "code_dir": "runtime/engine/liveportrait",
       "checkpoint_dir": "runtime/checkpoints/liveportrait",
       "pip_packages": [],
-      "runtime_pip_packages": [
-        "torch",
-        "torchvision",
-        "Pillow"
-      ],
+      "runtime_pip_packages": [],
       "hf_cache_downloads": [
         {
           "repo_id": "KwaiVGI/LivePortrait",
@@ -428,7 +418,7 @@
         "default_install": true
       },
       "code_dir": "runtime/engine/facefusion",
-      "checkpoint_dir": "runtime/engine/facefusion/.assets/models",
+      "checkpoint_dir": "runtime/checkpoints/facefusion",
       "pip_packages": [],
       "runtime_pip_packages": [],
       "_setup_note": "FaceFusion 3.x clone https://github.com/facefusion/facefusion.git tag 3.5.4 到 runtime/engine/facefusion/（由 runtime.py 自动完成）。pip 依赖由首次启动引导下载时 setup_facefusion_engine() 从引擎自身 requirements.txt 安装，不在构建期装。模型文件下载到 engine/.assets/models/（FaceFusion 标准路径）。",
@@ -637,12 +627,7 @@
       "code_dir": "runtime/engine/wan",
       "checkpoint_dir": "runtime/checkpoints/wan",
       "pip_packages": [],
-      "runtime_pip_packages": [
-        "torch",
-        "torchvision",
-        "transformers>=4.40",
-        "Pillow"
-      ],
+      "runtime_pip_packages": [],
       "hf_cache_downloads": [
         {
           "repo_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
@@ -666,12 +651,7 @@
       "code_dir": "runtime/engine/flux",
       "checkpoint_dir": "runtime/checkpoints/flux",
       "pip_packages": [],
-      "runtime_pip_packages": [
-        "torch",
-        "torchvision",
-        "transformers>=4.40",
-        "Pillow"
-      ],
+      "runtime_pip_packages": [],
       "hf_cache_downloads": [
         {
           "repo_id": "city96/FLUX.1-schnell-gguf",
@@ -742,12 +722,7 @@
       "code_dir": "runtime/engine/sd",
       "checkpoint_dir": "runtime/checkpoints/sd",
       "pip_packages": [],
-      "runtime_pip_packages": [
-        "torch",
-        "torchvision",
-        "transformers>=4.25",
-        "Pillow"
-      ],
+      "runtime_pip_packages": [],
       "hf_cache_downloads": [
         {
           "repo_id": "stabilityai/sd-turbo",
@@ -772,12 +747,6 @@
       "checkpoint_dir": "runtime/checkpoints/gpt_sovits",
       "pip_packages": [],
       "runtime_pip_packages": [
-        "torch",
-        "torchaudio",
-        "transformers>=4.43,<=4.50",
-        "einops",
-        "soundfile",
-        "librosa==0.10.2",
         "pytorch_lightning>=2.4",
         "x_transformers",
         "peft<0.18.0",
@@ -787,8 +756,6 @@
         "rotary_embedding_torch",
         "torchmetrics<=1.5",
         "ctranslate2>=4.0,<5",
-        "av>=11",
-        "scipy",
         "numba",
         "tensorboard",
         "jieba",
@@ -891,9 +858,6 @@
       "checkpoint_dir": "runtime/checkpoints/cosyvoice",
       "pip_packages": [],
       "runtime_pip_packages": [
-        "torch",
-        "torchaudio",
-        "transformers",
         "onnxruntime",
         "conformer",
         "hyperpyyaml"

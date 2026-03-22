@@ -277,17 +277,37 @@ def main() -> int:
             "save_every_epoch": max(1, args.epochs),
         }
 
-        # 写入临时配置
+        # s1_train.py は -c config_file のみ受付。config YAML にパラメータを書き込む
         s1_config_path = work_dir / "s1_config.yaml"
-        # GPT-SoVITS s1_train 使用 argparse，直接传参
+        import yaml
+        s1_yaml = {
+            "output_dir": str(gpt_output_dir),
+            "train_semantic_path": str(opt_dir / "6-name2semantic.tsv"),
+            "train_phoneme_path": str(opt_dir / "2-name2text-0.txt"),
+            "train": {
+                "seed": 1234, "epochs": args.epochs, "batch_size": args.batch_size,
+                "lr": 0.0001, "save_every_n_epoch": max(1, args.epochs),
+                "if_save_latest": True, "if_save_every_weights": True,
+                "exp_name": voice_id,
+                "half_weights_save_dir": str(gpt_output_dir),
+            },
+            "data": {
+                "max_eval_sample": 8, "max_sec": 54,
+                "num_workers": 0, "pad_val": 1024,
+            },
+            "model": {
+                "vocab_size": 1025, "phoneme_vocab_size": 512,
+                "embedding_dim": 512, "hidden_dim": 512,
+                "head": 16, "linear_units": 2048, "n_layer": 24,
+                "dropout": 0, "EOS": 1024,
+            },
+            "inference": {"top_k": 5},
+            "pretrained_s1": str(checkpoint_dir / "s1v3.ckpt"),
+        }
+        s1_config_path.write_text(yaml.dump(s1_yaml, allow_unicode=True), encoding="utf-8")
         s1_cmd = [
             py, str(engine_dir / "GPT_SoVITS" / "s1_train.py"),
-            "--config_file", str(engine_dir / "GPT_SoVITS" / "configs" / "s1longer.yaml"),
-            "--train_semantic_path", str(opt_dir / "6-name2semantic.tsv"),
-            "--train_phoneme_path", str(opt_dir / "2-name2text-0.txt"),
-            "--output_dir", str(gpt_output_dir),
-            "--epochs", str(args.epochs),
-            "--batch_size", str(args.batch_size),
+            "--config_file", str(s1_config_path),
         ]
 
         _emit("training_gpt", 60, f"训练 GPT 模型（{args.epochs} 轮）...")
@@ -311,12 +331,17 @@ def main() -> int:
         sovits_output_dir = voice_dir / "sovits_weights"
         sovits_output_dir.mkdir(parents=True, exist_ok=True)
 
+        # s2_train.py は -c config のみ受付。s2.json にパラメータを書き込む
+        s2_train_config = dict(s2_config)  # train.py 冒頭で生成した s2_config をベースにコピー
+        s2_train_config["train"]["epochs"] = args.epochs
+        s2_train_config["train"]["batch_size"] = args.batch_size
+        s2_train_config["s2_ckpt_dir"] = str(sovits_output_dir)
+        s2_train_config["pretrained_s2G"] = str(checkpoint_dir / "s2Gv3.pth")
+        s2_train_config_path = work_dir / "s2_train.json"
+        s2_train_config_path.write_text(json.dumps(s2_train_config, ensure_ascii=False, indent=2), encoding="utf-8")
         s2_cmd = [
             py, str(engine_dir / "GPT_SoVITS" / "s2_train.py"),
-            "--config", str(engine_dir / "GPT_SoVITS" / "configs" / "s2.json"),
-            "--exp_root", str(sovits_output_dir),
-            "--epochs", str(args.epochs),
-            "--batch_size", str(args.batch_size),
+            "--config", str(s2_train_config_path),
         ]
 
         _emit("training_sovits", 80, f"训练 SoVITS 模型（{args.epochs} 轮）...")

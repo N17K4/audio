@@ -880,9 +880,8 @@ def main():
             pre_cmd += ["-i", args.pypi_mirror]
         subprocess.run(pre_cmd, capture_output=True, text=True, timeout=120)
 
-    all_pkgs: list[str] = []
+    all_pkgs: list[str] = list(manifest.get("shared_runtime_pip_packages", []))
     for cfg in engines.values():
-        # pip_packages は pyproject.toml に統合済み、ここでは runtime_pip_packages のみ収集
         all_pkgs.extend(cfg.get("runtime_pip_packages", []))
 
     packages = _dedup_packages(all_pkgs)

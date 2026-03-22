@@ -647,6 +647,47 @@ def download_hf_cache(
 
 
 
+def _sync_facefusion_models(resources_root: Path, checkpoints_base: "Path | None") -> None:
+    """FaceFusion モデルをユーザー checkpoint ディレクトリから engine の .assets/models/ にコピー。
+
+    ダウンロード先:  CHECKPOINTS_ROOT/facefusion/ （ユーザーディレクトリ、永続化）
+    エンジン参照先:  runtime/engine/facefusion/.assets/models/ （FaceFusion ハードコード）
+    """
+    # ダウンロード先（ソース）
+    if checkpoints_base is not None:
+        src_dir = checkpoints_base / "facefusion"
+    else:
+        src_dir = resources_root / "runtime" / "checkpoints" / "facefusion"
+    if not src_dir.is_dir():
+        return
+
+    # エンジン参照先（デスティネーション）
+    dst_dir = resources_root / "runtime" / "engine" / "facefusion" / ".assets" / "models"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    skipped = 0
+    for src_file in src_dir.iterdir():
+        if not src_file.is_file():
+            continue
+        dst_file = dst_dir / src_file.name
+        if dst_file.exists() and dst_file.stat().st_size > 0:
+            # sha256 で完全性を検証（ソースとデスティネーションが同一か）
+            if sha256_file(src_file) == sha256_file(dst_file):
+                skipped += 1
+                continue
+        shutil.copy2(src_file, dst_file)
+        copied += 1
+    if skipped and not copied:
+        msg = f"  [facefusion] ✓ {skipped} 个模型已就绪（.assets/models/）"
+        print(msg)
+        emit("log", message=msg)
+    elif copied:
+        msg = f"  [facefusion] {copied} 个模型已复制到 .assets/models/（{skipped} 个已就绪）"
+        print(msg)
+        emit("log", message=msg)
+
+
 def get_facefusion_packages_dir(project_root: Path, checkpoints_base: "Path | None" = None) -> Path:
     """返回 FaceFusion 独立 site-packages 目录。
 
@@ -1032,6 +1073,10 @@ def main() -> int:
                 sha256_updates.update(local_sha256)
         if not ok:
             engine_ready = False
+
+        # FaceFusion: checkpoint をユーザーディレクトリから engine の .assets/models/ にコピー
+        if engine_name == "facefusion" and not args.check_only:
+            _sync_facefusion_models(resources_root, checkpoints_base)
 
         # 下载额外 HF 缓存模型
         if cfg.get("hf_cache_downloads"):

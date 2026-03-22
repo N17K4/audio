@@ -250,10 +250,13 @@ pnpm run dev          # 启动 Electron + Next.js
 
 ## manifest.json 依赖分类
 
-`backend/wrappers/manifest.json` 每个引擎有两类依赖：
+`backend/wrappers/manifest.json` 的依赖结构：
 
-- **`pip_packages`**：轻量依赖，`runtime.py` 装入嵌入式 Python，打进安装包
-- **`runtime_pip_packages`**：重型 ML 包（torch 等），装到 `runtime/ml/`（开发）或 `userData/python-packages/`（生产），通过 PYTHONPATH 引用
+- **`shared_runtime_pip_packages`**：全引擎共享的重型依赖（torch、transformers、numpy 等），避免各引擎重复声明
+- **`pip_packages`**（各引擎）：轻量依赖，`runtime.py` 装入嵌入式 Python，打进安装包
+- **`runtime_pip_packages`**（各引擎）：该引擎独有的重型 ML 包，装到 `runtime/ml/`（开发）或 `userData/python-packages/`（生产）
+
+`ml_base.py` 和 `docker/backend.Dockerfile` 收集包时会合并 `shared_runtime_pip_packages` + 各引擎的 `runtime_pip_packages`。
 
 ---
 
