@@ -175,7 +175,7 @@ def ensure_embedded_python(project_root: Path, target_system: str = "") -> str:
         sys.exit(1)
 
     # クロスプラットフォーム: 既にダウンロード済みならスキップ
-    sentinel = dest / ("python.exe" if system == "Windows" else "bin" / "python3")
+    sentinel = dest / "python.exe" if system == "Windows" else dest / "bin" / "python3"
     if sentinel.exists():
         print(f"  ✓ {system} 嵌入式 Python 已存在")
         return str(sentinel)
