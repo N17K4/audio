@@ -62,19 +62,25 @@ def load_engine(checkpoint_dir: str, device: str):
 
     # Windows: torchcodec が FFmpeg shared DLL を見つけられずハングする問題を回避。
     # torchaudio.load() / torchaudio.save() を soundfile バックエンドに強制切替。
-    try:
-        import torchaudio
-        if hasattr(torchaudio, 'load_with_torchcodec'):
-            import soundfile as sf
-            _orig_load = torchaudio.load
-            def _sf_load(filepath, *a, **kw):
-                try:
-                    return _orig_load(filepath, backend="soundfile")
-                except Exception:
-                    return _orig_load(filepath, *a, **kw)
-            torchaudio.load = _sf_load
-    except Exception:
-        pass
+    if sys.platform == "win32":
+        try:
+            import torchaudio
+            _orig_ta_load = torchaudio.load
+            _orig_ta_save = torchaudio.save
+            def _patched_load(filepath, *a, **kw):
+                kw.setdefault("backend", "soundfile")
+                if kw.get("backend") is None:
+                    kw["backend"] = "soundfile"
+                return _orig_ta_load(filepath, *a, **kw)
+            def _patched_save(filepath, *a, **kw):
+                kw.setdefault("backend", "soundfile")
+                if kw.get("backend") is None:
+                    kw["backend"] = "soundfile"
+                return _orig_ta_save(filepath, *a, **kw)
+            torchaudio.load = _patched_load
+            torchaudio.save = _patched_save
+        except Exception:
+            pass
 
     from tools.inference_engine import TTSInferenceEngine
     from tools.vqgan.inference import load_model as load_decoder_model

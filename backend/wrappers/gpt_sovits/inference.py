@@ -195,33 +195,38 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
     # 构建 TTS 配置
     # pretrained 模型存放于 checkpoints/gpt_sovits/，需显式设置路径
     try:
+        # TTS_Config は configs_.get("custom", configs_["v2"]) で config を読む。
+        # "custom" キーの下に全パラメータを入れなければ v2 にフォールバックする。
         config_dict = {
-            "version": "v3",
-            "device": "cpu",
-            "is_half": False,
-            "cnhuhbert_base_path": os.path.join(checkpoint_dir, "chinese-hubert-base"),
-            "bert_base_path": os.path.join(checkpoint_dir, "chinese-roberta-wwm-ext-large"),
-            "t2s_weights_path": os.path.join(checkpoint_dir, "s1v3.ckpt"),
-            "vits_weights_path": os.path.join(checkpoint_dir, "s2Gv3.pth"),
+            "custom": {
+                "version": "v3",
+                "device": "cpu",
+                "is_half": False,
+                "cnhuhbert_base_path": os.path.join(checkpoint_dir, "chinese-hubert-base"),
+                "bert_base_path": os.path.join(checkpoint_dir, "chinese-roberta-wwm-ext-large"),
+                "t2s_weights_path": os.path.join(checkpoint_dir, "s1v3.ckpt"),
+                "vits_weights_path": os.path.join(checkpoint_dir, "s2Gv3.pth"),
+            }
         }
 
         # 自动检测设备
+        custom = config_dict["custom"]
         try:
             import torch
             if torch.cuda.is_available():
-                config_dict["device"] = "cuda"
-                config_dict["is_half"] = True
+                custom["device"] = "cuda"
+                custom["is_half"] = True
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                config_dict["device"] = "mps"
-                config_dict["is_half"] = False  # MPS 不支持 half
+                custom["device"] = "mps"
+                custom["is_half"] = False  # MPS 不支持 half
         except Exception:
             pass
 
         # 用户指定的自定义 GPT/SoVITS 模型路径（覆盖默认预训练模型）
         if args.gpt_model:
-            config_dict["t2s_weights_path"] = args.gpt_model
+            custom["t2s_weights_path"] = args.gpt_model
         if args.sovits_model:
-            config_dict["vits_weights_path"] = args.sovits_model
+            custom["vits_weights_path"] = args.sovits_model
 
         config = TTS_Config(config_dict)
         tts_engine = TTS(config)

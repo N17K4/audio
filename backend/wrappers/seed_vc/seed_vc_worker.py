@@ -94,8 +94,33 @@ def setup_engine(project_root: Path) -> None:
         _ensure_hf_cache_refs(hf_cache)
 
 
+def _patch_torchaudio_soundfile():
+    """Windows: torchaudio の torchcodec ハングを soundfile バックエンドで回避。"""
+    if sys.platform != "win32":
+        return
+    try:
+        import torchaudio
+        _orig_load = torchaudio.load
+        _orig_save = torchaudio.save
+        def _pl(fp, *a, **kw):
+            kw.setdefault("backend", "soundfile")
+            if kw.get("backend") is None:
+                kw["backend"] = "soundfile"
+            return _orig_load(fp, *a, **kw)
+        def _ps(fp, *a, **kw):
+            kw.setdefault("backend", "soundfile")
+            if kw.get("backend") is None:
+                kw["backend"] = "soundfile"
+            return _orig_save(fp, *a, **kw)
+        torchaudio.load = _pl
+        torchaudio.save = _ps
+    except Exception:
+        pass
+
+
 def load_engine(checkpoint_pth: str, config_yml: str, device_str: str):
     """加载模型组件，返回 (components, device, sr, hop_length)。"""
+    _patch_torchaudio_soundfile()
     import argparse as _ap
     import torch
 

@@ -288,7 +288,7 @@ def main() -> int:
                 "seed": 1234, "epochs": args.epochs, "batch_size": args.batch_size,
                 "lr": 0.0001, "save_every_n_epoch": max(1, args.epochs),
                 "if_save_latest": True, "if_save_every_weights": True,
-                "exp_name": voice_id,
+                "exp_name": args.voice_id,
                 "half_weights_save_dir": str(gpt_output_dir),
             },
             "data": {
