@@ -452,6 +452,13 @@ docker-compose exec backend python scripts/checkpoints_base.py
 
 ---
 
+## 调试规范
+
+- **用户报告的错误，前次修改一定已经完全部署**。禁止自行推测「还没部署」。如有疑问，必须先向用户确认（「这个版本包含了 XX 修复吗？」），得到用户确认后再判断
+- 分析错误时，必须基于「前次修正已全部生效」的前提寻找新的原因
+
+---
+
 ## 权限规范
 
 执行脚本、读取文件、运行只读 shell 命令（grep、bash、cat、cd、ls、find 等）无需确认。

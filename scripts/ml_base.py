@@ -669,6 +669,29 @@ def _verify_numpy_pyd(py: str, target: str, mirror: str, json_progress: bool) ->
         _emit({"type": "log", "message": "  ✗ numpy C 拡張の修復に失敗。アンチウイルスソフトが .pyd をブロックしている可能性があります"}, json_progress)
 
 
+def _patch_torchaudio_torchcodec(target: str, json_progress: bool) -> None:
+    """torchaudio 2.10+ の torchcodec デフォルト呼び出しを soundfile fallback に置換。
+
+    torchaudio.__init__.py の load() / save() が torchcodec を直接呼ぶため、
+    FFmpeg shared DLL がない Windows 環境ではハングする。
+    ソースレベルで torchcodec 呼び出しを _load_impl / _save_impl に置換する。
+    """
+    ta_init = Path(target) / "torchaudio" / "__init__.py"
+    if not ta_init.exists():
+        return
+    text = ta_init.read_text(encoding="utf-8")
+    changed = False
+    if "return load_with_torchcodec(" in text:
+        text = text.replace("return load_with_torchcodec(", "return _load_impl(")
+        changed = True
+    if "return save_with_torchcodec(" in text:
+        text = text.replace("return save_with_torchcodec(", "return _save_impl(")
+        changed = True
+    if changed:
+        ta_init.write_text(text, encoding="utf-8")
+        _emit({"type": "log", "message": "  ✓ torchaudio: torchcodec → soundfile fallback パッチ適用"}, json_progress)
+
+
 def _patch_fairseq_in_target(target: str, json_progress: bool) -> None:
     """--target にインストールされた fairseq に Python 3.12 兼容パッチを適用。
 
@@ -903,6 +926,12 @@ def main():
     # Windows: numpy C 拡張（.pyd）が欠落していないか検証し、欠落時は強制再インストール
     if platform.system() == "Windows" and args.target:
         _verify_numpy_pyd(py, args.target, args.pypi_mirror, args.json_progress)
+
+    # Windows: torchaudio 2.10 が torchcodec をデフォルト backend にするが、
+    # FFmpeg shared DLL がないとハングする。torchaudio のソースを直接パッチして
+    # torchcodec 呼び出しを soundfile fallback に置換する。
+    if platform.system() == "Windows" and args.target:
+        _patch_torchaudio_torchcodec(args.target, args.json_progress)
 
     # macOS: 移除 quarantine 属性，防止 .so 文件被系统策略拒绝加载
     if platform.system() == "Darwin" and args.target:
