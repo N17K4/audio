@@ -281,6 +281,12 @@ PYTHONPATH=backend runtime/python/mac/bin/python3 tests/smoke_test2.py  # 进阶
 
 **判定规则**：日志中 ✅ = 通过、❌ = 失败。smoke_test.py 失败时抛 AssertionError；smoke_test2.py 失败时 `return False`（前端通过 exit code 和日志 ❌ 判定）。
 
+**测试数据最小化原则**：烟雾测试的音频/图像数据必须尽可能小，以确保在纯 CPU 环境（无 GPU 的 VM 等）下也能在超时内完成：
+- 音频：TTS/VC/STT 参考音频 `duration_sec=0.1`（GPT-SoVITS 要求 3~10s，用 `duration_sec=3`），训练数据集 `duration_sec=0.5`
+- 图像：FaceFusion 测试图 `8×8` 像素
+- 文本：TTS 合成文本尽量短（如 `"测试"`）
+- Fish Speech：使用 zero-shot（无参考音频），避免 CPU 下参考音频编码超时
+
 ### 开发环境 smoke test 完整步骤
 
 ```bash

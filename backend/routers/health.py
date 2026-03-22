@@ -248,6 +248,14 @@ def _clear_task_log():
         pass
 
 
+@router.get("/smoketest/status")
+async def smoketest_status():
+    """烟雾测试の実行状態を返す。"""
+    proc = _smoketest_proc
+    running = proc is not None and proc.poll() is None
+    return {"running": running}
+
+
 @router.post("/smoketest/abort")
 async def abort_smoketest():
     """实行中の烟雾测试プロセスを中止する。"""

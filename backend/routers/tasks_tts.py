@@ -99,7 +99,13 @@ async def task_tts(
                 detail=f"本地推理队列持续满载（{MAX_LOCAL_QUEUE} 个），等待超时，请稍后再试。",
             )
 
-    label = (text[:30] + "…") if len(text) > 30 else text
+    _provider_labels = {
+        "fish_speech": "Fish Speech", "gpt_sovits": "GPT-SoVITS", "cosyvoice": "CosyVoice",
+        "openai": "OpenAI", "gemini": "Gemini", "elevenlabs": "ElevenLabs",
+        "cartesia": "Cartesia", "dashscope": "DashScope", "minimax_tts": "MiniMax",
+    }
+    text_preview = (text[:20] + "…") if len(text) > 20 else text
+    label = f"{_provider_labels.get(p, p)} · {text_preview}"
     params = {
         "text": text,
         "provider": p,

@@ -90,6 +90,32 @@ def _ensure_fast_langdetect(pretrained_dir: Path) -> None:
         pass
 
 
+def _remove_broken_link(p: Path) -> None:
+    """壊れた symlink / junction / 不正なエントリを強制除去する。"""
+    if not p.exists() and not p.is_symlink():
+        # os.path.lexists: symlink/junction 自体の存在をチェック（リンク先不問）
+        if not os.path.lexists(str(p)):
+            return  # 本当に何も無い
+    # 何かが存在する → 除去を試行
+    for fn in [
+        lambda: p.unlink(),
+        lambda: os.unlink(str(p)),
+        lambda: os.rmdir(str(p)),
+    ]:
+        try:
+            fn()
+            return
+        except OSError:
+            continue
+    # 最終手段: subprocess（Windows の junction は rd で消せる）
+    if os.name == "nt":
+        try:
+            import subprocess
+            subprocess.run(["cmd", "/c", "rd", str(p)], capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+
 def _ensure_pretrained_models(pretrained_link: Path, ckpt: Path) -> None:
     """pretrained_models → checkpoint_dir のリンクを確立する。
 
@@ -98,13 +124,15 @@ def _ensure_pretrained_models(pretrained_link: Path, ckpt: Path) -> None:
     """
     import shutil
 
-    # 既に正しく存在していればスキップ
-    if pretrained_link.is_symlink():
-        return
-    if pretrained_link.is_dir():
-        # 実ディレクトリが既にある → checkpoint_dir のファイルを追加リンク
+    # 既に正しいディレクトリとして存在していればスキップ
+    if pretrained_link.is_dir() and not pretrained_link.is_symlink():
         _populate_pretrained(pretrained_link, ckpt)
         return
+    if pretrained_link.is_symlink() and pretrained_link.is_dir():
+        return  # 正常な symlink
+
+    # 壊れた junction / symlink / 不正なエントリを強制除去
+    _remove_broken_link(pretrained_link)
 
     # symlink を試行
     try:
@@ -114,6 +142,7 @@ def _ensure_pretrained_models(pretrained_link: Path, ckpt: Path) -> None:
         pass
 
     # Windows: junction を試行
+    _remove_broken_link(pretrained_link)
     if os.name == "nt":
         try:
             import _winapi
@@ -123,6 +152,7 @@ def _ensure_pretrained_models(pretrained_link: Path, ckpt: Path) -> None:
             pass
 
     # 最終手段: 実ディレクトリを作成し、checkpoint_dir の中身を個別リンク/コピー
+    _remove_broken_link(pretrained_link)
     pretrained_link.mkdir(parents=True, exist_ok=True)
     _populate_pretrained(pretrained_link, ckpt)
 
@@ -173,9 +203,16 @@ def main() -> int:
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hf_cache)
 
     # NLTK データパス（ml_base.py でダウンロード済み）
-    nltk_data_dir = root / "runtime" / "ml" / "nltk_data"
-    if nltk_data_dir.exists():
-        os.environ.setdefault("NLTK_DATA", str(nltk_data_dir))
+    # dev: runtime/ml/nltk_data, prod: AppData/Local/AI-Workshop/ml/nltk_data
+    for nltk_candidate in [
+        root / "runtime" / "ml" / "nltk_data",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "AI-Workshop" / "ml" / "nltk_data",
+        Path.home() / "Library" / "Application Support" / "AI-Workshop" / "ml" / "nltk_data",
+        Path.home() / ".local" / "share" / "AI-Workshop" / "ml" / "nltk_data",
+    ]:
+        if nltk_candidate.exists():
+            os.environ["NLTK_DATA"] = str(nltk_candidate)
+            break
 
     engine_dir = _detect_engine_dir()
     if not engine_dir:

@@ -40,12 +40,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 # 工具函数
 # ──────────────────────────────────────────────────────────────────────────────
 
-def create_test_wav(duration_sec: int = 1) -> bytes:
+def create_test_wav(duration_sec: float = 1) -> bytes:
     """创建一个简单的 8kHz 16 位单声道 WAV 文件"""
     import struct
 
     sample_rate = 8000
-    num_samples = 8000 * duration_sec
+    num_samples = int(8000 * duration_sec)
     num_channels = 1
     bits_per_sample = 16
 
@@ -200,10 +200,10 @@ def test_2_1_gpt_sovits_tts():
     TAG = "[2-1]"
     print(f"\n{TAG} GPT-SoVITS TTS")
 
-    wav_data = create_test_wav(duration_sec=5)
+    wav_data = create_test_wav(duration_sec=3)
     with httpx.Client(timeout=30) as client:
         data = {"text": "[2-1]GPT-SoVITS", "provider": "gpt_sovits"}
-        print(f"  📤 POST /tasks/tts  参数：{data}")
+        print(f"  📤 POST /tasks/tts  参数：{data}  + reference_audio (3s)")
 
         resp = client.post(
             f"{_BASE_URL}/tasks/tts", data=data,
@@ -222,7 +222,7 @@ def test_2_2_gpt_sovits_train():
     TAG = "[2-2]"
     print(f"\n{TAG} GPT-SoVITS 训练")
 
-    wav_data = create_test_wav(duration_sec=3)
+    wav_data = create_test_wav(duration_sec=0.5)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -250,7 +250,7 @@ def test_2_3_gpt_sovits_train_advanced():
     TAG = "[2-3]"
     print(f"\n{TAG} GPT-SoVITS 训练高级参数")
 
-    wav_data = create_test_wav(duration_sec=3)
+    wav_data = create_test_wav(duration_sec=0.5)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -278,7 +278,7 @@ def test_2_4_gpt_sovits_tts_advanced():
     TAG = "[2-4]"
     print(f"\n{TAG} GPT-SoVITS TTS 高级参数")
 
-    wav_data = create_test_wav(duration_sec=5)
+    wav_data = create_test_wav(duration_sec=3)
     with httpx.Client(timeout=60) as client:
         data = {
             "text": "[2-2]GPT-SoVITS TTS 高级", "provider": "gpt_sovits",
@@ -317,7 +317,7 @@ def test_3_1_seed_vc():
     TAG = "[3-1]"
     print(f"\n{TAG} Seed-VC 音色转换")
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {
             "file": ("[3-1]Seed-VC.wav", BytesIO(wav_data), "audio/wav"),
@@ -339,7 +339,7 @@ def test_3_2_seed_vc_advanced():
     TAG = "[3-2]"
     print(f"\n{TAG} Seed-VC 高级参数")
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {
             "file": ("[3-2]Seed-VC 高级.wav", BytesIO(wav_data), "audio/wav"),
@@ -403,7 +403,7 @@ def test_4_1_rvc_convert():
         print(f"⚠️  {TAG} 跳过 — 未找到 RVC 音色")
         return True
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {"file": ("[4-1]RVC.wav", BytesIO(wav_data), "audio/wav")}
         data = _rvc_convert_base_data(voice_id)
@@ -428,7 +428,7 @@ def test_4_2_rvc_convert_advanced():
         print(f"⚠️  {TAG} 跳过 — 未找到 RVC 音色")
         return True
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {"file": ("[4-2]RVC 高级.wav", BytesIO(wav_data), "audio/wav")}
         data = {
@@ -457,7 +457,7 @@ def test_4_3_rvc_train():
     TAG = "[4-3]"
     print(f"\n{TAG} RVC 训练（创建音色）")
 
-    wav_data = create_test_wav(duration_sec=3)
+    wav_data = create_test_wav(duration_sec=0.5)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -485,7 +485,7 @@ def test_4_4_rvc_train_advanced():
     TAG = "[4-4]"
     print(f"\n{TAG} RVC 训练高级参数")
 
-    wav_data = create_test_wav(duration_sec=3)
+    wav_data = create_test_wav(duration_sec=0.5)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -517,7 +517,7 @@ def test_5_faster_whisper():
     TAG = "[5]"
     print(f"\n{TAG} Faster Whisper STT")
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {"file": ("[5]Faster Whisper.wav", BytesIO(wav_data), "audio/wav")}
         data = {"provider": "faster_whisper", "model": "large-v3"}
@@ -544,7 +544,7 @@ def test_6_facefusion():
     TAG = "[6]"
     print(f"\n{TAG} FaceFusion 换脸")
 
-    png_data = create_test_png()
+    png_data = create_test_png(width=8, height=8)
     with httpx.Client(timeout=30) as client:
         files = {
             "source_image": ("[6]FaceFusion.png", BytesIO(png_data), "image/png"),
@@ -570,7 +570,7 @@ def test_7_ffmpeg():
     TAG = "[7]"
     print(f"\n{TAG} FFmpeg 媒体转换")
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {"file": ("[7-1]WAV→MP3.wav", BytesIO(wav_data), "audio/wav")}
         data = {"action": "convert", "output_format": "mp3"}
@@ -593,7 +593,7 @@ def test_5_2_faster_whisper_advanced():
     TAG = "[5-2]"
     print(f"\n{TAG} Faster Whisper STT 高级参数")
 
-    wav_data = create_test_wav()
+    wav_data = create_test_wav(duration_sec=0.1)
     with httpx.Client(timeout=30) as client:
         files = {"file": ("[5-2]Faster Whisper 高级.wav", BytesIO(wav_data), "audio/wav")}
         data = {
@@ -623,7 +623,7 @@ def test_6_2_facefusion_advanced():
     TAG = "[6-2]"
     print(f"\n{TAG} FaceFusion 高级参数")
 
-    png_data = create_test_png()
+    png_data = create_test_png(width=8, height=8)
     with httpx.Client(timeout=30) as client:
         files = {
             "source_image": ("[6-2]FaceFusion 高级.png", BytesIO(png_data), "image/png"),
