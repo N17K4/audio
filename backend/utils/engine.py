@@ -431,11 +431,9 @@ def get_checkpoint_dir(engine: str) -> str:
         return env_val
     rel = cfg.get("checkpoint_dir", f"runtime/checkpoints/{engine}")
     sub = rel[len("runtime/checkpoints/"):] if rel.startswith("runtime/checkpoints/") else None
-    # 优先使用 resources/ 里打包的 checkpoint（打包前由 pnpm run checkpoints 写入）
+    # checkpoints は常にユーザーディレクトリ（CHECKPOINTS_ROOT）から読み取る。
+    # アプリバンドル内の残骸よりユーザーが最新ダウンロードしたものを優先する。
     if sub is not None:
-        bundled = RUNTIME_ROOT / "checkpoints" / sub
-        if bundled.exists():
-            return str(bundled.resolve())
         return str((CHECKPOINTS_ROOT / sub).resolve())
     return str((RESOURCES_ROOT / rel).resolve())
 

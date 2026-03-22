@@ -1,8 +1,14 @@
+# syntax=docker/dockerfile:1
 # ── AI Workshop Backend（Docker 用） ──────────────────────────────────────────
 # 设计思路：マルチステージビルド
 #   builder: venv 内で全依存をビルド（コンパイラ付き）
 #   runtime: slim イメージに venv だけコピー（コンパイラ不要、イメージ軽量）
 #   checkpoints 不打入镜像，通过 volume 挂载
+#
+# レイヤー順序の方針：
+#   変更頻度が低く重いもの（torch 等 ML）を先に、
+#   変更頻度が高く軽いもの（backend deps）を後に。
+#   pip cache mount で再ダウンロードを回避。
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Stage 1: builder — コンパイラ付き、venv 内で全依存をインストール
@@ -21,15 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# backend Python 依赖（poetry export → pip install）
-RUN pip install --no-cache-dir poetry poetry-plugin-export
-COPY backend/pyproject.toml backend/poetry.lock ./backend/
-RUN cd backend && poetry export -f requirements.txt --without-hashes -o requirements.txt \
-    && pip install --no-cache-dir -r requirements.txt
-
-# 引擎 runtime_pip_packages（ML 重型包）
+# ── Layer 1: ML 重型包（最も遅い・最も変わらない → 最上位） ─────────────────
+# manifest.json だけ先に COPY → ML パッケージだけ変わらなければキャッシュヒット
 COPY backend/wrappers/manifest.json ./backend/wrappers/manifest.json
-RUN python <<'PYEOF' && pip install --no-cache-dir -r /tmp/engine_reqs.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python <<'PYEOF' && pip install -r /tmp/engine_reqs.txt
 import json
 m = json.load(open('backend/wrappers/manifest.json'))
 engines = m.get('engines', {})
@@ -45,18 +47,16 @@ print(f'安装 {len(pkgs)} 个运行时 ML 依赖...')
 open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs))
 PYEOF
 
-# numpy バージョン統一（torch/transformers/seed_vc が numpy 2.x C API を要求）
-# poetry export で入る numpy 1.x を強制的に 2.2.x へ上げる
-RUN pip install --no-cache-dir "numpy>=2.2,<2.3"
+# ── Layer 2: ML 追加依存（torchcodec / gradio 等、変更少） ─────────────────
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install "torchcodec>=0.10,<1.0" gradio sacrebleu
 
-# torchaudio 2.6+ が torchcodec を要求するため追加
-RUN pip install --no-cache-dir torchcodec
-
-# RVC 特殊安装（fairseq + rvc-python）
-RUN pip install --no-cache-dir setuptools'<72' \
-    && pip install --no-cache-dir --no-deps fairseq==0.12.2 \
-    && pip install --no-cache-dir bitarray \
-    && pip install --no-cache-dir --no-deps rvc-python==0.1.5
+# ── Layer 3: RVC 特殊安装 + fairseq patch（変更少） ────────────────────────
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install setuptools'<72' \
+    && pip install --no-deps fairseq==0.12.2 \
+    && pip install bitarray \
+    && pip install --no-deps rvc-python==0.1.5
 
 # fairseq 0.12.2 + Python 3.12 互換パッチ（dataclass / hydra の _MISSING_TYPE エラー回避）
 RUN python <<'PYEOF'
@@ -65,14 +65,12 @@ venv = pathlib.Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.
 fairseq_dir = venv / "fairseq"
 if not fairseq_dir.exists():
     print("[patch] fairseq not found, skip"); sys.exit(0)
-# 1) __init__.py: hydra_init() を try/except で囲む
 init_py = fairseq_dir / "__init__.py"
 if init_py.exists():
     t = init_py.read_text()
     if "hydra_init()" in t and "pass  # Py3.12" not in t:
         t = t.replace("hydra_init()", "try:\n    hydra_init()\nexcept Exception:\n    pass  # Py3.12")
         init_py.write_text(t)
-# 2) mutable default を field(default_factory=...) に置換
 for f in [fairseq_dir / "dataclass" / "configs.py",
           fairseq_dir / "models" / "transformer" / "transformer_config.py"]:
     if not f.exists(): continue
@@ -84,6 +82,17 @@ for f in [fairseq_dir / "dataclass" / "configs.py",
     f.write_text(t)
 print("[patch] fairseq Python 3.12 patch applied")
 PYEOF
+
+# ── Layer 4: backend 軽量依存（pyproject.toml 変更時のみ再実行） ───────────
+RUN pip install --no-cache-dir poetry poetry-plugin-export
+COPY backend/pyproject.toml backend/poetry.lock ./backend/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd backend && poetry export -f requirements.txt --without-hashes -o requirements.txt \
+    && pip install -r requirements.txt
+
+# numpy バージョン統一（ML + backend 両方のインストール後に最終調整）
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install "numpy>=2.2,<2.3"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Stage 2: runtime — コンパイラなし、軽量イメージ

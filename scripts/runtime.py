@@ -97,9 +97,9 @@ def get_embedded_python(root: Path) -> str:
 # 第一步：下载嵌入式 Python
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _download_pbs_python(dest_dir: Path) -> None:
+def _download_pbs_python(dest_dir: Path, target_system: str = "") -> None:
     """下载 python-build-standalone 到 dest_dir（macOS / Windows 共用）。"""
-    system = platform.system()
+    system = target_system or platform.system()
     if system == "Linux":
         # Linux / Docker：使用系统 Python，无需下载 python-build-standalone
         print("  [pbs] Linux 环境，跳过嵌入式 Python 下载")
@@ -154,15 +154,17 @@ def _download_pbs_python(dest_dir: Path) -> None:
     )
 
 
-def ensure_embedded_python(project_root: Path) -> str:
+def ensure_embedded_python(project_root: Path, target_system: str = "") -> str:
     """确保嵌入式 Python 存在，返回可执行路径。"""
-    py = get_embedded_python(project_root)
-    if py:
-        return py
+    system = target_system or platform.system()
 
-    system = platform.system()
+    # クロスプラットフォーム: target_system 指定時はスキップチェックせずダウンロード
+    if not target_system:
+        py = get_embedded_python(project_root)
+        if py:
+            return py
+
     if system == "Linux":
-        # Linux / Docker：使用系统 Python，无需下载嵌入式版本
         return sys.executable
     elif system == "Darwin":
         dest = project_root / "runtime" / "python" / "mac"
@@ -172,8 +174,14 @@ def ensure_embedded_python(project_root: Path) -> str:
         print(f"✗ 不支持的平台: {system}")
         sys.exit(1)
 
-    print(f"\n[setup] standalone Python 不存在，开始下载 {PBS_PY_VERSION}...")
-    _download_pbs_python(dest)
+    # クロスプラットフォーム: 既にダウンロード済みならスキップ
+    sentinel = dest / ("python.exe" if system == "Windows" else "bin" / "python3")
+    if sentinel.exists():
+        print(f"  ✓ {system} 嵌入式 Python 已存在")
+        return str(sentinel)
+
+    print(f"\n[setup] standalone Python ({system}) 不存在，开始下载 {PBS_PY_VERSION}...")
+    _download_pbs_python(dest, target_system=system)
 
     py = get_embedded_python(project_root)
     if not py:
@@ -1061,9 +1069,9 @@ def setup_flux_engine(project_root: Path, packages: list[str], py: str) -> bool:
 # FFmpeg / Pandoc 下载
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def download_ffmpeg(project_root: Path) -> bool:
-    """下载 FFmpeg 静态二进制到 runtime/bin/{mac|win}/。"""
-    system = platform.system()
+def download_ffmpeg(project_root: Path, target_system: str = "") -> bool:
+    """下载 FFmpeg 到 runtime/bin/{mac|win}/。"""
+    system = target_system or platform.system()
 
     if system == "Darwin":
         bin_dir = project_root / "runtime" / "bin" / "mac"
@@ -1174,9 +1182,9 @@ def download_ffmpeg(project_root: Path) -> bool:
                 pass
 
 
-def download_pandoc(project_root: Path) -> bool:
-    """下载 pandoc 静态二进制到 runtime/bin/{mac|win}/。"""
-    system = platform.system()
+def download_pandoc(project_root: Path, target_system: str = "") -> bool:
+    """下载 pandoc 到 runtime/bin/{mac|win}/。"""
+    system = target_system or platform.system()
     machine = platform.machine().lower()
     version = "3.6.4"
 
@@ -1337,8 +1345,11 @@ def _cleanup_embedded_ml_packages(py: str) -> None:
 # 主流程
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def main_full_setup(project_root: Path) -> int:
-    """全量 setup：下载 Python + backend 依赖 + 全部引擎 + FFmpeg + pandoc。"""
+def main_full_setup(project_root: Path, cross_platform: bool = False) -> int:
+    """全量 setup：下载 Python + backend 依赖 + 全部引擎 + FFmpeg + pandoc。
+    cross_platform=True 時、両プラットフォーム（macOS + Windows）のバイナリをダウンロード。
+    """
+    _cross_platform = cross_platform
     manifest_path = project_root / "backend" / "wrappers" / "manifest.json"
     if not manifest_path.exists():
         print(f"✗ 找不到 manifest.json: {manifest_path}")
@@ -1347,10 +1358,13 @@ def main_full_setup(project_root: Path) -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     engines: dict = manifest.get("engines", {})
 
-    # 1. 确保嵌入式 Python
+    # 1. 确保嵌入式 Python（--both 時は両プラットフォーム分）
     print("\n=== 1/5 嵌入式 Python ===")
     py = ensure_embedded_python(project_root)
     print(f"嵌入式 Python: {py}")
+    if _cross_platform:
+        _other = "Windows" if platform.system() == "Darwin" else "Darwin"
+        ensure_embedded_python(project_root, target_system=_other)
 
     all_ok = True
 
@@ -1388,14 +1402,19 @@ def main_full_setup(project_root: Path) -> int:
         if not _install_engine(engine_name, engines, py, project_root):
             all_ok = False
 
-    # 5. FFmpeg + pandoc
+    # 5. FFmpeg + pandoc（--both 時は両プラットフォーム分をダウンロード）
     print("\n=== 5/5 下载工具 ===")
-    print("\n▶ ffmpeg")
-    if not download_ffmpeg(project_root):
-        all_ok = False
-    print("\n▶ pandoc")
-    if not download_pandoc(project_root):
-        all_ok = False
+    _target_systems = [platform.system()]
+    if _cross_platform:
+        _other = "Windows" if platform.system() == "Darwin" else "Darwin"
+        _target_systems.append(_other)
+    for _ts in _target_systems:
+        print(f"\n▶ ffmpeg ({_ts})")
+        if not download_ffmpeg(project_root, target_system=_ts):
+            all_ok = False
+        print(f"\n▶ pandoc ({_ts})")
+        if not download_pandoc(project_root, target_system=_ts):
+            all_ok = False
 
     print()
     if all_ok:
@@ -1466,6 +1485,8 @@ def main() -> int:
     parser.add_argument("--engines-only", action="store_true",
                         help="仅 clone 引擎源码，跳过 Python 下载和 pip 安装（Docker 构建用）")
     parser.add_argument("--pypi-mirror", default="", help="PyPI 镜像源（如 https://pypi.tuna.tsinghua.edu.cn/simple）")
+    parser.add_argument("--both", action="store_true",
+                        help="両プラットフォーム（macOS + Windows）のバイナリをダウンロード（CI 用）")
     args = parser.parse_args()
 
     if args.pypi_mirror:
@@ -1478,7 +1499,7 @@ def main() -> int:
         return main_engines_only(project_root)
     if args.engine:
         return main_single_engine(args.engine, project_root)
-    return main_full_setup(project_root)
+    return main_full_setup(project_root, cross_platform=args.both)
 
 
 if __name__ == "__main__":

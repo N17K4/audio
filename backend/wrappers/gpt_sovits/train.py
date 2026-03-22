@@ -216,6 +216,7 @@ def main() -> int:
                       "upsample_initial_channel": 512,
                       "upsample_kernel_sizes": [16, 16, 8, 2, 2],
                       "n_layers_q": 3, "use_spectral_norm": False,
+                      "gin_channels": 512,
                       "semantic_frame_rate": "25hz", "freeze_quantizer": True},
             "s2_ckpt_dir": str(voice_dir / "sovits_weights"),
             "s1_ckpt_dir": str(voice_dir / "gpt_weights"),
