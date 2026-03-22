@@ -261,15 +261,26 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
     try:
         # TTS_Config は configs_.get("custom", configs_["v2"]) で config を読む。
         # "custom" キーの下に全パラメータを入れなければ v2 にフォールバックする。
+        # V3 は prompt_text（ref_text）必須。未指定時は V2 にフォールバック。
+        ref_text = args.ref_text.strip() if args.ref_text else ""
+        use_v3 = bool(ref_text) and os.path.isfile(os.path.join(checkpoint_dir, "s1v3.ckpt"))
+
+        if use_v3:
+            version, t2s, vits = "v3", "s1v3.ckpt", "s2Gv3.pth"
+        else:
+            version, t2s, vits = "v2", "s1bert25hz-5kh-longer.ckpt", "s2G2333k.pth"
+            if ref_text == "" and args.voice_ref:
+                print("[gpt_sovits] ref_text 未指定 → V2 モードにフォールバック", file=sys.stderr)
+
         config_dict = {
             "custom": {
-                "version": "v3",
+                "version": version,
                 "device": "cpu",
                 "is_half": False,
                 "cnhuhbert_base_path": os.path.join(checkpoint_dir, "chinese-hubert-base"),
                 "bert_base_path": os.path.join(checkpoint_dir, "chinese-roberta-wwm-ext-large"),
-                "t2s_weights_path": os.path.join(checkpoint_dir, "s1v3.ckpt"),
-                "vits_weights_path": os.path.join(checkpoint_dir, "s2Gv3.pth"),
+                "t2s_weights_path": os.path.join(checkpoint_dir, t2s),
+                "vits_weights_path": os.path.join(checkpoint_dir, vits),
             }
         }
 
@@ -324,7 +335,7 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
     inputs = {
         "text": args.text,
         "text_lang": args.text_lang if args.text_lang != "auto" else "auto",
-        "prompt_text": args.ref_text,
+        "prompt_text": ref_text,
         "prompt_lang": args.prompt_lang if args.prompt_lang != "auto" else "auto",
         "top_k": args.top_k,
         "top_p": args.top_p,

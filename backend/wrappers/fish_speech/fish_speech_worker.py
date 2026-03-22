@@ -159,11 +159,13 @@ def handle_request(conn: socket.socket, engine, last_active: list) -> None:
         req_dict = json.loads(buf.decode().strip())
         text = req_dict["text"]
         output_path = req_dict["output"]
+        print(f"[fish_speech_worker] 收到请求: text={text[:30]!r}, output={output_path}", file=sys.stderr, flush=True)
 
         # 延迟 import — 只在模型加载完成后进来才 import
         from tools.schema import ServeReferenceAudio, ServeTTSRequest
         import soundfile as sf
         import numpy as np
+        print("[fish_speech_worker] import 完成", file=sys.stderr, flush=True)
 
         # 支持多参考音频：voice_refs（列表）优先，向后兼容 voice_ref（单字符串）
         voice_refs = req_dict.get("voice_refs") or (
@@ -174,6 +176,7 @@ def handle_request(conn: socket.socket, engine, last_active: list) -> None:
             for vr in voice_refs
             if vr and Path(vr).exists() and Path(vr).stat().st_size > 0
         ]
+        print(f"[fish_speech_worker] 参考音频: {len(references)} 个, voice_refs={voice_refs}", file=sys.stderr, flush=True)
 
         req = ServeTTSRequest(
             text=text, references=references, streaming=False, format="wav",
@@ -182,6 +185,7 @@ def handle_request(conn: socket.socket, engine, last_active: list) -> None:
             repetition_penalty=req_dict.get("repetition_penalty", 1.2),
             max_new_tokens=req_dict.get("max_new_tokens", 1024),
         )
+        print(f"[fish_speech_worker] ServeTTSRequest 构建完成", file=sys.stderr, flush=True)
 
         import time as _t
         _infer_t0 = _t.monotonic()

@@ -51,7 +51,7 @@ PYEOF
 
 # ── Layer 2: ML 追加依存（gradio 等、変更少） ─────────────────────────────
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install gradio sacrebleu soundfile
+    pip install gradio sacrebleu soundfile python-multipart "tokenizers>=0.21,<0.22" "setuptools<72"
 
 # torchaudio 2.6+ は torchcodec をデフォルトで要求するが、
 # linux/arm64 に torchcodec wheel がないため _torchcodec.py をパッチし
@@ -149,6 +149,72 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY backend/wrappers/ ./backend/wrappers/
 COPY scripts/runtime.py scripts/_checkpoint_download.py ./scripts/
 RUN python scripts/runtime.py --engines-only
+
+# ── engine パッチ（HF オフライン対応） ──────────────────────────────────────
+# Seed-VC hf_utils.py: HF_HUB_CACHE から直接検索（オフラインモード対応）
+# Seed-VC BigVGAN: HF repo_id → ローカル snapshot パスに自動変換
+RUN python <<'PYEOF'
+import pathlib, os
+
+# 1) hf_utils.py パッチ
+hf = pathlib.Path("/app/runtime/engine/seed_vc/hf_utils.py")
+if hf.exists():
+    hf.write_text('''import os
+from pathlib import Path
+from huggingface_hub import hf_hub_download
+
+def _find_in_cache(cache_dir, repo_id, filename):
+    marker = Path(cache_dir) / f"models--{repo_id.replace('/', '--')}"
+    snapshots = marker / "snapshots"
+    if snapshots.is_dir():
+        for commit_dir in snapshots.iterdir():
+            candidate = commit_dir / filename
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return str(candidate)
+    direct = Path(cache_dir) / filename
+    if direct.is_file() and direct.stat().st_size > 0:
+        return str(direct)
+    return None
+
+def load_custom_model_from_hf(repo_id, model_filename="pytorch_model.bin", config_filename=None):
+    _cache = os.environ.get("HF_HUB_CACHE") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "checkpoints", "hf_cache")
+    os.makedirs(_cache, exist_ok=True)
+    model_path = _find_in_cache(_cache, repo_id, model_filename)
+    if not model_path:
+        model_path = hf_hub_download(repo_id=repo_id, filename=model_filename, cache_dir=_cache)
+    if config_filename is None:
+        return model_path
+    config_path = _find_in_cache(_cache, repo_id, config_filename)
+    if not config_path:
+        config_path = hf_hub_download(repo_id=repo_id, filename=config_filename, cache_dir=_cache)
+    return model_path, config_path
+''')
+    print("[patch] seed_vc/hf_utils.py patched")
+
+# 2) BigVGAN パッチ: from_pretrained で HF cache snapshot を自動解決
+bv = pathlib.Path("/app/runtime/engine/seed_vc/modules/bigvgan/bigvgan.py")
+if bv.exists():
+    t = bv.read_text()
+    patch = '''
+        # === PATCH: HF repo_id → ローカル cache snapshot パスに変換 ===
+        if not os.path.isdir(model_id):
+            _hf_cache = os.environ.get("HF_HUB_CACHE", "")
+            if _hf_cache:
+                _marker = os.path.join(_hf_cache, f"models--{model_id.replace('/', '--')}", "snapshots")
+                if os.path.isdir(_marker):
+                    _snaps = [d for d in os.listdir(_marker) if os.path.isdir(os.path.join(_marker, d))]
+                    if _snaps:
+                        model_id = os.path.join(_marker, _snaps[0])
+        # === END PATCH ===
+'''
+    if "=== PATCH:" not in t:
+        t = t.replace(
+            '"""Load Pytorch pretrained weights and return the loaded model."""',
+            '"""Load Pytorch pretrained weights and return the loaded model."""' + patch)
+        bv.write_text(t)
+        print("[patch] seed_vc BigVGAN from_pretrained patched")
+PYEOF
 
 # ── backend 源码 ─────────────────────────────────────────────────────────────
 COPY backend/ ./backend/

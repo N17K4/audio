@@ -171,12 +171,8 @@ def _start_worker(checkpoint_dir: str, socket_path: str, pid_path: str) -> None:
     t.join(timeout=600)
 
     if _ready.is_set():
-        # 成功：删除临时日志
-        try:
-            os.unlink(stderr_log)
-        except OSError:
-            pass
-        print(f"[fish_speech] worker 就绪，模型加载耗时 {_time.monotonic()-_start_t:.1f}s", file=sys.stderr, flush=True)
+        # 成功：保留 stderr 日志以便排查推理阶段问题
+        print(f"[fish_speech] worker 就绪，模型加载耗时 {_time.monotonic()-_start_t:.1f}s（stderr: {stderr_log}）", file=sys.stderr, flush=True)
         return
 
     # 失败：打印 worker stderr 帮助排查
@@ -300,6 +296,18 @@ def main() -> int:
         print(f"[fish_speech] 收到推理响应，耗时 {_time.monotonic()-_req_t0:.1f}s", file=sys.stderr, flush=True)
     except Exception as exc:
         print(f"[fish_speech] socket 通信失败 (耗时 {_time.monotonic()-_req_t0:.1f}s): {exc}", file=sys.stderr, flush=True)
+        # worker の stderr ログを出力して排查（デバッグ用）
+        _stderr_log = str(Path(__file__).resolve().parent / ".." / ".." / ".." / "cache" / "fish_worker_err.log")
+        # _start_worker が保存した stderr_log を探す
+        import glob as _glob
+        for _f in sorted(_glob.glob(os.path.join(os.environ.get("TEMP", "/tmp"), "fish_worker_err_*.log")), key=os.path.getmtime, reverse=True):
+            try:
+                _content = Path(_f).read_text(encoding="utf-8", errors="replace").strip()
+                if _content:
+                    print(f"[fish_speech] worker stderr:\n{_content}", file=sys.stderr, flush=True)
+                break
+            except Exception:
+                pass
         # worker 进程可能卡死（正在处理上一个请求），必须 kill 掉，否则下次仍会卡住
         if os.path.exists(pid_path):
             try:
