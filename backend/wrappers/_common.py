@@ -24,6 +24,9 @@ def get_runtime_root() -> Path:
 
 def get_embedded_python() -> str:
     """嵌入式 Python パスを返す。見つからなければ sys.exit(1)。"""
+    # Linux（含 Docker 容器）：容器自身の Python をそのまま使う
+    if sys.platform == "linux":
+        return sys.executable
     rt = get_runtime_root()
     if sys.platform == "win32":
         candidates = [rt / "python" / "win" / "python.exe"]

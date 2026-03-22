@@ -337,8 +337,18 @@ def build_engine_env(engine: str) -> Dict[str, str]:
     env_key = cfg.get("env_key") or f"{engine.upper()}_CHECKPOINT_DIR"
     # HF 缓存：统一在 checkpoints/hf_cache/ 下，与其他模型权重同级管理
     hf_cache = str(CHECKPOINTS_ROOT / "hf_cache")
+    # os.environ を継承するが、PYTHONPATH から backend/ 本体を除外する。
+    # backend/models.py が GPT-SoVITS 等の engine 内 models パッケージと衝突するため。
+    # Docker 環境では PYTHONPATH=/app/backend が設定されており、これが衝突の原因になる。
+    _clean_env = dict(os.environ)
+    _backend_dir = str(Path(__file__).resolve().parent.parent)
+    _old_pypath = _clean_env.get("PYTHONPATH", "")
+    if _old_pypath:
+        _clean_env["PYTHONPATH"] = os.pathsep.join(
+            p for p in _old_pypath.split(os.pathsep) if p != _backend_dir
+        )
     merged = {
-        **os.environ,
+        **_clean_env,
         env_key: get_checkpoint_dir(engine),
         "HF_HUB_CACHE": hf_cache,
         "HUGGINGFACE_HUB_CACHE": hf_cache,   # 兼容旧版

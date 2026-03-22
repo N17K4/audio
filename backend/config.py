@@ -7,8 +7,9 @@ from typing import Dict
 APP_ROOT = Path(__file__).resolve().parent.parent
 # dev: APP_ROOT = プロジェクトルート、prod: APP_ROOT = Resources/
 # backend/ が extraResources に移動したため、parent.parent はどちらも正しいルートを指す
-RESOURCES_ROOT = APP_ROOT
-RUNTIME_ROOT = APP_ROOT / "runtime"
+_res_env = os.getenv("RESOURCES_ROOT", "").strip()
+RESOURCES_ROOT = Path(_res_env) if _res_env else APP_ROOT
+RUNTIME_ROOT = RESOURCES_ROOT / "runtime"
 WRAPPERS_ROOT = Path(__file__).resolve().parent / "wrappers"
 
 # dev / prod 判定：dev にだけ .git がある（prod には含まれない）
@@ -30,9 +31,10 @@ def _get_user_data_base() -> Path:
 
 _USER_DATA_BASE = _get_user_data_base()
 
-# ml packages / checkpoints：dev は runtime/ 配下、prod はユーザーディレクトリ
+# ml packages / checkpoints：環境変数 > dev(runtime/) > prod(ユーザーディレクトリ)
 ML_PACKAGES_DIR: Path = _USER_DATA_BASE / "ml"
-CHECKPOINTS_ROOT: Path = _USER_DATA_BASE / "checkpoints"
+_ckpt_env = os.getenv("CHECKPOINTS_DIR", "").strip()
+CHECKPOINTS_ROOT: Path = Path(_ckpt_env) if _ckpt_env else _USER_DATA_BASE / "checkpoints"
 
 # user_data：dev は APP_ROOT/user_data/、prod はユーザーディレクトリ（アプリ更新でデータ消失しない）
 _user_data_env = os.getenv("USER_DATA_ROOT", "").strip()

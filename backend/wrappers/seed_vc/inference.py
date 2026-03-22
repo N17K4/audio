@@ -228,10 +228,10 @@ def run_subprocess_fallback(args, checkpoint_dir: str, project_root: Path) -> in
         _t0 = _time.monotonic()
         # CWD 须为 checkpoints/ 的父目录（从 HF_HUB_CACHE=checkpoints/hf_cache 推算）
         _hf_cache = os.getenv("HF_HUB_CACHE", "").strip()
-        _run_cwd = str(Path(_hf_cache).parent.parent) if (_hf_cache and Path(_hf_cache).parent.parent.exists()) else str(project_root)
+        _run_cwd = str(Path(_hf_cache).parent) if (_hf_cache and Path(_hf_cache).parent.exists()) else str(project_root)
         completed = subprocess.run(
             cmd, shell=True, capture_output=True, text=True, timeout=1800,
-            cwd=_run_cwd,
+            cwd=_run_cwd, encoding="utf-8", errors="replace",
         )
         _elapsed = _time.monotonic() - _t0
         print(f"[seed_vc] 推理命令结束，耗时 {_elapsed:.1f}s，退出码={completed.returncode}", file=sys.stderr, flush=True)

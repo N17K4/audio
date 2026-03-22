@@ -605,6 +605,28 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
     return all_ok
 
 
+def _remove_pkg_from_target(target: str, pkg_name: str, json_progress: bool) -> None:
+    """--target ディレクトリから不要なパッケージを削除する。"""
+    target_path = Path(target)
+    if not target_path.exists():
+        return
+    normalized = pkg_name.lower().replace("-", "_")
+    removed = []
+    for item in target_path.iterdir():
+        name_lower = item.name.lower().replace("-", "_")
+        if name_lower == normalized or name_lower.startswith(normalized + "-") or name_lower.startswith(normalized + "."):
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+                removed.append(item.name)
+            except OSError:
+                pass
+    if removed:
+        _emit({"type": "log", "message": f"  削除: {', '.join(removed)}"}, json_progress)
+
+
 def _verify_numpy_pyd(py: str, target: str, mirror: str, json_progress: bool) -> None:
     """Windows: numpy C 拡張（.pyd）が --target に正しくインストールされたか検証。
 
@@ -848,6 +870,11 @@ def main():
         _emit({"type": "log", "message": f"嵌入式 Python：{py}"}, args.json_progress)
     if args.pypi_mirror:
         _emit({"type": "log", "message": f"PyPI 镜像：{args.pypi_mirror}"}, args.json_progress)
+
+    # Windows: torchcodec は FFmpeg shared DLL を要求するが、アプリは static FFmpeg をバンドル。
+    # manifest で sys_platform != 'win32' にしても既存インストールは残るため、明示的に削除。
+    if platform.system() == "Windows" and args.target:
+        _remove_pkg_from_target(args.target, "torchcodec", args.json_progress)
 
     # Windows 前置依赖：loguru が win32-setctime を要求するため、先にインストール
     if platform.system() == "Windows":
