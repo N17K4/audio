@@ -433,10 +433,19 @@ export default function TaskList({ jobs, backendBaseUrl, setJobs, onFetchJobs, o
             )}
             {historyView === 'log' && (
               <div className="px-5 py-3">
-                <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
-                  style={{ maxHeight: '24rem' }}>
-                  {taskLogContent ?? '（加载中…）'}
-                </pre>
+                <div className="relative group">
+                  <button
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded px-2 py-1 text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
+                    onClick={() => navigator.clipboard?.writeText(taskLogContent || '').then(() => {
+                      const btn = document.activeElement as HTMLButtonElement;
+                      if (btn) { const orig = btn.textContent; btn.textContent = '已复制'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+                    })}
+                  >复制全部</button>
+                  <pre className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
+                    style={{ maxHeight: '24rem' }}>
+                    {taskLogContent ?? '（加载中…）'}
+                  </pre>
+                </div>
               </div>
             )}
           </section>

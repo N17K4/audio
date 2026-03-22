@@ -54,23 +54,30 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install gradio sacrebleu soundfile
 
 # torchaudio 2.6+ は torchcodec をデフォルトで要求するが、
-# linux/arm64 に torchcodec wheel がないためパッチで soundfile に回避
+# linux/arm64 に torchcodec wheel がないため _torchcodec.py をパッチし
+# torchcodec 未インストール時は soundfile にフォールバック
 RUN python <<'PYEOF'
 import pathlib, sys
-ta = pathlib.Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "torchaudio" / "__init__.py"
-if not ta.exists():
-    print("[patch] torchaudio not found, skip"); sys.exit(0)
-t = ta.read_text()
-if "load_with_torchcodec" in t:
-    # load() 内の torchcodec 呼び出しを soundfile fallback に置換
+sp = pathlib.Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+tc = sp / "torchaudio" / "_torchcodec.py"
+if not tc.exists():
+    print("[patch] torchaudio/_torchcodec.py not found, skip"); sys.exit(0)
+t = tc.read_text()
+if "raise ImportError" in t and "soundfile fallback" not in t:
+    # ImportError を raise する代わりに soundfile で読み込む
     t = t.replace(
-        "return load_with_torchcodec(",
-        "return _load_impl("  # _load_impl は sox/soundfile backend を使う
+        'raise ImportError(\n            "TorchCodec is required for load_with_torchcodec. Please install torchcodec to use this function."',
+        '# soundfile fallback（torchcodec unavailable on this platform）\n'
+        '            import soundfile as _sf, torch as _torch, numpy as _np\n'
+        '            _data, _sr = _sf.read(str(filepath))\n'
+        '            if _data.ndim == 1: _data = _data.reshape(1, -1)\n'
+        '            else: _data = _data.T\n'
+        '            return _torch.from_numpy(_np.array(_data, copy=True)).float(), _sr  # soundfile fallback'
     )
-    ta.write_text(t)
+    tc.write_text(t)
     print("[patch] torchaudio: torchcodec → soundfile fallback applied")
 else:
-    print("[patch] torchaudio: no torchcodec call found, skip")
+    print("[patch] torchaudio: already patched or no raise found, skip")
 PYEOF
 
 # ── Layer 3: RVC 特殊安装 + fairseq patch（変更少） ────────────────────────

@@ -208,9 +208,39 @@ def main() -> int:
         os.chdir(original_cwd)
 
 
+def _patch_bigvgan_from_pretrained():
+    """Windows パス問題を回避: BigVGAN.from_pretrained に渡されるローカルパスを正規化。
+
+    GPT-SoVITS が `"%s/GPT_SoVITS/pretrained_models/..." % now_dir` で
+    パスを組み立てるため、Windows では `C:\\...\\engine/GPT_SoVITS/...` と
+    混在パスになり os.path.isdir() が False → HF repo ID 検証エラーになる。
+    パスを os.path.normpath で正規化して解決する。
+    """
+    try:
+        from BigVGAN.bigvgan import BigVGAN
+        _original = BigVGAN.from_pretrained.__func__
+
+        @classmethod
+        def _patched(cls, model_id, *args, **kwargs):
+            normalized = os.path.normpath(str(model_id))
+            return _original(cls, normalized, *args, **kwargs)
+
+        BigVGAN.from_pretrained = _patched
+    except Exception:
+        pass
+
+
 def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: str) -> int:
     """在 engine_dir 作为 CWD 的环境下执行推理。"""
     print(f"[gpt_sovits] 运行推理: text={args.text[:50]}{'...' if len(args.text) > 50 else ''}", file=sys.stderr, flush=True)
+
+    # Windows パス混在問題を回避（BigVGAN.from_pretrained monkey-patch）
+    if os.name == "nt":
+        _patch_bigvgan_from_pretrained()
+
+    # torchaudio 2.6+: torchcodec 未インストール時のフォールバック
+    from _common import patch_torchaudio
+    patch_torchaudio()
 
     try:
         from GPT_SoVITS.TTS_infer_pack.TTS import TTS, TTS_Config

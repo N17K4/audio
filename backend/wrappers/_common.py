@@ -52,6 +52,37 @@ def get_engine_dir(engine: str) -> Path:
     return get_runtime_root() / "engine" / engine
 
 
+def patch_torchaudio():
+    """torchaudio 2.6+ が torchcodec を要求するが、未インストール環境では ImportError になる。
+    load_with_torchcodec を monkey-patch し、torchcodec がない場合は soundfile にフォールバック。
+    torchaudio を import した後に呼び出すこと。"""
+    try:
+        import torchaudio
+        tc = getattr(torchaudio, '_torchcodec', None)
+        if not tc or not hasattr(tc, 'load_with_torchcodec'):
+            return
+        _orig = tc.load_with_torchcodec
+
+        def _patched(filepath, *args, **kwargs):
+            try:
+                return _orig(filepath, *args, **kwargs)
+            except ImportError:
+                import soundfile as _sf
+                import torch as _torch
+                import numpy as _np
+                _data, _sr = _sf.read(str(filepath))
+                if _data.ndim == 1:
+                    _data = _data.reshape(1, -1)
+                else:
+                    _data = _data.T
+                return _torch.from_numpy(_np.array(_data, copy=True)).float(), _sr
+
+        tc.load_with_torchcodec = _patched
+        torchaudio.load_with_torchcodec = _patched
+    except Exception:
+        pass
+
+
 def get_checkpoint_dir(engine: str) -> Path:
     """checkpoint ディレクトリを返す。環境変数 > CHECKPOINTS_DIR > runtime/checkpoints/{engine}。"""
     env_key = f"{engine.upper()}_CHECKPOINT_DIR"
