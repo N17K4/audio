@@ -68,18 +68,86 @@ def resolve_checkpoint_dir(arg_value: str) -> str:
 
 
 def _ensure_fast_langdetect(pretrained_dir: Path) -> None:
-    """fast_langdetect のモデルファイルを pretrained_models/fast_langdetect/ にコピー。"""
+    """fast_langdetect のキャッシュディレクトリを確保する。
+
+    パッケージに resources/ があればコピー、なくても
+    ディレクトリだけは作成して fast_langdetect が自力で DL できるようにする。
+    """
     target = pretrained_dir / "fast_langdetect"
-    if target.exists():
-        return
+    target.mkdir(parents=True, exist_ok=True)
+    if any(target.iterdir()):
+        return  # 既にモデルファイルがある
     try:
         import fast_langdetect
         src = Path(fast_langdetect.__file__).parent / "resources"
         if src.exists():
             import shutil
-            shutil.copytree(str(src), str(target))
+            for item in src.iterdir():
+                dst = target / item.name
+                if not dst.exists():
+                    shutil.copy2(str(item), str(dst))
     except Exception:
         pass
+
+
+def _ensure_pretrained_models(pretrained_link: Path, ckpt: Path) -> None:
+    """pretrained_models → checkpoint_dir のリンクを確立する。
+
+    優先順位: symlink → junction → 実ディレクトリ作成+個別リンク/コピー
+    Windows で symlink/junction が両方失敗しても、実ディレクトリで確実に動作する。
+    """
+    import shutil
+
+    # 既に正しく存在していればスキップ
+    if pretrained_link.is_symlink():
+        return
+    if pretrained_link.is_dir():
+        # 実ディレクトリが既にある → checkpoint_dir のファイルを追加リンク
+        _populate_pretrained(pretrained_link, ckpt)
+        return
+
+    # symlink を試行
+    try:
+        pretrained_link.symlink_to(str(ckpt))
+        return
+    except OSError:
+        pass
+
+    # Windows: junction を試行
+    if os.name == "nt":
+        try:
+            import _winapi
+            _winapi.CreateJunction(str(ckpt), str(pretrained_link))
+            return
+        except Exception:
+            pass
+
+    # 最終手段: 実ディレクトリを作成し、checkpoint_dir の中身を個別リンク/コピー
+    pretrained_link.mkdir(parents=True, exist_ok=True)
+    _populate_pretrained(pretrained_link, ckpt)
+
+
+def _populate_pretrained(pretrained_link: Path, ckpt: Path) -> None:
+    """checkpoint_dir の各エントリを pretrained_models 内にリンク/コピーする。"""
+    import shutil
+    for src in ckpt.iterdir():
+        dst = pretrained_link / src.name
+        if dst.exists():
+            continue
+        try:
+            if os.name == "nt":
+                if src.is_dir():
+                    try:
+                        import _winapi
+                        _winapi.CreateJunction(str(src), str(dst))
+                    except Exception:
+                        shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+            else:
+                dst.symlink_to(src)
+        except Exception:
+            pass
 
 
 def _detect_engine_dir() -> Path | None:
@@ -108,14 +176,6 @@ def main() -> int:
     nltk_data_dir = root / "runtime" / "ml" / "nltk_data"
     if nltk_data_dir.exists():
         os.environ.setdefault("NLTK_DATA", str(nltk_data_dir))
-
-    # fast_langdetect キャッシュ: Windows で pretrained_models junction 失敗時の対策
-    # checkpoint_dir 内の fast_langdetect/ にフォールバック
-    if checkpoint_dir:
-        fl_cache = Path(checkpoint_dir) / "fast_langdetect"
-        if not fl_cache.exists():
-            fl_cache.mkdir(parents=True, exist_ok=True)
-        os.environ.setdefault("FTLANG_CACHE", str(fl_cache))
 
     engine_dir = _detect_engine_dir()
     if not engine_dir:
@@ -172,40 +232,7 @@ def main() -> int:
     pretrained_link = engine_dir / "GPT_SoVITS" / "pretrained_models"
     if checkpoint_dir:
         ckpt = Path(checkpoint_dir)
-        if pretrained_link.is_symlink() or (os.name == "nt" and not pretrained_link.exists()):
-            pass  # 既に symlink/junction
-        elif pretrained_link.is_dir():
-            # 実ディレクトリ → checkpoint_dir のファイルがなければコピー/リンク
-            for src in ckpt.iterdir():
-                dst = pretrained_link / src.name
-                if not dst.exists():
-                    if src.is_dir():
-                        if os.name == "nt":
-                            try:
-                                import _winapi
-                                _winapi.CreateJunction(str(src), str(dst))
-                            except Exception:
-                                import shutil
-                                shutil.copytree(src, dst)
-                        else:
-                            dst.symlink_to(src)
-                    else:
-                        if os.name == "nt":
-                            import shutil
-                            shutil.copy2(src, dst)
-                        else:
-                            dst.symlink_to(src)
-        else:
-            # pretrained_models が存在しない → symlink/junction 作成
-            try:
-                pretrained_link.symlink_to(checkpoint_dir)
-            except OSError:
-                if os.name == "nt":
-                    try:
-                        import _winapi
-                        _winapi.CreateJunction(checkpoint_dir, str(pretrained_link))
-                    except Exception:
-                        pass
+        _ensure_pretrained_models(pretrained_link, ckpt)
 
     # fast_langdetect 需要模型文件在 pretrained_models/fast_langdetect/ 下
     _ensure_fast_langdetect(pretrained_link)
