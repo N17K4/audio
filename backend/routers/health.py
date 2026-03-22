@@ -178,6 +178,13 @@ def _run_smoketest_gen(task_name: str, test_file: Path, py_cmd: str):
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
 
+        # 烟雾测试前に __pycache__ をクリア（コード変更が確実に反映されるように）
+        import shutil
+        for cache_root in [APP_ROOT / "backend", APP_ROOT / "tests"]:
+            for pc in cache_root.rglob("__pycache__"):
+                shutil.rmtree(pc, ignore_errors=True)
+        yield _emit("[调试] __pycache__ 已清理")
+
         cmd = [py_cmd, "-u", str(test_file)]
         yield _emit(f"[调试] Python: {py_cmd}")
         yield _emit(f"[调试] 测试文件: {test_file} (存在: {test_file.exists()})")
