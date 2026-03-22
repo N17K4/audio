@@ -222,7 +222,7 @@ def test_2_2_gpt_sovits_train():
     TAG = "[2-2]"
     print(f"\n{TAG} GPT-SoVITS 训练")
 
-    wav_data = create_test_wav(duration_sec=0.5)
+    wav_data = create_test_wav(duration_sec=3)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -250,7 +250,7 @@ def test_2_3_gpt_sovits_train_advanced():
     TAG = "[2-3]"
     print(f"\n{TAG} GPT-SoVITS 训练高级参数")
 
-    wav_data = create_test_wav(duration_sec=0.5)
+    wav_data = create_test_wav(duration_sec=3)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -457,7 +457,7 @@ def test_4_3_rvc_train():
     TAG = "[4-3]"
     print(f"\n{TAG} RVC 训练（创建音色）")
 
-    wav_data = create_test_wav(duration_sec=0.5)
+    wav_data = create_test_wav(duration_sec=3)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
@@ -485,7 +485,7 @@ def test_4_4_rvc_train_advanced():
     TAG = "[4-4]"
     print(f"\n{TAG} RVC 训练高级参数")
 
-    wav_data = create_test_wav(duration_sec=0.5)
+    wav_data = create_test_wav(duration_sec=3)
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
         zf.writestr("train_sample.wav", wav_data)
