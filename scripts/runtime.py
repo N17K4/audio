@@ -814,7 +814,7 @@ def setup_seed_vc_engine(project_root: Path) -> bool:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 _GPT_SOVITS_REPO = "https://github.com/RVC-Boss/GPT-SoVITS"
-_GPT_SOVITS_TAG = "main"
+_GPT_SOVITS_TAG = "20250606v2pro"  # main 禁止、必ず tag/commit を指定
 
 # 只保留推理必须的目录/文件，其余全部丢弃
 _GPT_SOVITS_KEEP = [

@@ -45,6 +45,10 @@ print(f'安装 {len(pkgs)} 个运行时 ML 依赖...')
 open('/tmp/engine_reqs.txt', 'w').write('\n'.join(pkgs))
 PYEOF
 
+# numpy バージョン統一（torch/transformers/seed_vc が numpy 2.x C API を要求）
+# poetry export で入る numpy 1.x を強制的に 2.2.x へ上げる
+RUN pip install --no-cache-dir "numpy>=2.2,<2.3"
+
 # RVC 特殊安装（fairseq + rvc-python）
 RUN pip install --no-cache-dir setuptools'<72' \
     && pip install --no-cache-dir --no-deps fairseq==0.12.2 \

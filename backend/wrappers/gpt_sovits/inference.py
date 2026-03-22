@@ -164,7 +164,13 @@ def main() -> int:
         try:
             pretrained_link.symlink_to(checkpoint_dir)
         except OSError:
-            pass
+            # Windows: 管理者権限なしで symlink 作成不可 → junction で代替
+            if os.name == "nt":
+                try:
+                    import _winapi
+                    _winapi.CreateJunction(checkpoint_dir, str(pretrained_link))
+                except Exception:
+                    pass
 
     # fast_langdetect 需要模型文件在 pretrained_models/fast_langdetect/ 下
     _ensure_fast_langdetect(pretrained_link)
@@ -190,18 +196,13 @@ def _run_inference(args: argparse.Namespace, output_path: Path, checkpoint_dir: 
     # pretrained 模型存放于 checkpoints/gpt_sovits/，需显式设置路径
     try:
         config_dict = {
-            "version": "v2",
+            "version": "v3",
             "device": "cpu",
             "is_half": False,
             "cnhuhbert_base_path": os.path.join(checkpoint_dir, "chinese-hubert-base"),
             "bert_base_path": os.path.join(checkpoint_dir, "chinese-roberta-wwm-ext-large"),
-            "t2s_weights_path": os.path.join(
-                checkpoint_dir, "gsv-v2final-pretrained",
-                "s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
-            ),
-            "vits_weights_path": os.path.join(
-                checkpoint_dir, "gsv-v2final-pretrained", "s2G2333k.pth",
-            ),
+            "t2s_weights_path": os.path.join(checkpoint_dir, "s1v3.ckpt"),
+            "vits_weights_path": os.path.join(checkpoint_dir, "s2Gv3.pth"),
         }
 
         # 自动检测设备

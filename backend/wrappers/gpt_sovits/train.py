@@ -240,7 +240,7 @@ def main() -> int:
             "is_half": str(is_half),
             "bert_pretrained_dir": str(checkpoint_dir / "chinese-roberta-wwm-ext-large"),
             "cnhubert_base_dir": str(checkpoint_dir / "chinese-hubert-base"),
-            "pretrained_s2G": str(checkpoint_dir / "gsv-v2final-pretrained" / "s2G2333k.pth"),
+            "pretrained_s2G": str(checkpoint_dir / "s2Gv3.pth"),
             "s2config_path": str(s2_config_path),
         }
 

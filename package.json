@@ -82,10 +82,6 @@
         "to": "tests/"
       },
       {
-        "from": "user_data/",
-        "to": "user_data/"
-      },
-      {
         "from": "assets/",
         "to": "assets/"
       },

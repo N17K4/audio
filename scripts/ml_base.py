@@ -723,8 +723,9 @@ def _install_rvc_to_target(py: str, target: str, pypi_mirror: str, json_progress
     target_args = ["--target", target, "--no-warn-script-location"] if target else []
 
     # fairseq がインストール済みか確認
-    if _is_importable_in_target(target, "fairseq") if target else False:
-        _emit({"type": "log", "message": "  ✓ fairseq 已存在，跳过"}, json_progress)
+    fairseq_exists = _is_importable_in_target(target, "fairseq") if target else False
+    if fairseq_exists:
+        _emit({"type": "log", "message": "  ✓ fairseq 已存在，跳过安装"}, json_progress)
     else:
         _emit({"type": "log", "message": "  安装 fairseq==0.12.2（纯 Python 模式）…"}, json_progress)
         # setuptools<72 は fairseq ビルドに必要
@@ -784,8 +785,8 @@ def _install_rvc_to_target(py: str, target: str, pypi_mirror: str, json_progress
                 _emit({"type": "log", "message": f"  ✗ fairseq 安装异常: {e}"}, json_progress)
                 return False
 
-        # fairseq Python 3.12 兼容パッチ（--target にインストールされた fairseq に直接適用）
-        _patch_fairseq_in_target(target, json_progress)
+    # fairseq Python 3.12 兼容パッチ（インストール済みでも常に適用 — 前回パッチ未適用の可能性）
+    _patch_fairseq_in_target(target, json_progress)
 
     # bitarray（fairseq 依赖）
     subprocess.run(

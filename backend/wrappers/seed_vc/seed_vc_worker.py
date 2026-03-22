@@ -41,6 +41,36 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _ensure_hf_cache_refs(hf_cache_dir: str) -> None:
+    """HF キャッシュの refs/main が欠落している場合に補完する。
+
+    checkpoints_base.py で snapshot_download / hf_hub_download した後、
+    Windows で refs/main が作成されないケースがある（symlink 失敗等）。
+    refs/main がないと from_pretrained() がオフラインでキャッシュを見つけられない。
+    """
+    cache_path = Path(hf_cache_dir)
+    if not cache_path.is_dir():
+        return
+    for model_dir in cache_path.iterdir():
+        if not model_dir.is_dir() or not model_dir.name.startswith("models--"):
+            continue
+        refs_dir = model_dir / "refs"
+        refs_main = refs_dir / "main"
+        if refs_main.exists():
+            continue
+        # blobs/ か snapshots/ があればキャッシュ済みと判定
+        snapshots_dir = model_dir / "snapshots"
+        if not snapshots_dir.is_dir():
+            continue
+        # snapshots/<commit_hash>/ からハッシュを取得
+        commits = [d.name for d in snapshots_dir.iterdir() if d.is_dir() and len(d.name) >= 40]
+        if not commits:
+            continue
+        refs_dir.mkdir(parents=True, exist_ok=True)
+        refs_main.write_text(commits[0], encoding="utf-8")
+        print(f"[seed_vc_worker] refs/main 補完: {model_dir.name} → {commits[0][:8]}", file=sys.stderr)
+
+
 def setup_engine(project_root: Path) -> None:
     """把 engine 目录加入 sys.path，切换 CWD 让 engine 内部的相对路径正确。"""
     engine_dir = project_root / "runtime" / "engine" / "seed_vc"
@@ -53,11 +83,15 @@ def setup_engine(project_root: Path) -> None:
     # engine 内部使用相对路径引用 checkpoints/，CWD 须是 checkpoints/ 的父目录。
     # 从 HF_HUB_CACHE（checkpoints/hf_cache）推算。
     hf_cache = os.getenv("HF_HUB_CACHE", "").strip()
-    if hf_cache and Path(hf_cache).parent.parent.exists():
-        cwd = str(Path(hf_cache).parent.parent)  # checkpoints/hf_cache → 上两级
+    if hf_cache and Path(hf_cache).parent.exists():
+        cwd = str(Path(hf_cache).parent)  # checkpoints/hf_cache → 上一级 = checkpoints/
     else:
         cwd = str(project_root)
     os.chdir(cwd)
+
+    # Windows: HF キャッシュの refs/main 補完（オフラインモード対応）
+    if hf_cache:
+        _ensure_hf_cache_refs(hf_cache)
 
 
 def load_engine(checkpoint_pth: str, config_yml: str, device_str: str):

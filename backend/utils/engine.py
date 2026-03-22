@@ -345,7 +345,8 @@ def build_engine_env(engine: str) -> Dict[str, str]:
         "TOKENIZERS_PARALLELISM": "false",
     }
     # 全引擎强制离线：所有 HF 模型须通过 pnpm run checkpoints 预先下载。
-    # 确保本地应用不依赖运行时网络连接。
+    # seed_vc: worker 起動時に refs/main 補完 + hf_utils.py で直接キャッシュ検索により
+    # オフラインでも from_pretrained() が動作する。
     merged["HF_HUB_OFFLINE"] = "1"
     merged["TRANSFORMERS_OFFLINE"] = "1"
     # macOS ARM CPU 下 fairseq/HuBERT 在不启用 MPS fallback 时会 SIGSEGV；

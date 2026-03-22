@@ -213,6 +213,32 @@ pnpm run checkpoints  # 模型权重 → runtime/checkpoints/（嵌入式 Python
 pnpm run dev          # 启动 Electron + Next.js
 ```
 
+### pnpm scripts 一览
+
+| 命令 | 用途 |
+|------|------|
+| `pnpm dev` | Electron + Next.js 开发模式 |
+| `pnpm setup` | mise + pnpm + poetry 环境初始化 |
+| `pnpm runtime` | 下载嵌入式 Python + 引擎源码 + FFmpeg/Pandoc |
+| `pnpm ml` | 安装基础 ML 包（torch 等）→ runtime/ml/ |
+| `pnpm ml:extra` | 安装进阶 ML 包（RAG/Agent/LoRA） |
+| `pnpm ml:rag` / `ml:agent` / `ml:lora` | 按组安装进阶 ML 包 |
+| `pnpm checkpoints` | 下载基础引擎 checkpoint |
+| `pnpm checkpoints:check` | 只检查 checkpoint 完整性，不下载 |
+| `pnpm checkpoints:force` | 强制重新下载所有 checkpoint |
+| `pnpm checkpoints:extra` | 下载额外引擎 checkpoint |
+| `pnpm clean` | 清除 runtime/ml、checkpoints、engine |
+| `pnpm reinstall` | clean + setup + ml + checkpoints |
+| `pnpm all` | setup + runtime + ml + checkpoints + dev |
+| `pnpm build:frontend` | 构建前端静态文件（out/） |
+| `pnpm dist` | 打包 macOS 安装包 |
+| `pnpm dist:win` | 打包 Windows 安装包 |
+| `pnpm dist:both` | 打包 macOS + Windows |
+| `pnpm docker` | docker compose up --build（本番构建） |
+| `pnpm dd` | Docker 开发模式（源码挂载 + hot reload） |
+| `pnpm ddd` | Docker 开发模式 + 强制重新 build 镜像 |
+| `pnpm dds` | Docker 开发环境 down |
+
 ### 包管理规范
 - JS/Node：一律用 `pnpm`，禁止 `npm`
 - Python backend：一律用 `poetry`，禁止直接 `pip`
@@ -275,9 +301,41 @@ pkill -f "uvicorn main:app"
 
 ---
 
-## 禁止直接修改 gitignored 的外部代码
+## 引擎源码管理规范
 
-`runtime/ml/`、`runtime/engine/`、`runtime/python/` 下的文件都是 pip install 或 git clone 生成的，gitignored，下次构建会被覆盖。**严禁直接修改这些文件来修 bug**。
+### git 跟踪的引擎源码（`runtime/engine/`）
+
+`runtime/engine/` 下的引擎源码**已 git 跟踪**，不是 gitignored。各引擎对应的上游版本：
+
+| 引擎 | 上游仓库 | 版本（tag/commit） | 说明 |
+|------|---------|-------------------|------|
+| Fish Speech | `fishaudio/fish-speech` | `v1.5.0` | tag |
+| Seed-VC | `Plachtaa/seed-vc` | `51383efd` | commit（无官方 tag） |
+| GPT-SoVITS | `RVC-Boss/GPT-SoVITS` | `20250606v2pro` | tag |
+| FaceFusion | `facefusion/facefusion` | `3.5.4` | tag |
+| LivePortrait | `KlingAIResearch/LivePortrait` | `49784e87` | commit |
+
+**规则：**
+- `runtime.py` 中的 clone 配置**必须使用 tag 或 commit ID**，严禁使用分支名（如 `main`）
+- `manifest.json` 中的 checkpoint URL 和 `repo_id` **必须固定 revision（commit hash）**，严禁使用 `main`
+  - URL 格式：`resolve/<commit_hash>/file.bin`，不用 `resolve/main/`
+  - repo_id 格式：添加 `"revision": "<commit_hash>"` 字段
+- 引擎源码变更后必须 commit 到 git
+- checkpoint（manifest.json）必须与引擎源码版本匹配
+- 手写的 wrapper 代码在 `backend/wrappers/`，与引擎源码分离
+- **上游更新 checkpoint 不会影响已固定的版本**——通过 commit hash 始终可以下载到固定版本的文件
+
+### 手写 wrapper 引擎（无 clone）
+
+| 引擎 | 目录 |
+|------|------|
+| RVC | `backend/wrappers/rvc/`（通过 rvc-python pip 包推理） |
+| Faster Whisper | `backend/wrappers/faster_whisper/` |
+| Whisper | `backend/wrappers/whisper/` |
+
+### 禁止直接修改 gitignored 的外部代码
+
+`runtime/ml/`、`runtime/python/` 下的文件是 pip install 生成的，gitignored，下次构建会被覆盖。**严禁直接修改这些文件来修 bug**。
 
 正确做法：
 - **wrapper 层拦截**：在 `backend/wrappers/` 的适配器脚本中处理兼容性问题（如 monkey-patch）

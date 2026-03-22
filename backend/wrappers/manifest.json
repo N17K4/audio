@@ -211,7 +211,7 @@
       "runtime_pip_packages": [
         "torch",
         "torchaudio",
-        "torchcodec",
+        "torchcodec; sys_platform != 'win32'",
         "numpy>=2.2,<2.3",
         "scipy",
         "librosa==0.10.2",
@@ -295,7 +295,7 @@
       "checkpoint_files": [
         {
           "path": "hubert_base.pt",
-          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/b2c8cae96e3b05de46d36c5ef9970ef6cbccafba/hubert_base.pt",
           "size_mb": 360,
           "required": true,
           "_note": "ContentVec 特征提取器，RVC 音色训练时需要",
@@ -303,7 +303,7 @@
         },
         {
           "path": "pretrained_v2/f0G40k.pth",
-          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/pretrained_v2/f0G40k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/b2c8cae96e3b05de46d36c5ef9970ef6cbccafba/pretrained_v2/f0G40k.pth",
           "size_mb": 400,
           "required": true,
           "_note": "RVC v2 预训练生成器，音色训练后用作基础模型",
@@ -410,7 +410,7 @@
       "hf_cache_downloads": [
         {
           "repo_id": "KwaiVGI/LivePortrait",
-          "revision": "main",
+          "revision": "82a4fa6735ca58432b6ce39301b4b9ee066dea47",
           "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 1800,
           "required": true,
@@ -437,6 +437,7 @@
         {
           "path": "retinaface_10g.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "retinaface_10g.onnx",
           "size_mb": 16,
           "required": true,
@@ -446,6 +447,7 @@
         {
           "path": "arcface_w600k_r50.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "arcface_w600k_r50.onnx",
           "size_mb": 166,
           "required": true,
@@ -455,6 +457,7 @@
         {
           "path": "2dfan4.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "2dfan4.onnx",
           "size_mb": 93,
           "required": true,
@@ -464,6 +467,7 @@
         {
           "path": "inswapper_128_fp16.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "inswapper_128_fp16.onnx",
           "size_mb": 265,
           "required": true,
@@ -473,6 +477,7 @@
         {
           "path": "yoloface_8n.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "yoloface_8n.onnx",
           "size_mb": 5,
           "required": true,
@@ -482,6 +487,7 @@
         {
           "path": "fan_68_5.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "fan_68_5.onnx",
           "size_mb": 1,
           "required": true,
@@ -491,6 +497,7 @@
         {
           "path": "fairface.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "fairface.onnx",
           "size_mb": 81,
           "required": true,
@@ -500,6 +507,7 @@
         {
           "path": "xseg_1.onnx",
           "repo_id": "facefusion/models-3.1.0",
+          "revision": "c9e3a503d8e84e91c5cd89ee2d510fe5e793e570",
           "filename": "xseg_1.onnx",
           "size_mb": 67,
           "required": true,
@@ -509,6 +517,7 @@
         {
           "path": "bisenet_resnet_34.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "bisenet_resnet_34.onnx",
           "size_mb": 89,
           "required": true,
@@ -518,6 +527,7 @@
         {
           "path": "nsfw_1.onnx",
           "repo_id": "facefusion/models-3.3.0",
+          "revision": "6271ab1c4619ceb2e534d65e0ec973f22a9aec38",
           "filename": "nsfw_1.onnx",
           "size_mb": 77,
           "required": false,
@@ -527,6 +537,7 @@
         {
           "path": "nsfw_2.onnx",
           "repo_id": "facefusion/models-3.3.0",
+          "revision": "6271ab1c4619ceb2e534d65e0ec973f22a9aec38",
           "filename": "nsfw_2.onnx",
           "size_mb": 22,
           "required": false,
@@ -536,6 +547,7 @@
         {
           "path": "nsfw_3.onnx",
           "repo_id": "facefusion/models-3.3.0",
+          "revision": "6271ab1c4619ceb2e534d65e0ec973f22a9aec38",
           "filename": "nsfw_3.onnx",
           "size_mb": 342,
           "required": false,
@@ -545,6 +557,7 @@
         {
           "path": "kim_vocal_2.onnx",
           "repo_id": "facefusion/models-3.0.0",
+          "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
           "filename": "kim_vocal_2.onnx",
           "size_mb": 64,
           "required": false,
@@ -566,6 +579,7 @@
           "path": "hutao-jp/model.pth",
           "repo_id": "N17K4/ai-workshop-assets",
           "repo_type": "dataset",
+          "revision": "764cc3ea60d2a8da7ab8591e446ac8451d852cad",
           "filename": "hutao-jp/model.pth",
           "size_mb": 53,
           "required": true,
@@ -575,6 +589,7 @@
           "path": "hutao-jp/hutao.index",
           "repo_id": "N17K4/ai-workshop-assets",
           "repo_type": "dataset",
+          "revision": "764cc3ea60d2a8da7ab8591e446ac8451d852cad",
           "filename": "hutao-jp/hutao.index",
           "size_mb": 65,
           "required": false,
@@ -584,6 +599,7 @@
           "path": "Ayayaka/model.pth",
           "repo_id": "N17K4/ai-workshop-assets",
           "repo_type": "dataset",
+          "revision": "764cc3ea60d2a8da7ab8591e446ac8451d852cad",
           "filename": "Ayayaka/model.pth",
           "size_mb": 53,
           "required": true,
@@ -593,6 +609,7 @@
           "path": "Ayayaka/ayaka.index",
           "repo_id": "N17K4/ai-workshop-assets",
           "repo_type": "dataset",
+          "revision": "764cc3ea60d2a8da7ab8591e446ac8451d852cad",
           "filename": "Ayayaka/ayaka.index",
           "size_mb": 101,
           "required": false,
@@ -602,6 +619,7 @@
           "path": "tsukuyomi/model.pth",
           "repo_id": "N17K4/ai-workshop-assets",
           "repo_type": "dataset",
+          "revision": "764cc3ea60d2a8da7ab8591e446ac8451d852cad",
           "filename": "tsukuyomi/model.pth",
           "size_mb": 53,
           "required": true,
@@ -658,7 +676,7 @@
         {
           "repo_id": "city96/FLUX.1-schnell-gguf",
           "filename": "flux1-schnell-Q4_K_S.gguf",
-          "revision": "main",
+          "revision": "f495746ed9c5efcf4661f53ef05401dceadc17d2",
           "cache_dir_rel": "runtime/checkpoints/flux",
           "size_mb": 6468,
           "required": false,
@@ -666,7 +684,7 @@
         },
         {
           "repo_id": "black-forest-labs/FLUX.1-schnell",
-          "revision": "main",
+          "revision": "741f7c3ce8b383c54771c7003378a50191e9efe9",
           "cache_dir_rel": "runtime/checkpoints/hf_cache",
           "size_mb": 10000,
           "required": false,
@@ -733,7 +751,7 @@
       "hf_cache_downloads": [
         {
           "repo_id": "stabilityai/sd-turbo",
-          "revision": "main",
+          "revision": "b261bac6fd2cf515557d5d0707481eafa0485ec2",
           "cache_dir_rel": "runtime/checkpoints/sd",
           "size_mb": 2300,
           "required": false,
@@ -780,7 +798,7 @@
       "checkpoint_files": [
         {
           "path": "chinese-hubert-base/preprocessor_config.json",
-          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/preprocessor_config.json",
+          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/fce0375452b1dd6c080ac3248d423d4d037bc831/preprocessor_config.json",
           "size_mb": 1,
           "required": true,
           "note": "Chinese HuBERT 基础模型（音素提取）",
@@ -788,14 +806,14 @@
         },
         {
           "path": "chinese-hubert-base/config.json",
-          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/config.json",
+          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/fce0375452b1dd6c080ac3248d423d4d037bc831/config.json",
           "size_mb": 1,
           "required": true,
           "sha256": "f6bd1bdef239518d022edcef31243acf344a2afa33d5428e16f221cac09cbcd0"
         },
         {
           "path": "chinese-hubert-base/pytorch_model.bin",
-          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/main/pytorch_model.bin",
+          "url": "https://huggingface.co/TencentGameMate/chinese-hubert-base/resolve/fce0375452b1dd6c080ac3248d423d4d037bc831/pytorch_model.bin",
           "size_mb": 380,
           "required": true,
           "sha256": "2fefccd26c2794a583b80f6f7210c721873cb7ebae2c1cde3baf9b27855e24d8"
@@ -823,20 +841,40 @@
           "sha256": "4ac62d49144d770c5ca9a5d1d3039c4995665a080febe63198189857c6bd11cd"
         },
         {
-          "path": "gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
-          "url": "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
-          "size_mb": 600,
+          "path": "s1v3.ckpt",
+          "repo_id": "lj1995/GPT-SoVITS",
+          "filename": "s1v3.ckpt",
+          "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
+          "size_mb": 148,
           "required": true,
-          "note": "GPT v2 预训练模型（Text-to-Semantic）",
-          "sha256": "732f94e63b148066e24c7f9d2637f3374083e637635f07fbdb695dee20ddbe1f"
+          "note": "GPT v3 预训练模型（Text-to-Semantic）"
         },
         {
-          "path": "gsv-v2final-pretrained/s2G2333k.pth",
-          "url": "https://huggingface.co/lj1995/GPT-SoVITS/resolve/main/gsv-v2final-pretrained/s2G2333k.pth",
-          "size_mb": 800,
+          "path": "s2Gv3.pth",
+          "repo_id": "lj1995/GPT-SoVITS",
+          "filename": "s2Gv3.pth",
+          "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
+          "size_mb": 733,
           "required": true,
-          "note": "SoVITS v2 预训练模型（Semantic-to-Audio）",
-          "sha256": "924fdccaa3c574bf139c25c9759aa1ed3b3f99e19a7c529ee996c2bc17663695"
+          "note": "SoVITS v3 预训练模型（Semantic-to-Audio）"
+        },
+        {
+          "path": "models--nvidia--bigvgan_v2_24khz_100band_256x/bigvgan_generator.pt",
+          "repo_id": "lj1995/GPT-SoVITS",
+          "filename": "models--nvidia--bigvgan_v2_24khz_100band_256x/bigvgan_generator.pt",
+          "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
+          "size_mb": 429,
+          "required": true,
+          "note": "BigVGAN vocoder（v3 推理必需）"
+        },
+        {
+          "path": "models--nvidia--bigvgan_v2_24khz_100band_256x/config.json",
+          "repo_id": "lj1995/GPT-SoVITS",
+          "filename": "models--nvidia--bigvgan_v2_24khz_100band_256x/config.json",
+          "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
+          "size_mb": 1,
+          "required": true,
+          "note": "BigVGAN vocoder 配置"
         }
       ],
       "env_key": "GPT_SOVITS_CHECKPOINT_DIR"
