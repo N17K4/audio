@@ -47,6 +47,7 @@ g2pk2 = "*"
 ko_pron = "*"
 opencc = "*"
 ffmpeg-python = "*"
+imageio-ffmpeg = "*"
 
 [tool.poetry.group.engines-extra]
 optional = true
@@ -57,7 +58,6 @@ transformers = ">=4.48,<6"
 verovio = "*"
 # liveportrait
 imageio = "*"
-imageio-ffmpeg = "*"
 av = "*"
 omegaconf = "*"
 einops = "*"

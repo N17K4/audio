@@ -1,11 +1,9 @@
 import type { MiscSubPage, Status, ChatMessage } from '../../types';
-import ImageUnderstandSection from './misc/ImageUnderstandSection';
 import TranslateSection from './misc/TranslateSection';
 import CodeAssistSection from './misc/CodeAssistSection';
 import ImgGenSection from './misc/ImgGenSection';
 import ImgI2iSection from './misc/ImgI2iSection';
 import VideoGenSection from './misc/VideoGenSection';
-import OcrSection from './misc/OcrSection';
 import LipsyncSection from './misc/LipsyncSection';
 
 interface MiscPanelProps {
@@ -26,16 +24,6 @@ interface MiscPanelProps {
   imageGenSize: string;
   setImageGenSize: (s: string) => void;
   onRunImageGen: () => void;
-  // image understand
-  imageUnderstandProvider: string;
-  onImageUnderstandProviderChange: (p: string) => void;
-  imageUnderstandFile: File | null;
-  setImageUnderstandFile: (f: File | null) => void;
-  imageUnderstandPrompt: string;
-  setImageUnderstandPrompt: (t: string) => void;
-  imageUnderstandModel: string;
-  setImageUnderstandModel: (m: string) => void;
-  onRunImageUnderstand: () => void;
   // translate
   translateProvider: string;
   setTranslateProvider: (p: string) => void;
@@ -103,16 +91,6 @@ interface MiscPanelProps {
   videoGenImageFile: File | null;
   setVideoGenImageFile: (f: File | null) => void;
   onRunVideoGen: () => void;
-  // ocr
-  ocrProvider: string;
-  onOcrProviderChange: (p: string) => void;
-  ocrFile: File | null;
-  setOcrFile: (f: File | null) => void;
-  ocrModel: string;
-  setOcrModel: (m: string) => void;
-  ocrLocalUrl: string;
-  setOcrLocalUrl: (u: string) => void;
-  onRunOcr: () => void;
   // lipsync
   lipsyncProvider: string;
   onLipsyncProviderChange: (p: string) => void;
@@ -140,9 +118,8 @@ interface MiscPanelProps {
 type MiscTab = { key: MiscSubPage; label: string; abbr: string; bg: string };
 
 const ROW1_TABS: MiscTab[] = [
-  { key: 'image_understand', label: '图像理解', abbr: 'IU',   bg: '#7c3aed' },
-  { key: 'translate',        label: '文字翻译', abbr: 'TRL',  bg: '#0284c7' },
-  { key: 'code_assist',      label: '代码助手', abbr: 'CODE', bg: '#059669' },
+  { key: 'translate',   label: '文字翻译', abbr: 'TRL',  bg: '#0284c7' },
+  { key: 'code_assist', label: '代码助手', abbr: 'CODE', bg: '#059669' },
 ];
 
 const ROW2_TABS: MiscTab[] = [
@@ -152,7 +129,6 @@ const ROW2_TABS: MiscTab[] = [
 ];
 
 const ROW3_TABS: MiscTab[] = [
-  { key: 'ocr',     label: 'OCR 识别', abbr: 'OCR', bg: '#0369a1' },
   { key: 'lipsync', label: '口型同步', abbr: 'LIP', bg: '#be185d' },
 ];
 
@@ -200,20 +176,6 @@ export default function MiscPanel(props: MiscPanelProps) {
             </div>
           ))}
         </div>
-      )}
-
-      {miscSubPage === 'image_understand' && (
-        <ImageUnderstandSection
-          status={props.status}
-          apiKey={props.apiKey} setApiKey={props.setApiKey}
-          cloudEndpoint={props.cloudEndpoint} setCloudEndpoint={props.setCloudEndpoint}
-          imageUnderstandProvider={props.imageUnderstandProvider} onImageUnderstandProviderChange={props.onImageUnderstandProviderChange}
-          imageUnderstandFile={props.imageUnderstandFile} setImageUnderstandFile={props.setImageUnderstandFile}
-          imageUnderstandPrompt={props.imageUnderstandPrompt} setImageUnderstandPrompt={props.setImageUnderstandPrompt}
-          imageUnderstandModel={props.imageUnderstandModel} setImageUnderstandModel={props.setImageUnderstandModel}
-          onRunImageUnderstand={props.onRunImageUnderstand}
-          labelCls={props.labelCls} fieldCls={props.fieldCls}
-        />
       )}
 
       {miscSubPage === 'translate' && (
@@ -292,19 +254,6 @@ export default function MiscPanel(props: MiscPanelProps) {
           onRunVideoGen={props.onRunVideoGen}
           outputDir={props.outputDir} setOutputDir={props.setOutputDir}
           labelCls={props.labelCls} fieldCls={props.fieldCls} btnSec={props.btnSec}
-        />
-      )}
-
-      {miscSubPage === 'ocr' && (
-        <OcrSection
-          status={props.status}
-          apiKey={props.apiKey} setApiKey={props.setApiKey}
-          ocrProvider={props.ocrProvider} onOcrProviderChange={props.onOcrProviderChange}
-          ocrFile={props.ocrFile} setOcrFile={props.setOcrFile}
-          ocrModel={props.ocrModel} setOcrModel={props.setOcrModel}
-          ocrLocalUrl={props.ocrLocalUrl} setOcrLocalUrl={props.setOcrLocalUrl}
-          onRunOcr={props.onRunOcr}
-          labelCls={props.labelCls} fieldCls={props.fieldCls}
         />
       )}
 

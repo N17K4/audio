@@ -12,20 +12,19 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: '音频工具', page: 'audio_tools' },
   { label: '图像工具', page: 'image_tools' },
   { label: '视频工具', page: 'video_tools' },
-  { label: '文字工具', page: 'text_tools' },
   { label: '格式转换', page: 'format_convert' },
-  { label: 'AI 进阶',  page: 'advanced_tools' },
 ];
 
 interface TopNavProps {
   currentPage: Page;
   jobs: Job[];
   isDark: boolean;
+  isDocker?: boolean;
   setIsDark: React.Dispatch<React.SetStateAction<boolean>>;
   onNavigate: (page: Page, subPage?: string) => void;
 }
 
-export default function TopNav({ currentPage, jobs, isDark, setIsDark, onNavigate }: TopNavProps) {
+export default function TopNav({ currentPage, jobs, isDark, isDocker, setIsDark, onNavigate }: TopNavProps) {
   const activeBadge = jobs.filter(j => j.status === 'queued' || j.status === 'running').length;
 
   return (
@@ -71,9 +70,9 @@ export default function TopNav({ currentPage, jobs, isDark, setIsDark, onNavigat
         {/* Tasks */}
         <button
           onClick={() => onNavigate('tasks')}
-          title="管理页面"
+          title="任务列表"
           className={`relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-            currentPage === 'tasks' || currentPage === 'system'
+            currentPage === 'tasks'
               ? 'bg-blue-50 dark:bg-blue-950/30 text-[#1A8FE3]'
               : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
           }`}
@@ -89,6 +88,24 @@ export default function TopNav({ currentPage, jobs, isDark, setIsDark, onNavigat
             </span>
           )}
         </button>
+
+        {/* Models */}
+        {!isDocker && (
+          <button
+            onClick={() => onNavigate('system')}
+            title="模型管理"
+            className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+              currentPage === 'system'
+                ? 'bg-blue-50 dark:bg-blue-950/30 text-[#1A8FE3]'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+              <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
+            </svg>
+          </button>
+        )}
 
         {/* Dark mode toggle */}
         <button

@@ -5,24 +5,17 @@ export const TASK_LABELS: Record<TaskType, string> = {
   tts: '文本转语音',
   vc: '音色转换',
   asr: '语音转文字',
-  llm: '聊天',
   voice_chat: '语音聊天',
   media: '音视频转换',
-  doc:  '文档工具',
   misc: 'AI扩展',
-  rag: '知识库',
-  agent: '智能体',
-  finetune: '微调',
 };
 
 export const TASK_PHASES: Record<string, string[]> = {
   tts:              ['准备请求', '合成语音中', '写入输出文件'],
   vc:               ['上传音频', '推理转换中', '写入转换结果'],
   asr:              ['上传音频', '语音识别中', '整理转录文字'],
-  llm:              ['发送消息', '等待模型回复'],
   voice_chat:       ['处理中'],
   media:            ['上传文件', 'FFmpeg 转换中', '写入输出文件'],
-  doc:              ['上传文件', '处理中', '写入输出文件'],
   image_gen:        ['发送请求', '图像生成中', '保存结果'],
   image_i2i:        ['上传图片', '图像处理中', '保存结果'],
   video_gen:        ['发送请求', '视频生成中', '保存结果'],
@@ -34,14 +27,7 @@ export const DEFAULT_CAPS: CapabilityMap = {
   tts: ['fish_speech', 'gpt_sovits', 'cosyvoice', 'gemini', 'openai', 'elevenlabs', 'cartesia', 'dashscope', 'minimax_tts'],
   vc: ['seed_vc', 'local_rvc', 'elevenlabs'],
   asr: ['faster_whisper', 'whisper', 'gemini', 'openai', 'groq', 'deepgram', 'dashscope'],
-  llm: ['gemini', 'openai', 'claude', 'groq', 'deepseek', 'mistral', 'xai', 'ollama', 'github',
-        'qwen', 'doubao', 'hunyuan', 'glm', 'moonshot', 'spark', 'minimax', 'baichuan'],
-  agent: ['ollama', 'gemini', 'openai', 'claude', 'groq', 'deepseek', 'mistral', 'xai', 'github',
-          'qwen', 'doubao', 'hunyuan', 'glm', 'moonshot', 'spark', 'minimax', 'baichuan'],
-  rag: ['ollama', 'gemini', 'openai', 'claude', 'groq', 'deepseek', 'mistral', 'xai', 'github',
-        'qwen', 'doubao', 'hunyuan', 'glm', 'moonshot', 'spark', 'minimax', 'baichuan'],
   media: [],
-  doc:   [],
   misc:  [],
 };
 
@@ -343,14 +329,9 @@ export const TASK_ICON_CFG: Record<TaskType, { abbr: string; bg: string; text: s
   tts:        { abbr: 'TTS', bg: '#4f46e5', text: '#fff' },
   vc:         { abbr: 'VC',  bg: '#7c3aed', text: '#fff' },
   asr:        { abbr: 'STT', bg: '#0284c7', text: '#fff' },
-  llm:        { abbr: 'LLM', bg: '#059669', text: '#fff' },
   voice_chat: { abbr: 'V+',  bg: '#d97706', text: '#fff' },
   media:      { abbr: 'FMT', bg: '#0f766e', text: '#fff' },
-  doc:        { abbr: 'DOC', bg: '#b45309', text: '#fff' },
   misc:       { abbr: 'EXT', bg: '#6d28d9', text: '#fff' },
-  rag:        { abbr: 'RAG', bg: '#0d9488', text: '#fff' },
-  agent:      { abbr: 'AGT', bg: '#7c3aed', text: '#fff' },
-  finetune:   { abbr: 'FT',  bg: '#be185d', text: '#fff' },
 };
 
 // ─── 图像生成（独立）提供商 ──────────────────────────────────────────────────
@@ -468,7 +449,6 @@ export const TOOL_CARDS = [
   { id: 'audio_tools',    label: '文本转语音', desc: '多引擎 TTS，支持本地与云端',        category: ['audio']   as const, iconBg: '#E9E6F9', iconColor: '#624BD8', iconType: 'tts',              subPage: 'tts' },
   { id: 'audio_tools',    label: '音色转换',   desc: '零样本或训练模型音色迁移',          category: ['audio']   as const, iconBg: '#F3E8FF', iconColor: '#9333ea', iconType: 'vc',               subPage: 'vc' },
   { id: 'audio_tools',    label: '语音转文字', desc: 'Whisper 及多云端 STT',             category: ['audio']   as const, iconBg: '#E2F0FE', iconColor: '#3D99F5', iconType: 'asr',              subPage: 'asr' },
-  { id: 'audio_tools',    label: 'AI 聊天',    desc: '接入多种大语言模型',               category: ['audio']   as const, iconBg: '#ECFAE5', iconColor: '#22c55e', iconType: 'llm',              subPage: 'llm' },
   { id: 'audio_tools',    label: '语音对话',   desc: '实时 STT+LLM+TTS 全链路',         category: ['audio']   as const, iconBg: '#FEF9E2', iconColor: '#D97706', iconType: 'voice_chat',       subPage: 'voice_chat' },
   // 图像（4个）
   { id: 'misc',           label: '图像生成',   desc: 'DALL-E / Imagen / SD 本地生成',   category: ['image']   as const, iconBg: '#FBE6E5', iconColor: '#E24841', iconType: 'image_gen',        subPage: 'img_gen' },
@@ -480,7 +460,6 @@ export const TOOL_CARDS = [
   { id: 'misc',           label: '口型同步',   desc: 'LivePortrait 图片驱动动画',       category: ['video']   as const, iconBg: '#FBE6E5', iconColor: '#be185d', iconType: 'lipsync',          subPage: 'lipsync' },
   // 转换（3个）
   { id: 'format_convert', label: '音视频转换', desc: 'FFmpeg 格式转换 / 截取片段',       category: ['convert'] as const, iconBg: '#E3FCFD', iconColor: '#0f766e', iconType: 'media' },
-  { id: 'format_convert', label: '文档工具',   desc: 'PDF / Word / 编码 / 二维码',      category: ['convert'] as const, iconBg: '#FFEDE0', iconColor: '#b45309', iconType: 'doc' },
   { id: 'misc',           label: '智能翻译',   desc: '多语言 LLM 翻译',                 category: ['convert'] as const, iconBg: '#E2F0FE', iconColor: '#0284c7', iconType: 'translate',        subPage: 'translate' },
 ];
 

@@ -47,6 +47,7 @@ BASE_ENGINES = {
     "faster_whisper",
     "fish_speech",
     "gpt_sovits",
+    "liveportrait",
     "rvc",
     "seed_vc",
 }
@@ -842,10 +843,21 @@ def _install_rvc_to_target(py: str, target: str, pypi_mirror: str, json_progress
                     original = setup_py.read_text(encoding="utf-8")
                     patched = re.sub(r"^(from|import)\s+Cython[^\n]*\n", "", original, flags=re.MULTILINE)
                     setup_py.write_text(_INJECT + patched, encoding="utf-8")
+                # PYTHONPATH に target を加えて pip のメタデータ生成時に
+                # runtime/ml の numpy/torch が見えるようにする（偽 numpy 不要）
+                import os as _os
+                _pip_env = _os.environ.copy()
+                if target:
+                    _abs_target = str(Path(target).resolve())
+                    _existing = _pip_env.get("PYTHONPATH", "")
+                    _pip_env["PYTHONPATH"] = _abs_target + (_os.pathsep + _existing if _existing else "")
+                else:
+                    _pip_env = None
                 r = subprocess.run(
                     [py, "-m", "pip", "install", str(fairseq_src),
                      "--no-build-isolation", "--no-deps", *target_args, "-q"],
                     capture_output=True, text=True, timeout=600,
+                    env=_pip_env,
                 )
                 if r.returncode != 0:
                     _emit({"type": "log", "message": f"  ✗ fairseq 安装失败: {r.stderr.strip()[-300:]}"}, json_progress)

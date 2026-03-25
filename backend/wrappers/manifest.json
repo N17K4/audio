@@ -123,26 +123,6 @@
       "note": "pip_packages 在构建期安装进 embedded Python，不含 ML 框架（torch 等在 runtime_pip_packages）。"
     },
     {
-      "name": "FFmpeg 二进制（macOS）",
-      "category": "evermeet",
-      "user_facing": false,
-      "url": "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip",
-      "size_display": "~70 MB",
-      "phase": "开发者 pnpm setup",
-      "mirror_support": false,
-      "note": "仅 macOS 使用，evermeet.cx 托管的静态编译版。已打包进 dist 产物，终端用户无需下载。"
-    },
-    {
-      "name": "FFmpeg 二进制（Windows）",
-      "category": "github_releases",
-      "user_facing": false,
-      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
-      "size_display": "~90 MB",
-      "phase": "开发者 pnpm setup",
-      "mirror_support": false,
-      "note": "仅 Windows 使用，已打包进 dist 产物，终端用户无需下载。"
-    },
-    {
       "name": "Pandoc（文档处理工具）",
       "category": "github_releases",
       "user_facing": false,
@@ -392,7 +372,7 @@
       "ui": {
         "label": "LivePortrait",
         "size_display": "~1.8 GB",
-        "default_install": false
+        "default_install": true
       },
       "code_dir": "runtime/engine/liveportrait",
       "checkpoint_dir": "runtime/checkpoints/liveportrait",
@@ -815,7 +795,8 @@
           "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
           "size_mb": 148,
           "required": true,
-          "note": "GPT v3 预训练模型（Text-to-Semantic）"
+          "note": "GPT v3 预训练模型（Text-to-Semantic）",
+          "sha256": "87133414860ea14ff6620c483a3db5ed07b44be42e2c3fcdad65523a729a745a"
         },
         {
           "path": "s2Gv3.pth",
@@ -824,7 +805,8 @@
           "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
           "size_mb": 733,
           "required": true,
-          "note": "SoVITS v3 预训练模型（Semantic-to-Audio）"
+          "note": "SoVITS v3 预训练模型（Semantic-to-Audio）",
+          "sha256": "f33abb1920076d988e1711d5f41b5c9c6d7f92575b4acf0ad4fae6a4ebf0cf19"
         },
         {
           "path": "models--nvidia--bigvgan_v2_24khz_100band_256x/bigvgan_generator.pt",
@@ -833,7 +815,8 @@
           "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
           "size_mb": 429,
           "required": true,
-          "note": "BigVGAN vocoder（v3 推理必需）"
+          "note": "BigVGAN vocoder（v3 推理必需）",
+          "sha256": "6f9c5715550c9d0f11159ceb8935638da5aeb19e27d1e63677632df095e376f5"
         },
         {
           "path": "models--nvidia--bigvgan_v2_24khz_100band_256x/config.json",
@@ -842,7 +825,8 @@
           "revision": "336b2ec4e8d4ac74740798dd40af44e74659ecaf",
           "size_mb": 1,
           "required": true,
-          "note": "BigVGAN vocoder 配置"
+          "note": "BigVGAN vocoder 配置",
+          "sha256": "d77e2c96583ca2296ac112a56ec7cc6bd5da4bf7681ceff18448bedc4fcf6512"
         }
       ],
       "env_key": "GPT_SOVITS_CHECKPOINT_DIR"

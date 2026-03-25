@@ -23,6 +23,7 @@ BASE_ENGINES = {
     "faster_whisper",
     "fish_speech",
     "gpt_sovits",
+    "liveportrait",
     "rvc",
     "seed_vc",
     "voices",  # 内置音色

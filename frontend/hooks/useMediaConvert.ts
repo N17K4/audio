@@ -40,8 +40,6 @@ export function useMediaConvert({
   const [endMin, setEndMin] = useState('');
   const [endSec, setEndSec] = useState('');
 
-  // 字幕工具
-  const [subtitleOutputFmt, setSubtitleOutputFmt] = useState<'srt' | 'vtt'>('srt');
   const [hwAccel, setHwAccel] = useState('auto');
 
   const abortCtrlRef = useRef<AbortController | null>(null);
@@ -96,37 +94,6 @@ export function useMediaConvert({
     }
   }
 
-  async function runSubtitleConvert() {
-    if (!mediaFile) { setError('请选择字幕或视频文件'); return; }
-    if (!outputDir.trim()) { setError('请选择输出目录'); return; }
-    setError('');
-    setStatus('processing');
-    setProcessingStartTime(Date.now());
-    const ctrl = new AbortController();
-    abortCtrlRef.current = ctrl;
-    const actionLabel = mediaAction === 'subtitle_extract' ? '提取字幕' : '字幕互转';
-    const label = `${actionLabel} · ${mediaFile.name}`;
-    const jobId = addPendingJob('media', label, 'ffmpeg', false);
-    try {
-      const fd = new FormData();
-      fd.append('file', mediaFile);
-      fd.append('action', mediaAction === 'subtitle_extract' ? 'extract' : 'convert');
-      fd.append('output_format', subtitleOutputFmt);
-      fd.append('output_dir', outputDir);
-      const res = await fetch(`${backendBaseUrl}/tasks/subtitle`, { method: 'POST', body: fd, signal: ctrl.signal });
-      const data = await safeJson(res);
-      if (!res.ok) throw new Error(`处理失败（${res.status}）${data?.detail ? `：${data.detail}` : ''}`);
-      resolveJob(jobId, { status: 'completed', result_url: data?.result_url });
-    } catch (e: any) {
-      if (e?.name === 'AbortError') { setError('已取消'); resolveJob(jobId, { status: 'failed', error: '已取消' }); }
-      else { resolveJob(jobId, { status: 'failed', error: e instanceof Error ? e.message : '处理失败' }); }
-    } finally {
-      setStatus('idle');
-      setProcessingStartTime(null);
-      abortCtrlRef.current = null;
-    }
-  }
-
   function abortCurrentRequest() { abortCtrlRef.current?.abort(); }
 
   return {
@@ -140,10 +107,8 @@ export function useMediaConvert({
     durationSec, setDurationSec,
     endMin, setEndMin,
     endSec, setEndSec,
-    subtitleOutputFmt, setSubtitleOutputFmt,
     hwAccel, setHwAccel,
     runMediaConvert,
-    runSubtitleConvert,
     abortCurrentRequest,
   };
 }

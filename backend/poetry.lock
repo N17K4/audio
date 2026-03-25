@@ -1195,7 +1195,7 @@ version = "0.6.0"
 description = "FFMPEG wrapper for Python"
 optional = false
 python-versions = ">=3.9"
-groups = ["engines-extra"]
+groups = ["main"]
 files = [
     {file = "imageio_ffmpeg-0.6.0-py3-none-macosx_10_9_intel.macosx_10_9_x86_64.whl", hash = "sha256:9d2baaf867088508d4a3458e61eeb30e945c4ad8016025545f66c4b5aaef0a61"},
     {file = "imageio_ffmpeg-0.6.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:b1ae3173414b5fc5f538a726c4e48ea97edc0d2cdc11f103afee655c463fa742"},
@@ -4609,4 +4609,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "c9c307234f33ebad0cb242b7644ea4a1b3fa9f9437a060367aee76648a05dfc9"
+content-hash = "6d6d4a650ec07a6b9974127849f17d97abc51357a98bd3002d35b65172736f6c"

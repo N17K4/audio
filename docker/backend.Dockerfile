@@ -133,7 +133,6 @@ WORKDIR /app
 # ── 実行時システム依赖のみ（コンパイラなし） ────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
-        pandoc \
         git \
         curl \
         libsndfile1 \

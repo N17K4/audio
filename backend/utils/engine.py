@@ -289,18 +289,16 @@ def get_embedded_python() -> str:
 
 
 def get_ffmpeg_binary() -> str:
-    """返回 FFmpeg 可执行路径。优先打包的静态二进制，开发模式回退到系统 ffmpeg。"""
-    import sys as _sys
+    """返回 FFmpeg 可执行路径。优先 imageio-ffmpeg 包内置二进制，回退到系统 ffmpeg。"""
     import shutil as _shutil
-    if _sys.platform == "win32":
-        bundled = RUNTIME_ROOT / "bin" / "win" / "ffmpeg.exe"
-    elif _sys.platform == "linux":
-        bundled = RUNTIME_ROOT / "bin" / "linux" / "ffmpeg"
-    else:
-        bundled = RUNTIME_ROOT / "bin" / "mac" / "ffmpeg"
-    if bundled.exists():
-        logger.debug("[ffmpeg] 使用打包二进制: %s", bundled)
-        return str(bundled.resolve())
+    try:
+        import imageio_ffmpeg
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if exe:
+            logger.debug("[ffmpeg] 使用 imageio-ffmpeg 内置二进制: %s", exe)
+            return exe
+    except Exception:
+        pass
     system_ffmpeg = _shutil.which("ffmpeg")
     if system_ffmpeg:
         logger.debug("[ffmpeg] 使用系统 ffmpeg: %s", system_ffmpeg)
@@ -309,25 +307,6 @@ def get_ffmpeg_binary() -> str:
     return ""
 
 
-def get_pandoc_binary() -> str:
-    """返回 pandoc 可执行路径。优先打包的静态二进制，开发模式回退到系统 pandoc。"""
-    import sys as _sys
-    import shutil as _shutil
-    if _sys.platform == "win32":
-        bundled = RUNTIME_ROOT / "bin" / "win" / "pandoc.exe"
-    elif _sys.platform == "linux":
-        bundled = RUNTIME_ROOT / "bin" / "linux" / "pandoc"
-    else:
-        bundled = RUNTIME_ROOT / "bin" / "mac" / "pandoc"
-    if bundled.exists():
-        logger.debug("[pandoc] 使用打包二进制: %s", bundled)
-        return str(bundled.resolve())
-    system_pandoc = _shutil.which("pandoc")
-    if system_pandoc:
-        logger.debug("[pandoc] 使用系统 pandoc: %s", system_pandoc)
-        return system_pandoc
-    logger.warning("[pandoc] 未找到 pandoc，文档互转功能不可用")
-    return ""
 
 
 def build_engine_env(engine: str) -> Dict[str, str]:

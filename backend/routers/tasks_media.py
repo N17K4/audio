@@ -18,7 +18,7 @@ from job_queue import _make_job
 from logging_setup import logger
 from services.llm.gemini_llm import run_gemini_audio_understanding, run_gemini_realtime_bootstrap
 from services.llm.openai_audio import run_openai_audio_understanding, run_openai_realtime_bootstrap
-from utils.engine import get_ffmpeg_binary, get_pandoc_binary, build_ffmpeg_video_encode_flags
+from utils.engine import get_ffmpeg_binary, build_ffmpeg_video_encode_flags
 from utils.voices import copy_to_output_dir
 
 router = APIRouter()
@@ -125,14 +125,14 @@ async def task_audio_understanding(
 @router.post("/tasks/media-convert")
 async def task_media_convert(
     file: UploadFile = File(...),
-    action: str = Form("convert"),      # convert | extract_audio | clip
+    action: str = Form("convert"),      # convert | clip
     output_format: str = Form("mp3"),   # mp3 | wav | m4a
     start_time: str = Form(""),         # HH:MM:SS，clip 时用
     duration: str = Form(""),           # HH:MM:SS，clip 时用
     output_dir: str = Form(""),
     hw_accel: str = Form("auto"),       # auto | videotoolbox | nvenc | qsv | amf | software
 ):
-    """媒体格式转换：音频互转、视频提取音频、截取片段。依赖 FFmpeg 静态二进制。"""
+    """媒体格式转换：音频互转、截取片段。依赖 FFmpeg 静态二进制。"""
     import os
     ffmpeg = get_ffmpeg_binary()
     if not ffmpeg:
@@ -154,7 +154,7 @@ async def task_media_convert(
         raise HTTPException(status_code=400, detail=f"不支持的输出格式: {fmt}")
 
     filename_stem = Path(file.filename or "media").stem
-    action_label = {"convert": "格式转换", "extract_audio": "提取音频", "clip": "截取片段"}.get(act, act)
+    action_label = {"convert": "格式转换", "clip": "截取片段"}.get(act, act)
     job = _make_job("media_convert", f"{action_label} · {filename_stem}", "FFmpeg", is_local=False, params={"action": act, "output_format": fmt})
     job_id = job["id"]
     job["status"] = "running"
@@ -179,8 +179,6 @@ async def task_media_convert(
                 cmd = BASE + ["-i", str(input_path)] + hw_flags + ["-c:a", "copy", str(output_path)]
             else:
                 cmd = BASE + ["-i", str(input_path), "-vn", str(output_path)]
-        elif act == "extract_audio":
-            cmd = BASE + ["-i", str(input_path), "-vn", str(output_path)]
         elif act == "clip":
             if not start_time.strip():
                 raise HTTPException(status_code=400, detail="clip 操作需要 start_time")
@@ -240,360 +238,3 @@ async def task_media_convert(
                 input_path.unlink()
             except Exception:
                 pass
-
-
-@router.post("/tasks/doc-convert")
-async def task_doc_convert(
-    file: UploadFile = File(...),
-    action: str = Form("pdf_to_word"),    # pdf_to_word | doc_convert | pdf_extract
-    output_format: str = Form("docx"),    # doc_convert 时用
-    extract_mode: str = Form("text"),     # pdf_extract 时用：text | images
-    output_dir: str = Form(""),
-):
-    """文档转换：PDF 转 Word（pdf2docx）、文档互转（pandoc）、PDF 提取（PyMuPDF）。"""
-    import os, zipfile
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="上传文件为空")
-
-    act = action.strip().lower()
-    task_id = str(uuid.uuid4())
-    in_ext = os.path.splitext(file.filename or "")[1] or ".bin"
-    input_path = DOWNLOAD_DIR / f"{task_id}_doc_input{in_ext}"
-    input_path.write_bytes(content)
-
-    output_path = None
-    try:
-        if act == "pdf_to_word":
-            try:
-                from pdf2docx import Converter  # type: ignore
-            except ImportError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="pdf2docx 未安装。请运行 pnpm run setup 安装依赖，或执行 poetry add pdf2docx。",
-                )
-            output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.docx"
-            def _convert():
-                cv = Converter(str(input_path))
-                cv.convert(str(output_path))
-                cv.close()
-            await asyncio.to_thread(_convert)
-
-        elif act == "doc_convert":
-            pandoc = get_pandoc_binary()
-            if not pandoc:
-                raise HTTPException(
-                    status_code=500,
-                    detail="pandoc 未找到。请在系统中安装 pandoc（https://pandoc.org/installing.html）或将二进制放置于 runtime/{platform}/bin/pandoc。",
-                )
-            fmt = output_format.strip().lower() or "docx"
-            output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.{fmt}"
-            cmd = [pandoc, "-o", str(output_path), str(input_path)]
-            logger.debug("[doc-convert] pandoc cmd: %s", " ".join(cmd))
-            completed = await asyncio.to_thread(
-                subprocess.run, cmd, capture_output=True, text=True, timeout=120
-            )
-            if completed.returncode != 0:
-                stderr = (completed.stderr or "").strip()[:1000]
-                raise HTTPException(status_code=500, detail=f"pandoc 失败: {stderr}")
-
-        elif act == "pdf_extract":
-            try:
-                import fitz  # type: ignore  # PyMuPDF
-            except ImportError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="PyMuPDF 未安装。请运行 pnpm run setup 安装依赖，或执行 poetry add pymupdf。",
-                )
-            mode = extract_mode.strip().lower()
-            if mode == "images":
-                output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.zip"
-                def _extract_images():
-                    doc = fitz.open(str(input_path))
-                    with zipfile.ZipFile(str(output_path), "w") as zf:
-                        for page_num in range(len(doc)):
-                            page = doc[page_num]
-                            for img_idx, img in enumerate(page.get_images()):
-                                xref = img[0]
-                                base_image = doc.extract_image(xref)
-                                ext = base_image.get("ext", "png")
-                                zf.writestr(f"page{page_num + 1}_img{img_idx + 1}.{ext}", base_image["image"])
-                    doc.close()
-                await asyncio.to_thread(_extract_images)
-            else:
-                output_path = DOWNLOAD_DIR / f"{task_id}_doc_output.txt"
-                def _extract_text():
-                    doc = fitz.open(str(input_path))
-                    text = "".join(page.get_text() for page in doc)
-                    doc.close()
-                    output_path.write_text(text, encoding="utf-8")
-                await asyncio.to_thread(_extract_text)
-        else:
-            raise HTTPException(status_code=400, detail=f"不支持的 action: {action}")
-
-        if not output_path or not output_path.exists() or output_path.stat().st_size == 0:
-            raise HTTPException(status_code=500, detail="转换完成但输出文件缺失或为空")
-
-        copy_to_output_dir(output_path, output_dir)
-        result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{output_path.name}"
-        return {
-            "status": "success",
-            "task": "doc_convert",
-            "action": act,
-            "result_url": result_url,
-            "size_bytes": output_path.stat().st_size,
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("[doc-convert] 异常:\n%s", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"文档转换失败: {exc}")
-    finally:
-        if input_path.exists():
-            try:
-                input_path.unlink()
-            except Exception:
-                pass
-
-
-# ─── 字幕工具 ─────────────────────────────────────────────────────────────────
-
-def _srt_ts_to_vtt(line: str) -> str:
-    import re
-    return re.sub(r'(\d{2}:\d{2}:\d{2}),(\d{3})', r'\1.\2', line)
-
-def _vtt_ts_to_srt(line: str) -> str:
-    import re
-    return re.sub(r'(\d{2}:\d{2}:\d{2})\.(\d{3})', r'\1,\2', line)
-
-def _convert_subtitle(content: str, src_fmt: str, dst_fmt: str) -> str:
-    lines = content.replace('\r\n', '\n').strip().split('\n')
-    if src_fmt == dst_fmt:
-        return content
-    if src_fmt == 'srt' and dst_fmt == 'vtt':
-        out = ['WEBVTT', '']
-        seq = 0
-        for line in lines:
-            stripped = line.strip()
-            if stripped.isdigit():
-                seq += 1
-                out.append(str(seq))
-            elif '-->' in stripped:
-                out.append(_srt_ts_to_vtt(stripped))
-            else:
-                out.append(stripped)
-        return '\n'.join(out)
-    if src_fmt == 'vtt' and dst_fmt == 'srt':
-        out = []
-        idx = 1
-        for line in lines:
-            stripped = line.strip()
-            if stripped in ('WEBVTT', '') or stripped.startswith('NOTE') or stripped.startswith('STYLE'):
-                continue
-            if '-->' in stripped:
-                out.append(str(idx))
-                out.append(_vtt_ts_to_srt(stripped))
-                idx += 1
-            else:
-                out.append(stripped)
-        return '\n'.join(out)
-    raise ValueError(f"不支持的转换方向: {src_fmt} → {dst_fmt}")
-
-
-@router.post("/tasks/subtitle")
-async def task_subtitle(
-    file: UploadFile = File(...),
-    action: str = Form("convert"),        # convert | extract
-    output_format: str = Form("srt"),     # srt | vtt
-    output_dir: str = Form(""),
-):
-    """字幕工具：字幕格式互转（SRT↔VTT）、从视频提取字幕（FFmpeg）。"""
-    import os
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="上传文件为空")
-
-    act = action.strip().lower()
-    dst_fmt = output_format.strip().lower() or "srt"
-    task_id = str(uuid.uuid4())
-    in_ext = os.path.splitext(file.filename or "")[1].lstrip('.').lower() or "bin"
-    input_path = DOWNLOAD_DIR / f"{task_id}_sub_input.{in_ext}"
-    input_path.write_bytes(content)
-    output_path = DOWNLOAD_DIR / f"{task_id}_sub_output.{dst_fmt}"
-
-    try:
-        if act == "convert":
-            src_fmt = in_ext if in_ext in ('srt', 'vtt', 'ass') else 'srt'
-            if src_fmt == dst_fmt:
-                raise HTTPException(status_code=400, detail="输入输出格式相同，无需转换")
-            if src_fmt not in ('srt', 'vtt') or dst_fmt not in ('srt', 'vtt'):
-                raise HTTPException(status_code=400, detail=f"暂不支持 {src_fmt} → {dst_fmt} 转换（仅支持 SRT↔VTT）")
-            text = content.decode('utf-8', errors='replace')
-            result_text = _convert_subtitle(text, src_fmt, dst_fmt)
-            output_path.write_text(result_text, encoding='utf-8')
-
-        elif act == "extract":
-            ffmpeg = get_ffmpeg_binary()
-            if not ffmpeg:
-                raise HTTPException(status_code=500, detail="FFmpeg 未找到，无法提取字幕")
-            cmd = [ffmpeg, "-hide_banner", "-y", "-i", str(input_path), "-map", "0:s:0", str(output_path)]
-            logger.debug("[subtitle] extract cmd: %s", " ".join(cmd))
-            completed = await asyncio.to_thread(
-                subprocess.run, cmd, capture_output=True, text=True, timeout=120
-            )
-            if completed.returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
-                raise HTTPException(status_code=500, detail="视频中未找到字幕轨道，或提取失败")
-        else:
-            raise HTTPException(status_code=400, detail=f"不支持的 action: {action}")
-
-        copy_to_output_dir(output_path, output_dir)
-        result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{output_path.name}"
-        return {"status": "success", "task": "subtitle", "action": act, "result_url": result_url}
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("[subtitle] 异常:\n%s", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"字幕处理失败: {exc}")
-    finally:
-        if input_path.exists():
-            try: input_path.unlink()
-            except Exception: pass
-
-
-# ─── 工具箱 ───────────────────────────────────────────────────────────────────
-
-@router.post("/tasks/toolbox")
-async def task_toolbox(
-    action: str = Form(...),             # image_convert | qr_generate | qr_decode | text_encoding
-    file: Optional[UploadFile] = File(None),
-    text_input: str = Form(""),          # qr_generate / text_encoding 时输入文本
-    output_format: str = Form("png"),    # image_convert 输出格式 / text_encoding 目标编码
-    resize_w: str = Form(""),
-    resize_h: str = Form(""),
-    quality: str = Form("85"),
-    output_dir: str = Form(""),
-):
-    """工具箱：图片处理（Pillow）、二维码生成/识别（qrcode+zxing-cpp）、文本编码转换。"""
-    import os, io
-    act = action.strip().lower()
-    task_id = str(uuid.uuid4())
-    input_path = None
-    output_path = None
-
-    try:
-        # ── 图片处理 ──
-        if act == "image_convert":
-            try:
-                from PIL import Image  # type: ignore
-            except ImportError:
-                raise HTTPException(status_code=500, detail="Pillow 未安装，请运行 pnpm run setup:dev")
-            if not file or not file.filename:
-                raise HTTPException(status_code=400, detail="请上传图片文件")
-            content = await file.read()
-            in_ext = os.path.splitext(file.filename)[1].lstrip('.').lower() or "bin"
-            input_path = DOWNLOAD_DIR / f"{task_id}_tbx_input.{in_ext}"
-            input_path.write_bytes(content)
-
-            fmt = output_format.strip().lower() or "png"
-            fmt_map = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP", "bmp": "BMP"}
-            pil_fmt = fmt_map.get(fmt, fmt.upper())
-            output_path = DOWNLOAD_DIR / f"{task_id}_tbx_output.{fmt}"
-
-            def _img_convert():
-                img = Image.open(str(input_path))
-                w_str = resize_w.strip()
-                h_str = resize_h.strip()
-                if w_str or h_str:
-                    orig_w, orig_h = img.size
-                    nw = int(w_str) if w_str else int(orig_w * int(h_str) / orig_h)
-                    nh = int(h_str) if h_str else int(orig_h * nw / orig_w)
-                    img = img.resize((nw, nh), Image.LANCZOS)
-                if pil_fmt == "JPEG" and img.mode in ("RGBA", "LA", "P"):
-                    img = img.convert("RGB")
-                q = max(1, min(95, int(quality or "85")))
-                img.save(str(output_path), format=pil_fmt, quality=q)
-            await asyncio.to_thread(_img_convert)
-
-        # ── 二维码生成 ──
-        elif act == "qr_generate":
-            try:
-                import qrcode as _qrcode  # type: ignore
-            except ImportError:
-                raise HTTPException(status_code=500, detail="qrcode 未安装，请运行 pnpm run setup:dev")
-            if not text_input.strip():
-                raise HTTPException(status_code=400, detail="请输入要生成二维码的文字")
-            output_path = DOWNLOAD_DIR / f"{task_id}_tbx_qr.png"
-            def _gen_qr():
-                qr = _qrcode.QRCode(error_correction=_qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-                qr.add_data(text_input.strip())
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                img.save(str(output_path))
-            await asyncio.to_thread(_gen_qr)
-
-        # ── 二维码识别 ──
-        elif act == "qr_decode":
-            try:
-                import zxingcpp  # type: ignore
-                from PIL import Image  # type: ignore
-            except ImportError:
-                raise HTTPException(status_code=500, detail="zxing-cpp 或 Pillow 未安装，请运行 pnpm run setup:dev")
-            if not file or not file.filename:
-                raise HTTPException(status_code=400, detail="请上传包含二维码的图片")
-            content = await file.read()
-            in_ext = os.path.splitext(file.filename)[1].lstrip('.').lower() or "png"
-            input_path = DOWNLOAD_DIR / f"{task_id}_tbx_input.{in_ext}"
-            input_path.write_bytes(content)
-            def _decode_qr():
-                img = Image.open(str(input_path))
-                results = zxingcpp.read_barcodes(img)
-                if not results:
-                    raise ValueError("未识别到二维码或条形码")
-                return "\n".join(r.text for r in results)
-            decoded_text = await asyncio.to_thread(_decode_qr)
-            return {"status": "success", "task": "toolbox", "action": act, "result_text": decoded_text}
-
-        # ── 文本编码转换 ──
-        elif act == "text_encoding":
-            if not file or not file.filename:
-                raise HTTPException(status_code=400, detail="请上传文本文件")
-            content = await file.read()
-            in_ext = os.path.splitext(file.filename)[1].lstrip('.').lower() or "txt"
-            input_path = DOWNLOAD_DIR / f"{task_id}_tbx_input.{in_ext}"
-            input_path.write_bytes(content)
-
-            target_enc = output_format.strip() or "utf-8"
-            output_path = DOWNLOAD_DIR / f"{task_id}_tbx_output.txt"
-
-            def _convert_encoding():
-                from charset_normalizer import from_bytes  # type: ignore  # 随 requests 安装
-                result = from_bytes(content).best()
-                src_enc = result.encoding if result else "utf-8"
-                text = content.decode(src_enc, errors="replace")
-                output_path.write_text(text, encoding=target_enc, errors="replace")
-                return src_enc
-            src_enc_detected = await asyncio.to_thread(_convert_encoding)
-            copy_to_output_dir(output_path, output_dir)
-            result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{output_path.name}"
-            return {"status": "success", "task": "toolbox", "action": act,
-                    "result_url": result_url, "result_text": f"检测到原始编码: {src_enc_detected}"}
-        else:
-            raise HTTPException(status_code=400, detail=f"不支持的 action: {action}")
-
-        if output_path and output_path.exists():
-            copy_to_output_dir(output_path, output_dir)
-            result_url = f"http://{BACKEND_HOST}:{BACKEND_PORT}/download/{output_path.name}"
-            return {"status": "success", "task": "toolbox", "action": act, "result_url": result_url}
-        raise HTTPException(status_code=500, detail="处理完成但输出文件缺失")
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("[toolbox] 异常:\n%s", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"工具箱处理失败: {exc}")
-    finally:
-        for p in [input_path]:
-            if p and p.exists():
-                try: p.unlink()
-                except Exception: pass

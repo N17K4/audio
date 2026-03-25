@@ -9,7 +9,6 @@ interface SystemPanelProps {
 }
 
 const NAV_ITEMS = [
-  { id: 'about',   label: '功能说明',   electronOnly: false, keywords: ['功能', '说明', '关于', '引擎'] },
   { id: 'models',  label: '模型管理',   electronOnly: false, keywords: ['模型', '磁盘', '安装', '卸载', '下载', '体积', '清除', '重置', '重新下载', '数据'] },
   { id: 'perf',    label: '性能',       electronOnly: false, keywords: ['并发', '性能', '推理', '并行'] },
 ] as const;
@@ -78,7 +77,7 @@ function Card({
 }
 
 export default function SystemPanel({ backendBaseUrl, isElectron, externalSection }: SystemPanelProps) {
-  const [activeSection, setActiveSection] = useState<SectionId>('about');
+  const [activeSection, setActiveSection] = useState<SectionId>('models');
   const effectiveSection = (externalSection as SectionId) || activeSection;
   const isEmbedded = !!externalSection;
 
@@ -146,7 +145,10 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
 
   // ── 切换 section 时自动刷新 ──────────────────────────────────────────────────
   useEffect(() => {
-    if (effectiveSection === 'models' && backendBaseUrl) { doRefreshDisk(); }
+    if (effectiveSection === 'models' && backendBaseUrl) {
+      doRefreshDisk();
+      ['ml_base', 'checkpoints_base'].forEach(stage => toggleStageLog(stage));
+    }
   }, [effectiveSection]);
 
   async function doRefreshDisk() {
@@ -263,11 +265,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     const STAGE_META: Record<string, { label: string; cmd: string; desc: string; estimatedSize: string }> = {
       setup:             { label: '运行环境',         cmd: 'pnpm run runtime',           desc: '嵌入式 Python + 后端依赖 + 全部引擎 pip 包与源码 + FFmpeg + Pandoc',                estimatedSize: '~600 MB' },
       ml_base:           { label: 'ML 基础依赖',      cmd: 'pnpm run ml',                desc: 'torch · torchaudio · transformers 等基础引擎 ML 运行库',                           estimatedSize: '~2–4 GB' },
-      ml_extra:          { label: 'ML 扩展依赖',      cmd: 'pnpm run ml:extra',          desc: 'RAG（llama-index · faiss）· Agent（langgraph）· LoRA（peft · trl）',                estimatedSize: '~500 MB–1 GB' },
       checkpoints_base:  { label: '基础模型权重',     cmd: 'pnpm run checkpoints',       desc: 'Fish Speech · GPT-SoVITS · Seed-VC · RVC · FaceFusion 模型 + 内置音色',             estimatedSize: '~8–10 GB' },
-      checkpoints_extra: { label: '扩展模型权重',     cmd: 'pnpm run checkpoints:extra', desc: 'Whisper · Flux · SD-Turbo · Wan · GOT-OCR · LivePortrait 模型（按需安装，体积较大）', estimatedSize: '~20–40 GB' },
     };
-    const STAGE_ORDER = ['setup', 'ml_base', 'ml_extra', 'checkpoints_base', 'checkpoints_extra'] as const;
+    const STAGE_ORDER = ['ml_base', 'checkpoints_base'] as const;
 
     if (!diskRows) {
       return (
@@ -419,7 +419,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
           const rows = stageMap.get(stage) ?? [];
           const stageSize = rows.reduce((s, r) => s + Math.max(0, r.size), 0);
           const isBusy = (stageStatus[stage] ?? 'idle') !== 'idle';
-          const panel = stagePanel[stage] ?? 'info';
 
           return (
             <div key={stage} className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
@@ -433,10 +432,9 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                     </span>
                     <span className="text-xs text-slate-400">预计 {meta.estimatedSize}</span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{meta.desc}</p>
                 </div>
                 <span className="text-sm font-bold text-slate-600 dark:text-slate-300 tabular-nums shrink-0">{fmtSize(stageSize)}</span>
-                {stage !== 'setup' && (
+                {(
                   isBusy && stageStatus[stage] === 'reinstalling' ? (
                     <button
                       className="shrink-0 rounded border border-rose-300 dark:border-rose-700 px-2.5 py-1 text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all flex items-center gap-1"
@@ -458,66 +456,14 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
                 )}
               </div>
 
-              {/* 介绍 / 日志 按钮栏 */}
-              <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-2 flex items-center gap-3">
-                <button
-                  className={`text-xs transition-colors ${panel === 'info' ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                  onClick={() => toggleStagePanel(stage, 'info')}>
-                  介绍
-                </button>
-                <button
-                  className={`text-xs transition-colors ${panel === 'log' ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                  onClick={() => toggleStagePanel(stage, 'log')}>
-                  日志
-                </button>
-                {panel === 'log' && (
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">download-{stage}.log</span>
-                )}
+              {/* 日志面板（常时展开） */}
+              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
+                <pre
+                  className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
+                  style={{ maxHeight: '14rem' }}>
+                  {stageLogContent[stage] ?? '（加载中…）'}
+                </pre>
               </div>
-
-              {/* 介绍面板：子项列表 */}
-              {panel === 'info' && (
-                <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
-                  {rows.length > 0 ? rows.map(r => (
-                    <div key={r.key} className="flex items-center gap-4 px-5 py-2.5 pl-8 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
-                      <div className="flex-1 min-w-0 text-left">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                            {r.label}
-                          </span>
-                          {r.estimatedSizeMb != null && r.estimatedSizeMb > 0 && (
-                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono leading-none bg-slate-100 dark:bg-slate-700 text-slate-400">
-                              ~{r.estimatedSizeMb >= 1024 ? `${(r.estimatedSizeMb / 1024).toFixed(1)} GB` : `${r.estimatedSizeMb} MB`}
-                            </span>
-                          )}
-                        </div>
-                        {r.sub && (
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono break-all leading-tight">{r.sub}</div>
-                        )}
-                        {r.desc && (
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-relaxed">{r.desc}</div>
-                        )}
-                      </div>
-                      <span className="w-16 text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
-                        {fmtSize(r.size)}
-                      </span>
-                    </div>
-                  )) : (
-                    <div className="px-5 py-3 pl-8 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">{meta.desc}</div>
-                  )}
-                </div>
-              )}
-
-              {/* 日志面板 */}
-              {panel === 'log' && (
-                <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
-                  <pre
-                    className="rounded border border-slate-800 bg-slate-950 text-green-400 p-4 text-xs font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap break-all"
-                    style={{ maxHeight: '14rem' }}>
-                    {stageLogContent[stage] ?? '（加载中…）'}
-                  </pre>
-                </div>
-              )}
             </div>
           );
         })}
@@ -570,92 +516,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
     );
   }
 
-  function SectionAbout() {
-    const Table = ({ children }: { children: React.ReactNode }) => (
-      <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
-        <table className="text-xs w-full table-fixed">{children}</table>
-      </div>
-    );
-    const Thead = ({ cols, color = SPRING_GREEN }: { cols: { label: string; w: string }[]; color?: string }) => (
-      <thead>
-        <tr className="text-xs font-bold text-white" style={{ backgroundColor: color }}>
-          {cols.map(c => <th key={c.label} className={`text-left px-3 py-2.5 ${c.w}`}>{c.label}</th>)}
-        </tr>
-      </thead>
-    );
-    const Row3 = ({ row }: { row: string[] }) => (
-      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0">
-        <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
-        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[1]}</td>
-        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[2]}</td>
-      </tr>
-    );
-    const Row5 = ({ row }: { row: string[] }) => (
-      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0">
-        <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300">{row[0]}</td>
-        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[1]}</td>
-        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{row[2]}</td>
-        <td className="px-3 py-2.5 text-slate-400 dark:text-slate-500">{row[3]}</td>
-        <td className="px-3 py-2.5 text-slate-400 dark:text-slate-500">{row[4]}</td>
-      </tr>
-    );
-
-    return (
-      <div className="space-y-5">
-        <Card title="基本功能" accent accentColor={SPRING_GREEN}>
-          <Table>
-            <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} />
-            <tbody>
-              {[
-                ['TTS 文本转语音', 'Fish Speech', 'OpenAI · Gemini · ElevenLabs · Cartesia · DashScope'],
-                ['VC 音色转换', 'RVC · Seed-VC', 'ElevenLabs'],
-                ['STT 语音转文字', 'Whisper', 'OpenAI · Gemini · Groq · Deepgram'],
-                ['LLM 聊天', 'Ollama', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
-                ['语音聊天', 'Whisper + Ollama + Fish Speech', 'OpenAI Realtime · Gemini Live'],
-                ['音视频格式转换', 'FFmpeg（内置）', '—'],
-                ['文档转换 / PDF', 'pdf2docx · pandoc · PyMuPDF', '—'],
-              ].map(row => <Row3 key={row[0]} row={row} />)}
-            </tbody>
-          </Table>
-        </Card>
-
-        <Card title="扩展功能" accent accentColor="#8b5cf6">
-          <Table>
-            <Thead cols={[{ label: '功能', w: 'w-[28%]' }, { label: '本地引擎', w: 'w-[28%]' }, { label: '云端服务商', w: 'w-[44%]' }]} color="#8b5cf6" />
-            <tbody>
-              {[
-                ['图像生成', 'SD-Turbo · Flux.1-Schnell GGUF · ComfyUI', 'OpenAI DALL-E 3 · Gemini Imagen 3 · Stability AI · DashScope'],
-                ['图像理解', 'Ollama（LLaVA · moondream）', 'OpenAI GPT-4o · Gemini Vision · Claude Vision'],
-                ['文字翻译', 'Ollama', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
-                ['代码助手', 'Ollama（Qwen-Coder · DeepSeek-Coder）', 'OpenAI · Gemini · Claude · DeepSeek · Groq · Mistral · xAI · GitHub'],
-              ].map(row => <Row3 key={row[0]} row={row} />)}
-            </tbody>
-          </Table>
-        </Card>
-
-        <Card title="进阶功能参考" accent accentColor="#d97706">
-          <Table>
-            <Thead cols={[
-              { label: '功能领域',              w: 'w-[14%]' },
-              { label: '推荐本地（4050 6GB）',   w: 'w-[20%]' },
-              { label: '推荐云端（生产环境）',   w: 'w-[18%]' },
-              { label: '4050 优化方向',          w: 'w-[28%]' },
-              { label: 'MBP 32GB 表现',          w: 'w-[20%]' },
-            ]} color="#d97706" />
-            <tbody>
-              {[
-                ['图像生成',  'Flux.1-Schnell GGUF Q4', 'Midjourney',                  'Schnell 是 6GB 显存下的速度之王',          '优（可跑 Dev 版 FP8 高质模型）'],
-                ['换脸/动作', 'FaceFusion 3.x',         'Replicate（InsightFace）',    '4050 跑实时推理极稳，无需云端',            '良（MPS 加速下兼容性较好）'],
-                ['视频生成',  'Wan 2.1（1.3B）',        'Kling（可灵）/ Runway',       '本地仅能做 2-3 秒预览，成品必须云端',      '差（内存交换频繁，不建议）'],
-                ['OCR / 文档','GOT-OCR2.0',             'Azure Doc Intelligence',       '本地运行轻量级，满足日常识别',             '极优（大内存处理高密文档）'],
-                ['口型同步',  'LivePortrait FP16',       'HeyGen',                      '4050 跑 LivePortrait 对延迟优化极好',      '中（仅能处理轻量级任务）'],
-              ].map(row => <Row5 key={row[0]} row={row} />)}
-            </tbody>
-          </Table>
-        </Card>
-      </div>
-    );
-  }
 
   // ── render ────────────────────────────────────────────────────────────────────
   return (
@@ -802,7 +662,6 @@ export default function SystemPanel({ backendBaseUrl, isElectron, externalSectio
         <div className={isEmbedded ? '' : 'max-w-4xl px-8 py-6'}>
           {effectiveSection === 'perf'   && <SectionPerf />}
           {effectiveSection === 'models' && <SectionModels />}
-          {effectiveSection === 'about'  && <SectionAbout />}
         </div>
       </div>
     </div>

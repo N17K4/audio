@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import type { TaskType, MiscSubPage, MediaAction, DocSubPage, ToolboxSubPage } from '../types';
+import { useEffect, useState } from 'react';
+import type { TaskType, MiscSubPage } from '../types';
 import { TASK_LABELS, TASK_PHASES, TASK_ICON_CFG, LOCAL_PROVIDERS, URL_ONLY_PROVIDERS } from '../constants';
 import { fieldCls, fileCls, labelCls, btnSec } from '../constants/styles';
 
@@ -11,11 +11,7 @@ import { useJobs } from '../hooks/useJobs';
 import { useTTS } from '../hooks/useTTS';
 import { useVC } from '../hooks/useVC';
 import { useASR } from '../hooks/useASR';
-import { useLLM } from '../hooks/useLLM';
-import { useVoiceChat } from '../hooks/useVoiceChat';
 import { useMediaConvert } from '../hooks/useMediaConvert';
-import { useDocConvert } from '../hooks/useDocConvert';
-import { useToolbox } from '../hooks/useToolbox';
 import { useMisc } from '../hooks/useMisc';
 import { useImageExt } from '../hooks/useImageExt';
 import { useNavigation } from '../hooks/useNavigation';
@@ -33,14 +29,8 @@ import TaskIcon from './icons/TaskIcon';
 import TtsPanel from './panels/TtsPanel';
 import VcPanel from './panels/VcPanel';
 import AsrPanel from './panels/AsrPanel';
-import LlmPanel from './panels/LlmPanel';
-import VoiceChatPanel from './panels/VoiceChatPanel';
-import MediaPanel from './panels/MediaPanel';
-import DocPanel from './panels/DocPanel';
 import MiscPanel from './panels/MiscPanel';
-import RagPanel from './panels/RagPanel';
-import AgentPanel from './panels/AgentPanel';
-import FinetunePanel from './panels/FinetunePanel';
+import MediaPanel from './panels/MediaPanel';
 
 export default function AppShell() {
   // ─── App state ─────────────────────────────────────────────────────────────
@@ -90,16 +80,13 @@ export default function AppShell() {
 
   const {
     taskType, setTaskType,
-    showHome, showTasks, showAudioTools, showFormatConvert,
-    showImageTools, showVideoTools, showTextTools, showAdvancedTools,
+    showHome, showTasks, showAudioTools,
+    showImageTools, showVideoTools, showFormatConvert,
     tasksTab, setTasksTab,
-    advancedSubPage, setAdvancedSubPage,
-    textSubPage, setTextSubPage,
-    formatGroup, setFormatGroup,
-    hwAccelDetected,
     currentPage,
     navigate,
   } = nav;
+
 
   // Sync persisted taskType from appState into navigation
   useEffect(() => {
@@ -200,46 +187,8 @@ export default function AppShell() {
     addInstantJobResult,
   });
 
-  // ─── LLM ──────────────────────────────────────────────────────────────────
-  const llm = useLLM({
-    backendBaseUrl: backend.backendBaseUrl,
-    selectedProvider,
-    apiKey,
-    cloudEndpoint,
-    needsAuth,
-    setError,
-  });
-
-  // ─── Voice Chat ────────────────────────────────────────────────────────────
-  const voiceChat = useVoiceChat({
-    backendBaseUrl: backend.backendBaseUrl,
-    setError,
-    pollJobResult,
-  });
-
   // ─── Media Convert ─────────────────────────────────────────────────────────
   const media = useMediaConvert({
-    backendBaseUrl: backend.backendBaseUrl,
-    outputDir,
-    setStatus,
-    setProcessingStartTime,
-    setError,
-    addPendingJob,
-    resolveJob,
-  });
-
-  // ─── Toolbox ───────────────────────────────────────────────────────────────
-  const toolbox = useToolbox({
-    backendBaseUrl: backend.backendBaseUrl,
-    outputDir,
-    setStatus,
-    setProcessingStartTime,
-    setError,
-    addInstantJobResult,
-  });
-
-  // ─── Doc Convert ───────────────────────────────────────────────────────────
-  const doc = useDocConvert({
     backendBaseUrl: backend.backendBaseUrl,
     outputDir,
     setStatus,
@@ -307,15 +256,6 @@ export default function AppShell() {
     imageGenSize: misc.imageGenSize,
     setImageGenSize: misc.setImageGenSize,
     onRunImageGen: misc.runImageGen,
-    imageUnderstandProvider: misc.imageUnderstandProvider,
-    onImageUnderstandProviderChange: misc.handleImageUnderstandProviderChange,
-    imageUnderstandFile: misc.imageUnderstandFile,
-    setImageUnderstandFile: misc.setImageUnderstandFile,
-    imageUnderstandPrompt: misc.imageUnderstandPrompt,
-    setImageUnderstandPrompt: misc.setImageUnderstandPrompt,
-    imageUnderstandModel: misc.imageUnderstandModel,
-    setImageUnderstandModel: misc.setImageUnderstandModel,
-    onRunImageUnderstand: misc.runImageUnderstand,
     translateProvider: misc.translateProvider,
     setTranslateProvider: misc.setTranslateProvider,
     translateText: misc.translateText,
@@ -378,15 +318,6 @@ export default function AppShell() {
     videoGenImageFile: imageExt.videoGenImageFile,
     setVideoGenImageFile: imageExt.setVideoGenImageFile,
     onRunVideoGen: imageExt.runVideoGen,
-    ocrProvider: imageExt.ocrProvider,
-    onOcrProviderChange: imageExt.handleOcrProviderChange,
-    ocrFile: imageExt.ocrFile,
-    setOcrFile: imageExt.setOcrFile,
-    ocrModel: imageExt.ocrModel,
-    setOcrModel: imageExt.setOcrModel,
-    ocrLocalUrl: imageExt.ocrLocalUrl,
-    setOcrLocalUrl: imageExt.setOcrLocalUrl,
-    onRunOcr: imageExt.runOcr,
     lipsyncProvider: imageExt.lipsyncProvider,
     onLipsyncProviderChange: imageExt.handleLipsyncProviderChange,
     lipsyncVideoFile: imageExt.lipsyncVideoFile,
@@ -412,6 +343,7 @@ export default function AppShell() {
         currentPage={currentPage}
         jobs={jobs}
         isDark={isDark}
+        isDocker={backend.isDocker}
         setIsDark={setIsDark}
         onNavigate={navigate}
       />
@@ -424,61 +356,36 @@ export default function AppShell() {
             {/* Home */}
             {showHome && <HomePanel onNavigate={(page, sub) => navigate(page as Page, sub)} jobs={jobs} backendBaseUrl={backend.backendBaseUrl} />}
 
-            {/* Tasks + Settings tabs */}
-            {showTasks && (() => {
-              const TASKS_TABS = [
-                { id: 'tasks',  label: '任务列表' },
-                { id: 'about',  label: '功能说明' },
-                ...(backend.isDocker ? [] : [{ id: 'models' as const, label: '模型管理' }]),
-              ] as const;
-              return (
-                <>
-                  <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 mb-5">
-                    {TASKS_TABS.map(t => (
-                      <button key={t.id}
-                        className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                          tasksTab === t.id
-                            ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
-                        onClick={() => {
-                          setTasksTab(t.id as typeof tasksTab);
-                          if (t.id === 'tasks') fetchJobs();
-                        }}>
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                  {tasksTab === 'tasks' && (
-                    <>
-                      <TaskList
-                        jobs={jobs}
-                        backendBaseUrl={backend.backendBaseUrl}
-                        setJobs={setJobs}
-                        onFetchJobs={fetchJobs}
-                        outputDir={outputDir}
-                        downloadDir={backend.downloadDir}
-                        addInstantJobResult={addInstantJobResult}
-                      />
-                      <div className="mt-6">
-                        <SystemPanel
-                          backendBaseUrl={backend.backendBaseUrl}
-                          isElectron={isElectron}
-                          externalSection="perf"
-                        />
-                      </div>
-                    </>
-                  )}
-                  {tasksTab !== 'tasks' && (
-                    <SystemPanel
-                      backendBaseUrl={backend.backendBaseUrl}
-                      isElectron={isElectron}
-                      externalSection={tasksTab}
-                    />
-                  )}
-                </>
-              );
-            })()}
+            {/* Task list */}
+            {showTasks && tasksTab === 'tasks' && (
+              <>
+                <TaskList
+                  jobs={jobs}
+                  backendBaseUrl={backend.backendBaseUrl}
+                  setJobs={setJobs}
+                  onFetchJobs={fetchJobs}
+                  outputDir={outputDir}
+                  downloadDir={backend.downloadDir}
+                  addInstantJobResult={addInstantJobResult}
+                />
+                <div className="mt-6">
+                  <SystemPanel
+                    backendBaseUrl={backend.backendBaseUrl}
+                    isElectron={isElectron}
+                    externalSection="perf"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Model management */}
+            {showTasks && tasksTab === 'models' && (
+              <SystemPanel
+                backendBaseUrl={backend.backendBaseUrl}
+                isElectron={isElectron}
+                externalSection="models"
+              />
+            )}
 
             {/* Audio tools header + sub tabs */}
             {showAudioTools && (
@@ -494,15 +401,14 @@ export default function AppShell() {
                   </svg>
                   <div>
                     <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">AI音频</h1>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT · LLM · 语音</p>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT</p>
                   </div>
                 </header>
                 <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
                   {([
-                    ['tts',        '文本转语音', 'TTS'  ],
-                    ['vc',         '音色转换',   'VC'   ],
-                    ['asr',        '语音转文本', 'STT'  ],
-                    ['voice_chat', '语音聊天',   'Voice'],
+                    ['tts',  '文本转语音', 'TTS'],
+                    ['vc',   '音色转换',   'VC' ],
+                    ['asr',  '语音转文本', 'STT'],
                   ] as [TaskType, string, string][]).map(([key, label, abbr]) => (
                     <button key={key} onClick={() => setTaskType(key)}
                       className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${taskType === key ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
@@ -514,23 +420,8 @@ export default function AppShell() {
               </div>
             )}
 
-            {/* Format convert header */}
-            {showFormatConvert && (
-              <header className="flex items-center gap-3.5 pb-1">
-                <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-                  <rect width="28" height="28" rx="7" fill="#0f766e"/>
-                  <path d="M7 10h10M7 10l3-3M7 10l3 3" stroke="#99f6e4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M21 18H11M21 18l-3-3M21 18l-3 3" stroke="#5eead4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <div>
-                  <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">格式转换</h1>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">音视频 · 文档</p>
-                </div>
-              </header>
-            )}
-
             {/* Misc header (backward compat) */}
-            {!showHome && !showTasks && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
+            {!showHome && !showTasks && !showAudioTools && taskType === 'misc' && (
               <header className="flex items-center gap-3.5 pb-1">
                 <TaskIcon task="misc" size={36} />
                 <div>
@@ -755,191 +646,8 @@ export default function AppShell() {
               />
             )}
 
-            {/* LLM Panel */}
-            {showAudioTools && taskType === 'llm' && (
-              <LlmPanel
-                taskType="llm"
-                capabilities={backend.capabilities}
-                selectedProvider={selectedProvider}
-                needsAuth={needsAuth}
-                isUrlOnly={isUrlOnly}
-                apiKey={apiKey}
-                cloudEndpoint={cloudEndpoint}
-                engineVersions={backend.engineVersions}
-                setProviderMap={setProviderMap}
-                setApiKey={setApiKey}
-                setCloudEndpoint={setCloudEndpoint}
-                llmMessages={llm.llmMessages}
-                setLlmMessages={llm.setLlmMessages}
-                llmInput={llm.llmInput}
-                setLlmInput={llm.setLlmInput}
-                llmModel={llm.llmModel}
-                setLlmModel={llm.setLlmModel}
-                llmLoading={llm.llmLoading}
-                llmScrollRef={llm.llmScrollRef}
-                onSendLlmMessage={llm.sendLlmMessage}
-                fieldCls={fieldCls}
-                labelCls={labelCls}
-              />
-            )}
-
-            {/* Voice Chat Panel */}
-            {showAudioTools && taskType === 'voice_chat' && (
-              <VoiceChatPanel
-                vchatMsgs={voiceChat.vchatMsgs}
-                setVchatMsgs={voiceChat.setVchatMsgs}
-                vchatStatus={voiceChat.vchatStatus}
-                vchatSttProvider={voiceChat.vchatSttProvider}
-                setVchatSttProvider={voiceChat.setVchatSttProvider}
-                vchatSttModel={voiceChat.vchatSttModel}
-                setVchatSttModel={voiceChat.setVchatSttModel}
-                vchatLlmProvider={voiceChat.vchatLlmProvider}
-                setVchatLlmProvider={voiceChat.setVchatLlmProvider}
-                vchatLlmModel={voiceChat.vchatLlmModel}
-                setVchatLlmModel={voiceChat.setVchatLlmModel}
-                vchatTtsProvider={voiceChat.vchatTtsProvider}
-                setVchatTtsProvider={voiceChat.setVchatTtsProvider}
-                vchatTtsModel={voiceChat.vchatTtsModel}
-                setVchatTtsModel={voiceChat.setVchatTtsModel}
-                vchatTtsRefAudios={voiceChat.vchatTtsRefAudios}
-                setVchatTtsRefAudios={voiceChat.setVchatTtsRefAudios}
-                vchatApiKey={voiceChat.vchatApiKey}
-                setVchatApiKey={voiceChat.setVchatApiKey}
-                vchatEndpoint={voiceChat.vchatEndpoint}
-                setVchatEndpoint={voiceChat.setVchatEndpoint}
-                capabilities={backend.capabilities}
-                engineVersions={backend.engineVersions}
-                vchatScrollRef={voiceChat.vchatScrollRef}
-                onStartRecording={voiceChat.startVchatRecording}
-                onStopRecording={voiceChat.stopVchatRecording}
-                downloadDir={backend.downloadDir}
-                fieldCls={fieldCls}
-                labelCls={labelCls}
-                btnSec={btnSec}
-              />
-            )}
-
-            {/* Format convert: tabs + content */}
-            {showFormatConvert && (
-              <>
-                <div className="space-y-1">
-                  {/* Media tools */}
-                  <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-                    {([
-                      { value: 'convert' as MediaAction,          label: '音视频转换', pkg: 'ffmpeg' },
-                      { value: 'clip' as MediaAction,             label: '截取片段',   pkg: 'ffmpeg' },
-                      { value: 'subtitle_extract' as MediaAction, label: '提取字幕',   pkg: 'ffmpeg' },
-                      { value: 'subtitle_convert' as MediaAction, label: '字幕互转',   pkg: 'ffmpeg' },
-                    ]).map(opt => {
-                      const active = formatGroup === 'media' && media.mediaAction === opt.value;
-                      return (
-                        <button key={opt.value}
-                          className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-                          onClick={() => { setFormatGroup('media'); media.setMediaAction(opt.value); }}>
-                          <span className="text-sm font-medium leading-tight">{opt.label}</span>
-                          <span className={`text-[10px] font-mono leading-tight ${active ? 'text-teal-500 dark:text-teal-400' : 'text-slate-400 dark:text-slate-600'}`}>{opt.pkg}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Doc tools */}
-                  <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-                    {([
-                      { value: 'pdf_to_word' as DocSubPage,   label: 'PDF 转 Word', pkg: 'pdf2docx' },
-                      { value: 'doc_convert' as DocSubPage,   label: '文档互转',    pkg: 'pandoc'   },
-                      { value: 'pdf_extract' as DocSubPage,   label: 'PDF 提取',    pkg: 'PyMuPDF'  },
-                      { value: 'image' as DocSubPage,         label: '图片处理',    pkg: 'Pillow'   },
-                      { value: 'qr' as DocSubPage,            label: '二维码',      pkg: 'qrcode'   },
-                      { value: 'text_encoding' as DocSubPage, label: '编码转换',    pkg: 'chardet'  },
-                    ]).map(opt => {
-                      const active = formatGroup === 'doc' && doc.docSubPage === opt.value;
-                      return (
-                        <button key={opt.value}
-                          className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${active ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-                          onClick={() => { setFormatGroup('doc'); doc.setDocSubPage(opt.value); doc.setDocFile(null); }}>
-                          <span className="text-sm font-medium leading-tight">{opt.label}</span>
-                          <span className={`text-[10px] font-mono leading-tight ${active ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-600'}`}>{opt.pkg}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {formatGroup === 'media' && (
-                  <MediaPanel
-                    mediaFile={media.mediaFile}
-                    setMediaFile={media.setMediaFile}
-                    mediaAction={media.mediaAction}
-                    setMediaAction={media.setMediaAction}
-                    mediaOutputFormat={media.mediaOutputFormat}
-                    setMediaOutputFormat={media.setMediaOutputFormat}
-                    startMin={media.startMin}
-                    setStartMin={media.setStartMin}
-                    startSec={media.startSec}
-                    setStartSec={media.setStartSec}
-                    clipEndMode={media.clipEndMode}
-                    setClipEndMode={media.setClipEndMode}
-                    durationMin={media.durationMin}
-                    setDurationMin={media.setDurationMin}
-                    durationSec={media.durationSec}
-                    setDurationSec={media.setDurationSec}
-                    endMin={media.endMin}
-                    setEndMin={media.setEndMin}
-                    endSec={media.endSec}
-                    setEndSec={media.setEndSec}
-                    subtitleOutputFmt={media.subtitleOutputFmt}
-                    setSubtitleOutputFmt={media.setSubtitleOutputFmt}
-                    hwAccel={media.hwAccel}
-                    setHwAccel={media.setHwAccel}
-                    hwAccelDetected={hwAccelDetected}
-                    outputDir={outputDir}
-                    setOutputDir={setOutputDir}
-                    status={status}
-                    onRunMediaConvert={() => { media.runMediaConvert(); }}
-                    onRunSubtitleConvert={() => { media.runSubtitleConvert(); }}
-                    fieldCls={fieldCls}
-                    fileCls={fileCls}
-                    labelCls={labelCls}
-                    btnSec={btnSec}
-                  />
-                )}
-
-                {formatGroup === 'doc' && (
-                  <DocPanel
-                    docSubPage={doc.docSubPage}
-                    setDocSubPage={doc.setDocSubPage}
-                    docFile={doc.docFile}
-                    setDocFile={doc.setDocFile}
-                    docOutputFormat={doc.docOutputFormat}
-                    setDocOutputFormat={doc.setDocOutputFormat}
-                    docExtractMode={doc.docExtractMode}
-                    setDocExtractMode={doc.setDocExtractMode}
-                    onRunDocConvert={doc.runDocConvert}
-                    imgFile={toolbox.imgFile} setImgFile={toolbox.setImgFile}
-                    imgOutputFmt={toolbox.imgOutputFmt} setImgOutputFmt={toolbox.setImgOutputFmt}
-                    imgResizeW={toolbox.imgResizeW} setImgResizeW={toolbox.setImgResizeW}
-                    imgResizeH={toolbox.imgResizeH} setImgResizeH={toolbox.setImgResizeH}
-                    imgQuality={toolbox.imgQuality} setImgQuality={toolbox.setImgQuality}
-                    qrMode={toolbox.qrMode} setQrMode={toolbox.setQrMode}
-                    qrText={toolbox.qrText} setQrText={toolbox.setQrText}
-                    qrFile={toolbox.qrFile} setQrFile={toolbox.setQrFile}
-                    encFile={toolbox.encFile} setEncFile={toolbox.setEncFile}
-                    encTarget={toolbox.encTarget} setEncTarget={toolbox.setEncTarget}
-                    onRunToolbox={() => toolbox.runToolbox(doc.docSubPage as ToolboxSubPage)}
-                    outputDir={outputDir}
-                    setOutputDir={setOutputDir}
-                    status={status}
-                    fieldCls={fieldCls}
-                    fileCls={fileCls}
-                    labelCls={labelCls}
-                    btnSec={btnSec}
-                  />
-                )}
-              </>
-            )}
-
             {/* Misc Panel (backward compat) */}
-            {!showHome && !showTasks && !showAudioTools && !showFormatConvert && taskType === 'misc' && (
+            {!showHome && !showTasks && !showAudioTools && taskType === 'misc' && (
               <MiscPanel {...miscPanelProps} />
             )}
 
@@ -955,10 +663,10 @@ export default function AppShell() {
                   </svg>
                   <div>
                     <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">图像工具</h1>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">图像生成 · 换脸换图 · OCR · 图像理解</p>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">图像生成 · 换脸换图</p>
                   </div>
                 </header>
-                <MiscPanel {...miscPanelProps} allowedSubPages={['img_gen', 'img_i2i', 'image_understand', 'ocr']} />
+                <MiscPanel {...miscPanelProps} allowedSubPages={['img_gen', 'img_i2i']} />
               </>
             )}
 
@@ -980,140 +688,53 @@ export default function AppShell() {
               </>
             )}
 
-            {/* Text tools */}
-            {showTextTools && (
+            {/* Format convert */}
+            {showFormatConvert && (
               <div>
                 <header className="flex items-center gap-3.5 pb-4">
                   <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-                    <rect width="28" height="28" rx="7" fill="#0284c7"/>
-                    <path d="M7 9h14M7 14h10M7 19h8" stroke="#bae6fd" strokeWidth="2" strokeLinecap="round"/>
+                    <rect width="28" height="28" rx="7" fill="#0f766e"/>
+                    <path d="M7 10h10M7 10l3-3M7 10l3 3" stroke="#99f6e4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M21 18H11M21 18l-3-3M21 18l-3 3" stroke="#5eead4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   <div>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">文字工具</h1>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">LLM 聊天 · 文字翻译 · 代码助手</p>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">格式转换</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">音视频转换 · 截取片段 · 字幕</p>
                   </div>
                 </header>
-                {/* Tab bar */}
-                <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                  {(['llm', 'translate', 'code_assist'] as const).map(tab => {
-                    const labels: Record<string, string> = { llm: 'LLM 聊天', translate: '文字翻译', code_assist: '代码助手' };
-                    return (
-                      <button key={tab}
-                        onClick={() => {
-                          setTextSubPage(tab);
-                          if (tab !== 'llm') misc.setMiscSubPage(tab as MiscSubPage);
-                        }}
-                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                          textSubPage === tab
-                            ? 'bg-white dark:bg-slate-900 text-[#1A8FE3] shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                        }`}>
-                        {labels[tab]}
-                      </button>
-                    );
-                  })}
-                </div>
-                {textSubPage === 'llm' && (
-                  <LlmPanel
-                    taskType="llm"
-                    capabilities={backend.capabilities}
-                    selectedProvider={providerMap['llm'] || 'gemini'}
-                    needsAuth={!LOCAL_PROVIDERS.has(providerMap['llm'] || 'gemini') && !URL_ONLY_PROVIDERS.has(providerMap['llm'] || 'gemini')}
-                    isUrlOnly={URL_ONLY_PROVIDERS.has(providerMap['llm'] || 'gemini')}
-                    apiKey={apiKey}
-                    cloudEndpoint={cloudEndpoint}
-                    engineVersions={backend.engineVersions}
-                    setProviderMap={setProviderMap}
-                    setApiKey={setApiKey}
-                    setCloudEndpoint={setCloudEndpoint}
-                    llmMessages={llm.llmMessages}
-                    setLlmMessages={llm.setLlmMessages}
-                    llmInput={llm.llmInput}
-                    setLlmInput={llm.setLlmInput}
-                    llmModel={llm.llmModel}
-                    setLlmModel={llm.setLlmModel}
-                    llmLoading={llm.llmLoading}
-                    llmScrollRef={llm.llmScrollRef}
-                    onSendLlmMessage={llm.sendLlmMessage}
-                    fieldCls={fieldCls}
-                    labelCls={labelCls}
-                  />
-                )}
-                {(textSubPage === 'translate' || textSubPage === 'code_assist') && (
-                  <MiscPanel {...miscPanelProps} allowedSubPages={[textSubPage as MiscSubPage]} />
-                )}
-              </div>
-            )}
-
-            {/* Advanced tools */}
-            {showAdvancedTools && (
-              <div>
-                <header className="flex items-center gap-3.5 pb-4">
-                  <svg width="36" height="36" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-                    <rect width="28" height="28" rx="7" fill="#7c3aed"/>
-                    <circle cx="14" cy="10" r="4" fill="none" stroke="#ddd6fe" strokeWidth="1.5"/>
-                    <path d="M7 22c0-3.866 3.134-7 7-7s7 3.134 7 7" fill="none" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round"/>
-                    <circle cx="21" cy="10" r="2.5" fill="#a78bfa"/>
-                    <circle cx="7" cy="10" r="2.5" fill="#a78bfa"/>
-                  </svg>
-                  <div>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">AI 进阶</h1>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">知识库 · 智能体 · 模型微调</p>
-                  </div>
-                </header>
-                <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                  {([
-                    ['rag',      '知识库',   'RAG'      ],
-                    ['agent',    '智能体',   'Agent'    ],
-                    ['finetune', 'LoRA 微调', 'Fine-tune'],
-                  ] as const).map(([tab, label, abbr]) => (
-                    <button key={tab}
-                      onClick={() => setAdvancedSubPage(tab)}
-                      className={`flex-1 py-2 rounded-lg flex flex-col items-center gap-0.5 transition-all ${
-                        advancedSubPage === tab
-                          ? 'bg-white dark:bg-slate-900 text-[#7c3aed] shadow-sm'
-                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                      }`}>
-                      <span className="text-sm font-medium leading-tight">{label}</span>
-                      <span className={`text-[10px] font-mono leading-tight ${advancedSubPage === tab ? 'text-[#7c3aed]' : 'text-slate-400 dark:text-slate-600'}`}>{abbr}</span>
-                    </button>
-                  ))}
-                </div>
-                {advancedSubPage === 'rag' && (
-                  <RagPanel
-                    backendUrl={backend.backendBaseUrl}
-                    capabilities={backend.capabilities}
-                    selectedProvider={providerMap['rag'] || 'ollama'}
-                    apiKey={apiKey}
-                    cloudEndpoint={cloudEndpoint}
-                    setProviderMap={setProviderMap}
-                    setApiKey={setApiKey}
-                    setCloudEndpoint={setCloudEndpoint}
-                    addPendingJob={addPendingJob}
-                    resolveJob={resolveJob}
-                  />
-                )}
-                {advancedSubPage === 'agent' && (
-                  <AgentPanel
-                    backendUrl={backend.backendBaseUrl}
-                    capabilities={backend.capabilities}
-                    selectedProvider={providerMap['agent'] || 'ollama'}
-                    apiKey={apiKey}
-                    cloudEndpoint={cloudEndpoint}
-                    setProviderMap={setProviderMap}
-                    setApiKey={setApiKey}
-                    setCloudEndpoint={setCloudEndpoint}
-                  />
-                )}
-                {advancedSubPage === 'finetune' && (
-                  <FinetunePanel
-                    backendUrl={backend.backendBaseUrl}
-                    outputDir={outputDir}
-                    setOutputDir={setOutputDir}
-                    addPendingJob={addPendingJob}
-                    resolveJob={resolveJob}
-                  />
-                )}
+                <MediaPanel
+                  mediaFile={media.mediaFile}
+                  setMediaFile={media.setMediaFile}
+                  mediaAction={media.mediaAction}
+                  setMediaAction={media.setMediaAction}
+                  mediaOutputFormat={media.mediaOutputFormat}
+                  setMediaOutputFormat={media.setMediaOutputFormat}
+                  startMin={media.startMin}
+                  setStartMin={media.setStartMin}
+                  startSec={media.startSec}
+                  setStartSec={media.setStartSec}
+                  clipEndMode={media.clipEndMode}
+                  setClipEndMode={media.setClipEndMode}
+                  durationMin={media.durationMin}
+                  setDurationMin={media.setDurationMin}
+                  durationSec={media.durationSec}
+                  setDurationSec={media.setDurationSec}
+                  endMin={media.endMin}
+                  setEndMin={media.setEndMin}
+                  endSec={media.endSec}
+                  setEndSec={media.setEndSec}
+                  hwAccel={media.hwAccel}
+                  setHwAccel={media.setHwAccel}
+                  hwAccelDetected=""
+                  outputDir={outputDir}
+                  setOutputDir={setOutputDir}
+                  status={status}
+                  onRunMediaConvert={media.runMediaConvert}
+                  fieldCls={fieldCls}
+                  fileCls={fileCls}
+                  labelCls={labelCls}
+                  btnSec={btnSec}
+                />
               </div>
             )}
 

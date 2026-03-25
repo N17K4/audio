@@ -1,7 +1,7 @@
 import { TASK_LABELS } from '../../constants';
 import type { TaskType, Job } from '../../types';
 
-export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert' | 'image_tools' | 'video_tools' | 'text_tools' | 'misc' | 'advanced_tools' | 'rag' | 'agent';
+export type Page = 'home' | 'tasks' | 'system' | TaskType | 'audio_tools' | 'format_convert' | 'image_tools' | 'video_tools' | 'misc';
 
 interface SidebarProps {
   currentPage: Page;
@@ -55,10 +55,9 @@ export default function Sidebar({
         className="flex flex-col shrink-0 border-r border-slate-200 overflow-hidden bg-white dark:bg-slate-900 dark:border-slate-800"
         style={{ width: sidebarCollapsed ? 60 : sidebarWidth, transition: isResizing ? 'none' : 'width 0.2s ease' }}>
 
-        {/* 品牌区 — 点击返回首页 */}
-        <button
-          onClick={() => onNavigate('home')}
-          className={`flex items-center py-4 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-4 gap-2.5 w-full'}`}>
+        {/* 品牌区 */}
+        <div
+          className={`flex items-center py-4 border-b border-slate-200 dark:border-slate-800 ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-4 gap-2.5 w-full'}`}>
           <svg width="30" height="30" viewBox="0 0 30 30" style={{ flexShrink: 0 }}>
             <rect width="30" height="30" rx="8" fill="#3b82f6" />
             <path d="M7 20 Q15 8 23 20" stroke="#bfdbfe" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
@@ -71,18 +70,18 @@ export default function Sidebar({
               AI 工坊
             </span>
           )}
-        </button>
+        </div>
 
         {/* 主导航 */}
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto overflow-x-hidden">
-          <NavItem page="system" label="设置" subtitle="功能说明 · 配置 · 健康检查" icon={
+          <NavItem page="system" label="设置" subtitle="模型管理 · 配置 · 健康检查" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#334155"/>
               <path d="M10.325 8.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           } />
-          <NavItem page="audio_tools" label="音频工具" subtitle="TTS · 音色转换 · STT · 语音聊天" icon={
+          <NavItem page="audio_tools" label="音频工具" subtitle="TTS · 音色转换 · STT" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#4f46e5"/>
               <rect x="5" y="13" width="2.5" height="6" rx="1.2" fill="#c7d2fe"/>
@@ -92,7 +91,7 @@ export default function Sidebar({
               <rect x="21" y="14" width="2.5" height="4" rx="1.2" fill="#c7d2fe"/>
             </svg>
           } />
-          <NavItem page="image_tools" label="图像工具" subtitle="图像生成 · 换脸 · OCR" icon={
+          <NavItem page="image_tools" label="图像工具" subtitle="图像生成 · 换脸换图" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#db2777"/>
               <rect x="5" y="7" width="18" height="14" rx="3" fill="none" stroke="#fce7f3" strokeWidth="1.5"/>
@@ -105,35 +104,6 @@ export default function Sidebar({
               <rect width="28" height="28" rx="7" fill="#0f766e"/>
               <rect x="4" y="8" width="14" height="12" rx="2.5" fill="none" stroke="#99f6e4" strokeWidth="1.5"/>
               <path d="M18 12l6-3v10l-6-3V12z" fill="#5eead4"/>
-            </svg>
-          } />
-          <NavItem page="text_tools" label="文字工具" subtitle="LLM · 翻译 · 代码" icon={
-            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-              <rect width="28" height="28" rx="7" fill="#0284c7"/>
-              <path d="M7 9h14M7 14h10M7 19h8" stroke="#bae6fd" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          } />
-          <NavItem page="rag" label="知识库" subtitle="RAG" icon={
-            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-              <rect width="28" height="28" rx="7" fill="#0d9488"/>
-              <path d="M8 8h12M8 12h12M8 16h8M8 20h10" stroke="#99f6e4" strokeWidth="1.5" strokeLinecap="round"/>
-              <circle cx="20" cy="12" r="3" fill="none" stroke="#99f6e4" strokeWidth="1.5"/>
-            </svg>
-          } />
-          <NavItem page="agent" label="智能体" subtitle="Agent" icon={
-            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-              <rect width="28" height="28" rx="7" fill="#7c3aed"/>
-              <circle cx="14" cy="10" r="4" fill="none" stroke="#ddd6fe" strokeWidth="1.5"/>
-              <path d="M7 22c0-3.866 3.134-7 7-7s7 3.134 7 7" fill="none" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round"/>
-              <circle cx="21" cy="10" r="2.5" fill="#a78bfa"/>
-              <circle cx="7" cy="10" r="2.5" fill="#a78bfa"/>
-            </svg>
-          } />
-          <NavItem page="advanced_tools" label="微调" subtitle="Fine-tune" icon={
-            <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
-              <rect width="28" height="28" rx="7" fill="#be185d"/>
-              <circle cx="14" cy="12" r="3" fill="none" stroke="#fbcfe8" strokeWidth="1.5"/>
-              <path d="M10 18c1.5 2 2.5 2.5 4 2.5s2.5-.5 4-2.5" stroke="#fbcfe8" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           } />
           <NavItem page="format_convert" label="格式转换" subtitle="音视频 · 文档" icon={

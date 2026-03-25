@@ -44,10 +44,10 @@ PBS_RELEASE = "20250317"
 PBS_PY_VERSION = "3.12.9"
 
 # 基础引擎集合（step 3 安装，含嵌入式 Python + backend 依赖）
-BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper", "facefusion"}
+BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper", "facefusion", "liveportrait"}
 
 # 额外引擎集合（step 4 安装，需嵌入式 Python 已就绪）
-EXTRA_ENGINES = {"whisper", "got_ocr", "liveportrait", "wan", "flux", "sd"}
+EXTRA_ENGINES = {"whisper", "got_ocr", "wan", "flux", "sd"}
 
 # PyPI 镜像源（通过 --pypi-mirror 设置）
 PYPI_MIRROR = ""
@@ -1066,190 +1066,8 @@ def setup_flux_engine(project_root: Path, packages: list[str], py: str) -> bool:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# FFmpeg / Pandoc 下载
+# Pandoc 下载
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def download_ffmpeg(project_root: Path, target_system: str = "") -> bool:
-    """下载 FFmpeg 到 runtime/bin/{mac|win}/。"""
-    system = target_system or platform.system()
-
-    if system == "Darwin":
-        bin_dir = project_root / "runtime" / "bin" / "mac"
-        dest = bin_dir / "ffmpeg"
-        url = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-    elif system == "Windows":
-        bin_dir = project_root / "runtime" / "bin" / "win"
-        dest = bin_dir / "ffmpeg.exe"
-        # shared ビルド: ffmpeg.exe + DLL (avcodec, avformat 等) を含む。
-        # torchcodec (torchaudio 2.6+) が FFmpeg shared DLL を要求するため必須。
-        url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
-    else:
-        print(f"  [ffmpeg] 不支持的平台: {system}，跳过")
-        return True
-
-    if dest.exists():
-        size_mb = dest.stat().st_size / 1024 / 1024
-        if size_mb < 10:
-            print(f"  ✗ FFmpeg 文件异常（{size_mb:.1f} MB），重新下载")
-            dest.unlink()
-        else:
-            # Windows: shared DLL が必要（torchcodec 用）。なければ再ダウンロード
-            if system == "Windows" and not list(bin_dir.glob("av*.dll")):
-                print(f"  ✗ FFmpeg DLL 未找到，重新下载（shared ビルド）")
-                dest.unlink()
-            else:
-                print(f"  ✓ FFmpeg 已存在（{size_mb:.1f} MB）: {dest}")
-                if system != "Windows":
-                    dest.chmod(0o755)
-                return True
-
-    print(f"  ✗ FFmpeg 未找到，下载中（~50-80 MB）...")
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    tmp_archive = bin_dir / "_ffmpeg_tmp"
-
-    try:
-        urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
-        if _IS_TTY:
-            print()
-
-        target_name = "ffmpeg.exe" if system == "Windows" else "ffmpeg"
-        if url.endswith(".zip") or url.endswith("/zip"):
-            def _extract_from_zip(zip_path: Path, out_path: Path) -> bool:
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    found = next(
-                        (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
-                        None,
-                    )
-                    if not found:
-                        print(f"    ✗ 压缩包内未找到 {target_name}")
-                        return False
-                    with zf.open(found) as src_f, open(out_path, "wb") as dst_f:
-                        dst_f.write(src_f.read())
-                if zipfile.is_zipfile(out_path):
-                    inner_zip = out_path.with_suffix("._inner.zip")
-                    out_path.rename(inner_zip)
-                    try:
-                        if not _extract_from_zip(inner_zip, out_path):
-                            return False
-                    finally:
-                        inner_zip.unlink(missing_ok=True)
-                return True
-
-            if not _extract_from_zip(tmp_archive, dest):
-                return False
-            # Windows shared ビルド: DLL も抽出（torchcodec が FFmpeg shared DLL を要求）
-            if system == "Windows":
-                with zipfile.ZipFile(tmp_archive, "r") as zf:
-                    for entry in zf.namelist():
-                        if entry.endswith(".dll") and "/bin/" in entry:
-                            dll_name = Path(entry).name
-                            dll_dest = bin_dir / dll_name
-                            if not dll_dest.exists():
-                                with zf.open(entry) as src_f, open(dll_dest, "wb") as dst_f:
-                                    dst_f.write(src_f.read())
-        else:
-            with tarfile.open(tmp_archive) as tf:
-                found_member = next(
-                    (m for m in tf.getmembers() if Path(m.name).name == target_name and m.isfile()),
-                    None,
-                )
-                if not found_member:
-                    print("    ✗ 压缩包内未找到 ffmpeg")
-                    return False
-                f_obj = tf.extractfile(found_member)
-                if f_obj:
-                    with open(dest, "wb") as dst_f:
-                        dst_f.write(f_obj.read())
-
-        if not dest.exists() or dest.stat().st_size == 0:
-            print("    ✗ 提取后文件缺失或为空")
-            return False
-
-        if system != "Windows":
-            dest.chmod(0o755)
-
-        print(f"    ✓ FFmpeg 下载完成（{dest.stat().st_size / 1024 / 1024:.1f} MB）")
-        return True
-
-    except Exception as e:
-        print(f"    ✗ FFmpeg 下载失败: {e}")
-        return False
-    finally:
-        if tmp_archive.exists():
-            try:
-                tmp_archive.unlink()
-            except Exception:
-                pass
-
-
-def download_pandoc(project_root: Path, target_system: str = "") -> bool:
-    """下载 pandoc 到 runtime/bin/{mac|win}/。"""
-    system = target_system or platform.system()
-    machine = platform.machine().lower()
-    version = "3.6.4"
-
-    if system == "Darwin":
-        bin_dir = project_root / "runtime" / "bin" / "mac"
-        dest = bin_dir / "pandoc"
-        arch = "arm64" if "arm" in machine or "aarch" in machine else "x86_64"
-        url = f"https://github.com/jgm/pandoc/releases/download/{version}/pandoc-{version}-{arch}-macOS.zip"
-        binary_in_zip = f"pandoc-{version}/bin/pandoc"
-    elif system == "Windows":
-        bin_dir = project_root / "runtime" / "bin" / "win"
-        dest = bin_dir / "pandoc.exe"
-        url = f"https://github.com/jgm/pandoc/releases/download/{version}/pandoc-{version}-windows-x86_64.zip"
-        binary_in_zip = f"pandoc-{version}/pandoc.exe"
-    else:
-        print(f"  [pandoc] 不支持的平台: {system}，跳过")
-        return True
-
-    if dest.exists() and dest.stat().st_size > 1024 * 1024:
-        print(f"  ✓ pandoc 已存在（{dest.stat().st_size / 1024 / 1024:.1f} MB）: {dest}")
-        if system != "Windows":
-            dest.chmod(0o755)
-        return True
-
-    print(f"  ✗ pandoc 未找到，下载中（~100-130 MB）...")
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    tmp_archive = bin_dir / "_pandoc_tmp.zip"
-
-    try:
-        urllib.request.urlretrieve(url, str(tmp_archive), _reporthook)
-        if _IS_TTY:
-            print()
-        with zipfile.ZipFile(tmp_archive, "r") as zf:
-            if binary_in_zip not in zf.namelist():
-                target_name = "pandoc.exe" if system == "Windows" else "pandoc"
-                binary_in_zip = next(
-                    (n for n in zf.namelist() if Path(n).name == target_name and not n.endswith("/")),
-                    None,
-                )
-                if not binary_in_zip:
-                    print("    ✗ 压缩包内未找到 pandoc 可执行文件")
-                    return False
-            with zf.open(binary_in_zip) as src_f, open(dest, "wb") as dst_f:
-                dst_f.write(src_f.read())
-
-        if not dest.exists() or dest.stat().st_size == 0:
-            print("    ✗ 提取后文件缺失或为空")
-            return False
-
-        if system != "Windows":
-            dest.chmod(0o755)
-
-        print(f"    ✓ pandoc 下载完成（{dest.stat().st_size / 1024 / 1024:.1f} MB）")
-        return True
-
-    except Exception as e:
-        print(f"    ✗ pandoc 下载失败: {e}")
-        return False
-    finally:
-        if tmp_archive.exists():
-            try:
-                tmp_archive.unlink()
-            except Exception:
-                pass
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 引擎安装分发（统一入口）
@@ -1346,7 +1164,7 @@ def _cleanup_embedded_ml_packages(py: str) -> None:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def main_full_setup(project_root: Path, cross_platform: bool = False) -> int:
-    """全量 setup：下载 Python + backend 依赖 + 全部引擎 + FFmpeg + pandoc。
+    """全量 setup：下载 Python + backend 依赖 + 全部引擎。
     cross_platform=True 時、両プラットフォーム（macOS + Windows）のバイナリをダウンロード。
     """
     _cross_platform = cross_platform
@@ -1359,7 +1177,7 @@ def main_full_setup(project_root: Path, cross_platform: bool = False) -> int:
     engines: dict = manifest.get("engines", {})
 
     # 1. 确保嵌入式 Python（--both 時は両プラットフォーム分）
-    print("\n=== 1/5 嵌入式 Python ===")
+    print("\n=== 1/4 嵌入式 Python ===")
     py = ensure_embedded_python(project_root)
     print(f"嵌入式 Python: {py}")
     if _cross_platform:
@@ -1369,7 +1187,7 @@ def main_full_setup(project_root: Path, cross_platform: bool = False) -> int:
     all_ok = True
 
     # 2. 安装 backend 依赖
-    print("\n=== 2/5 安装 backend 依赖 ===")
+    print("\n=== 2/4 安装 backend 依赖 ===")
     if not install_backend_deps(project_root, py):
         all_ok = False
 
@@ -1381,7 +1199,7 @@ def main_full_setup(project_root: Path, cross_platform: bool = False) -> int:
     _cleanup_embedded_ml_packages(py)
 
     # 3. 安装基础引擎（rvc-python 特殊流程 + 源码 clone）
-    print("\n=== 3/5 安装基础引擎 ===")
+    print("\n=== 3/4 安装基础引擎 ===")
     for engine_name in sorted(BASE_ENGINES):
         print(f"\n▶ {engine_name}")
         if not _install_engine(engine_name, engines, py, project_root):
@@ -1389,31 +1207,15 @@ def main_full_setup(project_root: Path, cross_platform: bool = False) -> int:
 
     # 4. 安装额外引擎（源码 clone）
     # 注意：pip_packages 已统一到 pyproject.toml，此处只处理源码 clone
-    print("\n=== 4/5 安装额外引擎 ===")
-    # 需要源码 clone 的额外引擎
-    _EXTRA_ENGINES_WITH_SOURCE = {"liveportrait"}
+    print("\n=== 4/4 安装额外引擎 ===")
     for engine_name in sorted(EXTRA_ENGINES):
         cfg = engines.get(engine_name, {})
         packages = cfg.get("pip_packages", [])
         # 跳过无 pip_packages 且无源码的引擎
-        if not packages and engine_name not in _EXTRA_ENGINES_WITH_SOURCE:
+        if not packages:
             continue
         print(f"\n▶ {engine_name}")
         if not _install_engine(engine_name, engines, py, project_root):
-            all_ok = False
-
-    # 5. FFmpeg + pandoc（--both 時は両プラットフォーム分をダウンロード）
-    print("\n=== 5/5 下载工具 ===")
-    _target_systems = [platform.system()]
-    if _cross_platform:
-        _other = "Windows" if platform.system() == "Darwin" else "Darwin"
-        _target_systems.append(_other)
-    for _ts in _target_systems:
-        print(f"\n▶ ffmpeg ({_ts})")
-        if not download_ffmpeg(project_root, target_system=_ts):
-            all_ok = False
-        print(f"\n▶ pandoc ({_ts})")
-        if not download_pandoc(project_root, target_system=_ts):
             all_ok = False
 
     print()

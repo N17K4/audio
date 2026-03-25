@@ -1,6 +1,6 @@
 """基础功能烟雾测试
 
-测试项目（7 大引擎 19 项测试）：
+测试项目（8 大引擎 20 项测试）：
   1-1. Fish Speech TTS
   1-2. Fish Speech TTS 高级参数（top_p / temperature / repetition_penalty）
   2-1. GPT-SoVITS TTS 合成
@@ -20,6 +20,7 @@
   7-1. FFmpeg WAV→MP3
   7-2. FFmpeg WAV→FLAC
   7-3. FFmpeg clip 截取
+  8.   LivePortrait 口型同步
 
 運行：
   cd test001 && python tests/smoke_test.py
@@ -69,6 +70,34 @@ def create_test_wav(duration_sec: float = 1) -> bytes:
     buf.write(struct.pack('<I', data_size))
     buf.write(b'\x00' * data_size)
     return buf.getvalue()
+
+
+def create_test_mp4(width: int = 64, height: int = 64, duration_sec: float = 0.5) -> bytes:
+    """用 FFmpeg 创建一张黑色帧 + 静音的最小 MP4，供 LivePortrait 烟雾测试使用。"""
+    import subprocess
+    import tempfile
+    try:
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        import shutil
+        ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+    try:
+        subprocess.run([
+            ffmpeg, "-y",
+            "-f", "lavfi", "-i", f"color=black:size={width}x{height}:rate=10:duration={duration_sec}",
+            "-f", "lavfi", "-i", f"aevalsrc=0:r=8000:d={duration_sec}",
+            "-c:v", "libx264", "-c:a", "aac",
+            "-t", str(duration_sec),
+            tmp_path,
+        ], capture_output=True, timeout=30, check=True)
+        return Path(tmp_path).read_bytes()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 def create_test_png(width: int = 64, height: int = 64) -> bytes:
@@ -683,6 +712,38 @@ def test_7_3_ffmpeg_clip():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 8. LivePortrait 口型同步
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_8_liveportrait():
+    import httpx
+    TAG = "[8]"
+    print(f"\n{TAG} LivePortrait 口型同步")
+
+    try:
+        mp4_data = create_test_mp4(width=64, height=64, duration_sec=0.5)
+    except Exception as e:
+        print(f"  ⚠ 跳过：无法创建测试 MP4（FFmpeg 不可用）：{e}")
+        return None
+
+    wav_data = create_test_wav(duration_sec=0.5)
+    with httpx.Client(timeout=120) as client:
+        files = {
+            "video": ("[8]portrait.mp4", BytesIO(mp4_data), "video/mp4"),
+            "audio": ("[8]portrait.wav", BytesIO(wav_data), "audio/wav"),
+        }
+        data = {"provider": "liveportrait"}
+        print(f"  📤 POST /tasks/lipsync  参数：{data}")
+
+        resp = client.post(f"{_BASE_URL}/tasks/lipsync", data=data, files=files)
+        print(f"     HTTP {resp.status_code}")
+
+        if resp.status_code == 200:
+            return _ok(TAG, "LivePortrait 口型同步", resp.json())
+        _fail(TAG, "LivePortrait 口型同步", resp.status_code, resp.text)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 主入口
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -720,6 +781,7 @@ if __name__ == "__main__":
         "[7-1] FFmpeg WAV→MP3":                test_7_ffmpeg,
         "[7-2] FFmpeg WAV→FLAC":               test_7_2_ffmpeg_flac,
         "[7-3] FFmpeg WAV 截取":               test_7_3_ffmpeg_clip,
+        "[8]   LivePortrait 口型同步":          test_8_liveportrait,
     }
 
     results = {}
