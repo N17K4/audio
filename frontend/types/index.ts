@@ -1,6 +1,6 @@
 // ─── 类型 ──────────────────────────────────────────────────────────────────
 export type Status = 'idle' | 'recording' | 'processing';
-export type TaskType = 'tts' | 'vc' | 'asr' | 'voice_chat' | 'media' | 'misc';
+export type TaskType = 'tts' | 'vc' | 'voice_chat' | 'media' | 'misc';
 export type MiscSubPage = 'image_understand' | 'translate' | 'code_assist' | 'img_gen' | 'img_i2i' | 'video_gen' | 'ocr' | 'lipsync';
 export type MediaAction = 'convert' | 'clip';
 export type VcInputMode = 'record' | 'upload';

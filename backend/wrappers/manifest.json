@@ -310,7 +310,7 @@
       "ui": {
         "label": "Faster Whisper",
         "size_display": "large-v3 · ~3.1 GB",
-        "default_install": true
+        "default_install": false
       },
       "code_dir": "runtime/engine/faster_whisper",
       "checkpoint_dir": "runtime/checkpoints/faster_whisper",
@@ -372,7 +372,7 @@
       "ui": {
         "label": "LivePortrait",
         "size_display": "~1.8 GB",
-        "default_install": true
+        "default_install": false
       },
       "code_dir": "runtime/engine/liveportrait",
       "checkpoint_dir": "runtime/checkpoints/liveportrait",
@@ -396,7 +396,7 @@
       "ui": {
         "label": "FaceFusion",
         "size_display": "~540 MB",
-        "default_install": true
+        "default_install": false
       },
       "code_dir": "runtime/engine/facefusion",
       "checkpoint_dir": "runtime/checkpoints/facefusion",

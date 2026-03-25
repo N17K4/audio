@@ -62,6 +62,20 @@ def _cleanup_ml_conflicts() -> None:
 
 _cleanup_ml_conflicts()
 
+# protobuf は google/ namespace にインストールされる。
+# runtime/ml/google/protobuf が古いバージョン（3.x）の場合、
+# 嵌入式 Python の onnx が必要とする google.protobuf.internal.builder が見つからず ImportError になる。
+_google_protobuf_dir = _ml_dir / "google" / "protobuf"
+if _google_protobuf_dir.is_dir():
+    try:
+        shutil.rmtree(_google_protobuf_dir)
+        _google_dir = _ml_dir / "google"
+        if _google_dir.is_dir() and not any(_google_dir.iterdir()):
+            _google_dir.rmdir()
+        logger.info("ML 衝突パッケージを削除: google/protobuf")
+    except Exception:
+        pass
+
 app = FastAPI()
 
 app.add_middleware(

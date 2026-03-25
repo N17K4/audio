@@ -44,7 +44,7 @@ PBS_RELEASE = "20250317"
 PBS_PY_VERSION = "3.12.9"
 
 # 基础引擎集合（step 3 安装，含嵌入式 Python + backend 依赖）
-BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc", "faster_whisper", "facefusion", "liveportrait"}
+BASE_ENGINES = {"fish_speech", "gpt_sovits", "seed_vc", "rvc"}
 
 # 额外引擎集合（step 4 安装，需嵌入式 Python 已就绪）
 EXTRA_ENGINES = {"whisper", "got_ocr", "wan", "flux", "sd"}

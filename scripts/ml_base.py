@@ -43,11 +43,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # 基础引擎集合（默认安装，所有环境都需要）
 BASE_ENGINES = {
-    "facefusion",
-    "faster_whisper",
     "fish_speech",
     "gpt_sovits",
-    "liveportrait",
     "rvc",
     "seed_vc",
 }
@@ -167,6 +164,35 @@ def _is_importable_in_target(target: str, module_name: str) -> bool:
     return False
 
 
+def _version_satisfies_constraints(pkg: str, installed_ver: str) -> bool:
+    """检查已安装版本是否满足包的版本约束（>=, <=, <, >, !=）。
+    例：pkg='numpy>=2.2,<2.3', installed_ver='1.26.4' → False
+    """
+    if not installed_ver:
+        return False
+
+    def _to_tuple(v: str) -> tuple:
+        return tuple(int(x) for x in re.split(r"[.\-+]", v.split("+")[0]) if x.isdigit())
+
+    try:
+        iv = _to_tuple(installed_ver)
+        for op, ver_str in re.findall(r"(>=|<=|!=|>|<)(\d[^\s,;]*)", pkg):
+            rv = _to_tuple(ver_str)
+            if op == ">=" and not (iv >= rv):
+                return False
+            if op == "<=" and not (iv <= rv):
+                return False
+            if op == ">" and not (iv > rv):
+                return False
+            if op == "<" and not (iv < rv):
+                return False
+            if op == "!=" and iv == rv:
+                return False
+        return True
+    except Exception:
+        return True  # 无法解析，保守地认为满足
+
+
 # pip 包名 → 实际 import 模块名的映射（仅针对名称不一致的包）
 _PKG_TO_MODULE: dict[str, str] = {
     "faiss_cpu": "faiss",
@@ -234,6 +260,9 @@ _EMBEDDED_PROTECTED_PACKAGES = {
     "uvicorn", "httpx", "httpcore",
     "anyio", "sniffio",
     "annotated_types",
+    # protobuf は google/ namespace にインストールされる。
+    # 嵌入式 Python に新しいバージョン（7.x）があるため、runtime/ml の古いバージョンを保護対象に。
+    "protobuf",
 }
 # 注意: typing_extensions / numpy は torch が必要とするバージョンと
 # 嵌入式 Python 同梱バージョンが異なる場合があるため、ここに含めない。
@@ -267,6 +296,19 @@ def _cleanup_protected_packages(target: str, json_progress: bool) -> None:
                 removed.append(item.name)
             except OSError:
                 pass
+    # protobuf は google/ namespace パッケージにインストールされる（top-level は "google"）。
+    # 通常のループでは検出できないため、個別に削除する。
+    protobuf_dir = target_path / "google" / "protobuf"
+    if protobuf_dir.is_dir():
+        try:
+            shutil.rmtree(protobuf_dir)
+            removed.append("google/protobuf")
+            # google/ ディレクトリが空になったら削除
+            google_dir = target_path / "google"
+            if google_dir.is_dir() and not any(google_dir.iterdir()):
+                google_dir.rmdir()
+        except OSError:
+            pass
     if removed:
         _emit({"type": "log", "message": f"  清理与嵌入式 Python 冲突的包: {', '.join(removed)}"}, json_progress)
 
@@ -473,6 +515,12 @@ def install_packages(packages: list[str], py: str, target: str, mirror: str, jso
                 continue
         elif target:
             if _is_importable_in_target(target, module_name):
+                # 有版本约束时（如 numpy>=2.2,<2.3），还需检查已安装版本是否满足
+                if re.search(r"[>=<]", pkg):
+                    inst_ver = _dist_version_in_target(target, dist_name)
+                    if not _version_satisfies_constraints(pkg, inst_ver):
+                        to_install.append(pkg)
+                        continue
                 _emit({"type": "log", "message": f"  {tag} ✓ {pkg}  (已安装)"}, json_progress)
                 continue
         else:

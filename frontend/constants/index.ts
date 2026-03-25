@@ -3,8 +3,7 @@ import type { TaskType, CapabilityMap } from '../types';
 // ─── 常量 ──────────────────────────────────────────────────────────────────
 export const TASK_LABELS: Record<TaskType, string> = {
   tts: '文本转语音',
-  vc: '音色转换',
-  asr: '语音转文字',
+  vc: '变声器',
   voice_chat: '语音聊天',
   media: '音视频转换',
   misc: 'AI扩展',
@@ -13,7 +12,6 @@ export const TASK_LABELS: Record<TaskType, string> = {
 export const TASK_PHASES: Record<string, string[]> = {
   tts:              ['准备请求', '合成语音中', '写入输出文件'],
   vc:               ['上传音频', '推理转换中', '写入转换结果'],
-  asr:              ['上传音频', '语音识别中', '整理转录文字'],
   voice_chat:       ['处理中'],
   media:            ['上传文件', 'FFmpeg 转换中', '写入输出文件'],
   image_gen:        ['发送请求', '图像生成中', '保存结果'],
@@ -26,7 +24,6 @@ export const TASK_PHASES: Record<string, string[]> = {
 export const DEFAULT_CAPS: CapabilityMap = {
   tts: ['fish_speech', 'gpt_sovits', 'cosyvoice', 'gemini', 'openai', 'elevenlabs', 'cartesia', 'dashscope', 'minimax_tts'],
   vc: ['seed_vc', 'local_rvc', 'elevenlabs'],
-  asr: ['faster_whisper', 'whisper', 'gemini', 'openai', 'groq', 'deepgram', 'dashscope'],
   media: [],
   misc:  [],
 };
@@ -328,7 +325,6 @@ export const LS = {
 export const TASK_ICON_CFG: Record<TaskType, { abbr: string; bg: string; text: string }> = {
   tts:        { abbr: 'TTS', bg: '#4f46e5', text: '#fff' },
   vc:         { abbr: 'VC',  bg: '#7c3aed', text: '#fff' },
-  asr:        { abbr: 'STT', bg: '#0284c7', text: '#fff' },
   voice_chat: { abbr: 'V+',  bg: '#d97706', text: '#fff' },
   media:      { abbr: 'FMT', bg: '#0f766e', text: '#fff' },
   misc:       { abbr: 'EXT', bg: '#6d28d9', text: '#fff' },
@@ -448,7 +444,6 @@ export const TOOL_CARDS = [
   // 音频（5个）
   { id: 'audio_tools',    label: '文本转语音', desc: '多引擎 TTS，支持本地与云端',        category: ['audio']   as const, iconBg: '#E9E6F9', iconColor: '#624BD8', iconType: 'tts',              subPage: 'tts' },
   { id: 'audio_tools',    label: '音色转换',   desc: '零样本或训练模型音色迁移',          category: ['audio']   as const, iconBg: '#F3E8FF', iconColor: '#9333ea', iconType: 'vc',               subPage: 'vc' },
-  { id: 'audio_tools',    label: '语音转文字', desc: 'Whisper 及多云端 STT',             category: ['audio']   as const, iconBg: '#E2F0FE', iconColor: '#3D99F5', iconType: 'asr',              subPage: 'asr' },
   { id: 'audio_tools',    label: '语音对话',   desc: '实时 STT+LLM+TTS 全链路',         category: ['audio']   as const, iconBg: '#FEF9E2', iconColor: '#D97706', iconType: 'voice_chat',       subPage: 'voice_chat' },
   // 图像（4个）
   { id: 'misc',           label: '图像生成',   desc: 'DALL-E / Imagen / SD 本地生成',   category: ['image']   as const, iconBg: '#FBE6E5', iconColor: '#E24841', iconType: 'image_gen',        subPage: 'img_gen' },

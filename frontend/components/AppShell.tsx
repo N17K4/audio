@@ -10,7 +10,6 @@ import { useBackend } from '../hooks/useBackend';
 import { useJobs } from '../hooks/useJobs';
 import { useTTS } from '../hooks/useTTS';
 import { useVC } from '../hooks/useVC';
-import { useASR } from '../hooks/useASR';
 import { useMediaConvert } from '../hooks/useMediaConvert';
 import { useMisc } from '../hooks/useMisc';
 import { useImageExt } from '../hooks/useImageExt';
@@ -28,7 +27,6 @@ import SystemPanel from './SystemPanel';
 import TaskIcon from './icons/TaskIcon';
 import TtsPanel from './panels/TtsPanel';
 import VcPanel from './panels/VcPanel';
-import AsrPanel from './panels/AsrPanel';
 import MiscPanel from './panels/MiscPanel';
 import MediaPanel from './panels/MediaPanel';
 
@@ -173,20 +171,6 @@ export default function AppShell() {
     rvcProtect: vcExt.rvcProtect,
   });
 
-  // ─── ASR ───────────────────────────────────────────────────────────────────
-  const asr = useASR({
-    backendBaseUrl: backend.backendBaseUrl,
-    selectedProvider,
-    isLocal,
-    apiKey,
-    cloudEndpoint,
-    needsAuth,
-    setStatus,
-    setProcessingStartTime,
-    setError,
-    addInstantJobResult,
-  });
-
   // ─── Media Convert ─────────────────────────────────────────────────────────
   const media = useMediaConvert({
     backendBaseUrl: backend.backendBaseUrl,
@@ -232,7 +216,6 @@ export default function AppShell() {
   // ─── Abort handler ─────────────────────────────────────────────────────────
   function handleAbort() {
     vc.abortCurrentRequest();
-    asr.abortCurrentRequest();
     media.abortCurrentRequest();
   }
 
@@ -400,15 +383,14 @@ export default function AppShell() {
                     <rect x="21" y="14" width="2.5" height="4" rx="1.2" fill="#c7d2fe"/>
                   </svg>
                   <div>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">AI音频</h1>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · VC · STT</p>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">变声器</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">TTS · 变声</p>
                   </div>
                 </header>
                 <div className="flex gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
                   {([
-                    ['tts',  '文本转语音', 'TTS'],
-                    ['vc',   '音色转换',   'VC' ],
-                    ['asr',  '语音转文本', 'STT'],
+                    ['tts', '文本转语音', 'TTS'],
+                    ['vc',  '变声器',     'VC' ],
                   ] as [TaskType, string, string][]).map(([key, label, abbr]) => (
                     <button key={key} onClick={() => setTaskType(key)}
                       className={`flex-1 rounded-xl py-2 flex flex-col items-center gap-0.5 transition-all ${taskType === key ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
@@ -610,39 +592,6 @@ export default function AppShell() {
                 fileCls={fileCls}
                 labelCls={labelCls}
                 btnSec={btnSec}
-              />
-            )}
-
-            {/* ASR Panel */}
-            {showAudioTools && taskType === 'asr' && (
-              <AsrPanel
-                taskType="asr"
-                capabilities={backend.capabilities}
-                selectedProvider={selectedProvider}
-                needsAuth={needsAuth}
-                isUrlOnly={isUrlOnly}
-                apiKey={apiKey}
-                cloudEndpoint={cloudEndpoint}
-                engineVersions={backend.engineVersions}
-                setProviderMap={setProviderMap}
-                setApiKey={setApiKey}
-                setCloudEndpoint={setCloudEndpoint}
-                asrFile={asr.asrFile}
-                setAsrFile={asr.setAsrFile}
-                asrModel={asr.asrModel}
-                setAsrModel={asr.setAsrModel}
-                asrInputMode={asr.asrInputMode}
-                setAsrInputMode={asr.setAsrInputMode}
-                asrRecordedObjectUrl={asr.asrRecordedObjectUrl}
-                asrRecordingDir={asr.asrRecordingDir}
-                onStartAsrRecording={asr.startAsrRecording}
-                onStopAsrRecording={asr.stopAsrRecording}
-                onClearAsrRecording={asr.clearAsrRecording}
-                outputDir={outputDir}
-                status={status}
-                onRunAsr={asr.runAsr}
-                fieldCls={fieldCls}
-                labelCls={labelCls}
               />
             )}
 

@@ -81,7 +81,7 @@ export default function Sidebar({
               <path d="M16 14a2 2 0 11-4 0 2 2 0 014 0z" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           } />
-          <NavItem page="audio_tools" label="音频工具" subtitle="TTS · 音色转换 · STT" icon={
+          <NavItem page="audio_tools" label="变声器" subtitle="TTS · 变声" icon={
             <svg width="28" height="28" viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
               <rect width="28" height="28" rx="7" fill="#4f46e5"/>
               <rect x="5" y="13" width="2.5" height="6" rx="1.2" fill="#c7d2fe"/>

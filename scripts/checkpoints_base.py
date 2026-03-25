@@ -19,11 +19,8 @@ import sys
 from pathlib import Path
 
 BASE_ENGINES = {
-    "facefusion",
-    "faster_whisper",
     "fish_speech",
     "gpt_sovits",
-    "liveportrait",
     "rvc",
     "seed_vc",
     "voices",  # 内置音色

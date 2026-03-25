@@ -44,6 +44,24 @@ _JSON_MODE = False
 _REAL_STDOUT = sys.stdout
 
 
+def _default_target() -> Path:
+    """config.py の _get_user_data_base() と同じロジック。
+    開発環境（.git あり）は runtime/ml/、本番はユーザーディレクトリ。
+    """
+    app_root = Path(__file__).resolve().parent.parent
+    is_dev = (app_root / ".git").exists()
+    if is_dev:
+        return app_root / "runtime" / "ml"
+    _sys = platform.system()
+    if _sys == "Darwin":
+        base = Path.home() / "Library" / "Application Support" / "AI-Workshop"
+    elif _sys == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "AI-Workshop"
+    else:
+        base = Path.home() / ".local" / "share" / "AI-Workshop"
+    return base / "ml"
+
+
 def _hf_endpoint() -> str:
     return os.getenv("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
 
@@ -129,7 +147,7 @@ def main() -> None:
 
     _JSON_MODE = args.json_progress
 
-    target = Path(args.target) if args.target else PROJECT_ROOT / "runtime" / "ml"
+    target = Path(args.target) if args.target else _default_target()
 
     _emit({"type": "log", "message": "=== ML 包安装（HuggingFace 预构建版）==="})
     _emit({"type": "log", "message": f"  目标目录: {target}"})
